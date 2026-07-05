@@ -293,20 +293,30 @@ function computePL(meta, raw){
     categoryRows: meta.categories.filter(c => (catSum[c.code]||0) !== 0 || c.active)
       .map(c => ({...c, amount: catSum[c.code]||0})),
     payrollPct: totalSales ? (catSum['payroll']||0)/totalSales : null,
-    suppliesPct: totalSales ? ((catSum['supplies']||0)+(catSum['supplies_food']||0)+(catSum['supplies_material']||0))/totalSales : null,
+    suppliesPct: totalSales ? ((catSum['supplies']||0)+(catSum['supplies_food']||0)+(catSum['supplies_material']||0)+(catSum['hq_supplies']||0))/totalSales : null,
   };
 }
 
 // summary snapshot stored on publish (this is exactly what investors see)
 function buildSummary(pl){
+  // Fold categories that share an investor_group into a single investor-facing
+  // line, so internal splits (e.g. HQ Supplies vs store Supplies) are not exposed.
+  const grouped = {};
+  const order = [];
+  pl.categoryRows.filter(c=>c.amount!==0).forEach(c=>{
+    const key = c.investor_group || c.name;
+    if(!(key in grouped)){ grouped[key]=0; order.push(key); }
+    grouped[key] += c.amount;
+  });
+  const expenses = order.map(k=>({name:k, amount:+grouped[k].toFixed(2)}))
+    .concat(pl.ruleRows.filter(r=>r.amount!==0).map(r=>({name:r.name, amount:+r.amount.toFixed(2), auto:true})));
   return {
     total_sales: +pl.totalSales.toFixed(2),
     total_expenses: +pl.totalExpenses.toFixed(2),
     net_profit: +pl.net.toFixed(2),
     net_margin: pl.margin !== null ? +(pl.margin).toFixed(4) : null,
     revenue: pl.channelRows.filter(c=>c.amount!==0).map(c=>({name:c.name, amount:+c.amount.toFixed(2)})),
-    expenses: pl.categoryRows.filter(c=>c.amount!==0).map(c=>({name:c.name, amount:+c.amount.toFixed(2)}))
-      .concat(pl.ruleRows.filter(r=>r.amount!==0).map(r=>({name:r.name, amount:+r.amount.toFixed(2), auto:true}))),
+    expenses,
     distribution: pl.dist.map(d=>({holder:d.holder, pct:d.pct, amount:+d.amount.toFixed(2)})),
   };
 }
@@ -664,6 +674,8 @@ function Entry({corps, canEditIds, profile, presetCorp}){
               <td>{catName(e.category_id)}
                 {e.source==='recurring' && <span className="badge blue">Recurring</span>}
                 {e.source==='toast' && <span className="badge green">Toast</span>}
+                {e.source==='quickbooks' && <span className="badge green">QuickBooks</span>}
+                {e.source==='inventory' && <span className="badge green">Inventory</span>}
                 {e.source==='slack' && <span className="badge blue">Slack</span>}
                 {e.adjustment && <span className="badge gold">Adjustment</span>}
                 {e.payee && <span className="faint"> · {e.payee}</span>}

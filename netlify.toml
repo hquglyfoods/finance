@@ -5,14 +5,14 @@
 [functions]
   node_bundler = "esbuild"
 
-# Daily at 8:30 UTC: pull yesterday's Toast sales + tips per store
+# Daily 8:30 UTC: Toast store sales + tips (AD/BW/FH)
 [functions."toast-sync"]
   schedule = "30 8 * * *"
 
-# Daily at 8:40 UTC: pull yesterday's HQ revenue from QuickBooks
-[functions."quickbooks-sync"]
-  schedule = "40 8 * * *"
+# Daily 8:45 UTC: HQ invoices + Ummas orders from the Inventory app Supabase
+[functions."inventory-sync"]
+  schedule = "45 8 * * *"
 
-# Daily at 9:00 UTC: generate due recurring expenses
+# Daily 9:00 UTC: generate due recurring expenses
 [functions."recurring-cron"]
   schedule = "0 9 * * *"

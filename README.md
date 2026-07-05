@@ -10,26 +10,25 @@ package.json                      # Function dependency (@supabase/supabase-js)
 netlify/functions/
   create-account.js               # Owner-only account creation
   recurring-cron.js               # Daily: generates due recurring expenses
-  toast-sync.js                   # Daily: store sales + tips from Toast
-  quickbooks-sync.js              # Daily: HQ revenue from QuickBooks Online
-  qbo-auth.js                     # One-time QuickBooks OAuth connection
-  ummas-revenue.js                # Webhook: Ummas website posts daily revenue
+  toast-sync.js                   # Daily: store sales + tips from Toast (AD/BW/FH)
+  inventory-sync.js               # Daily: HQ invoices + Ummas orders from the
+                                  #        Inventory app Supabase (read-only)
   slack-expense.js                # Slack channel -> pending expenses
 ```
 
+## Data sources
+- Toast API: AD/BW/FH daily sales by channel + card tips (expense).
+- Inventory app Supabase (single source of truth for QuickBooks + Ummas + Wix):
+  - source 'quickbooks' to a company store  -> HQ revenue + that store's HQ Supplies expense
+  - source 'quickbooks' to Pearland          -> HQ revenue only (franchisee)
+  - source 'ummasrecipe-store' / 'wix'       -> UMMA revenue
+  Finance Tool reads it read-only with a dedicated key. No direct QuickBooks
+  connection is needed (QuickBooks flows QB -> Zapier -> Inventory app).
+- Slack: expense channel messages -> pending expenses for approval.
+
 ## Netlify environment variables
-Core:
-- SUPABASE_URL, SUPABASE_SERVICE_KEY, ALLOWED_ORIGIN, SITE_URL
-
-Toast (after Standard API access approval):
-- TOAST_CLIENT_ID, TOAST_CLIENT_SECRET
-- TOAST_RESTAURANTS = "AD:guid,BW:guid,FH:guid"
-
-QuickBooks (after creating an Intuit developer app):
-- QBO_CLIENT_ID, QBO_CLIENT_SECRET, QBO_SETUP_SECRET
-
-Ummas website:
-- UMMAS_WEBHOOK_SECRET
-
-Slack (after creating a Slack app):
-- SLACK_SIGNING_SECRET, SLACK_CHANNEL_ID
+Core: SUPABASE_URL, SUPABASE_SERVICE_KEY, ALLOWED_ORIGIN, SITE_URL
+Toast: TOAST_CLIENT_ID, TOAST_CLIENT_SECRET, TOAST_RESTAURANTS="AD:guid,BW:guid,FH:guid"
+Inventory (read-only): INV_SUPABASE_URL, INV_SUPABASE_READ_KEY
+  Optional: INV_CUSTOMER_MAP, INV_UMMA_MAP
+Slack: SLACK_SIGNING_SECRET, SLACK_CHANNEL_ID
