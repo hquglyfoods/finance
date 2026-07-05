@@ -1,0 +1,10 @@
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# 매일 오전 9시 UTC (미 동부 새벽 4-5시)에 반복 비용 자동 생성
+[functions."recurring-cron"]
+  schedule = "0 9 * * *"
