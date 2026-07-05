@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -148,6 +148,34 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   .nav-item{width:auto;white-space:nowrap;margin-bottom:0}
   .main{padding:20px 16px 70px}
 }
+
+/* ---------- home (today) ---------- */
+.home-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;margin-bottom:22px}
+.home-card{background:var(--panel);border:1px solid var(--border-soft);border-radius:12px;padding:20px;cursor:pointer;transition:border-color .15s, transform .1s;position:relative}
+.home-card:hover{border-color:var(--gold-soft);transform:translateY(-1px)}
+.home-card.done{border-color:var(--gold-soft);background:linear-gradient(180deg, rgba(201,162,39,.07), var(--panel))}
+.home-card .hc-code{font-family:var(--font-m);font-size:11px;letter-spacing:.14em;color:var(--gold)}
+.home-card .hc-name{font-family:var(--font-d);font-size:18px;margin:4px 0 12px}
+.home-card .hc-amt{font-family:var(--font-m);font-size:24px;margin-bottom:12px}
+.home-card .hc-amt .cur{font-size:14px;color:var(--text3)}
+.home-card .hc-status{display:flex;gap:14px;font-size:12.5px;color:var(--text2);margin-bottom:14px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--border);margin-right:6px;vertical-align:0}
+.dot.ok{background:var(--green)} .dot.warn{background:var(--gold)}
+.hc-check{position:absolute;top:16px;right:16px;color:var(--gold);font-size:16px}
+.progress{height:5px;border-radius:3px;background:var(--border-soft);overflow:hidden;margin-bottom:8px}
+.progress .fill{height:100%;background:var(--gold);border-radius:3px;transition:width .3s}
+.progress-lbl{font-size:11.5px;color:var(--text3)}
+.quest{display:flex;align-items:center;gap:12px;padding:13px 16px;border:1px solid var(--border-soft);border-radius:10px;background:var(--panel2);margin-bottom:8px}
+.quest .q-ico{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--gold-dim);color:var(--gold);flex-shrink:0}
+.quest .grow{flex:1;min-width:0}
+.quest .q-t{font-weight:600;font-size:13.5px}
+.quest .q-s{font-size:12px;color:var(--text3)}
+.big-total{display:flex;justify-content:space-between;align-items:baseline;background:var(--panel2);border:1px solid var(--border-soft);border-radius:8px;padding:12px 16px;margin-top:12px}
+.big-total .bt-l{font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em}
+.big-total .bt-v{font-family:var(--font-m);font-size:20px;color:var(--gold)}
+.step-tag{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--gold-dim);color:var(--gold);font-family:var(--font-m);font-size:11px;margin-right:9px}
+.greet{font-family:var(--font-d);font-size:26px;margin-bottom:2px}
+.greet-sub{color:var(--text2);font-size:13.5px;margin-bottom:24px}
 </style>
 </head>
 <body>
@@ -177,7 +205,8 @@ const fmtPct = v => (v===null||isNaN(v)) ? '-' : (v*100).toFixed(1)+'%';
 const monthLabel = (y,m) => `${y}. ${pad(m)}`;
 const lastDay = (y,m) => new Date(y, m, 0).getDate();
 const todayStr = () => { const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
-const KOR_DOW = ['일','월','화','수','목','금','토'];
+const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 // safe formula evaluator: variables + max/min + arithmetic
 function evalExpr(expr, vars){
@@ -296,7 +325,7 @@ function MonthPick({y, m, onChange}){
     <button onClick={()=>mv(1)}>›</button>
   </div>;
 }
-function Spinner(){ return <div className="faint" style={{padding:'30px 0',textAlign:'center'}}>불러오는 중...</div>; }
+function Spinner(){ return <div className="faint" style={{padding:'30px 0',textAlign:'center'}}>Loading...</div>; }
 
 // simple SVG trend chart: bars = sales, line = net profit
 function TrendChart({points}){
@@ -322,10 +351,54 @@ function TrendChart({points}){
       {points.map((p,i)=><circle key={i} cx={padL+gap*i+gap/2} cy={yOf(p.net)} r="3" fill={p.net>=0?'#7FB069':'#C4644C'}/>)}
     </svg>
     <div className="legend">
-      <span><span className="sw" style={{background:'rgba(201,162,39,.5)'}}></span>매출</span>
-      <span><span className="sw" style={{background:'#7FB069'}}></span>순이익</span>
+      <span><span className="sw" style={{background:'rgba(201,162,39,.5)'}}></span>Sales</span>
+      <span><span className="sw" style={{background:'#7FB069'}}></span>Net profit</span>
     </div>
   </div>;
+}
+
+// ratio trend chart: payroll % and supplies % over months
+function RatioChart({points}){
+  const pts = points.filter(p=>p.payrollPct!==null || p.suppliesPct!==null);
+  if(!pts.length) return null;
+  const W = Math.max(560, pts.length*52), H = 180, padL=8, padB=26, padT=14;
+  const vals = pts.flatMap(p=>[p.payrollPct,p.suppliesPct]).filter(v=>v!==null);
+  const maxV = Math.max(0.35, ...vals), minV = 0;
+  const yOf = v => padT + (H-padB-padT)*(1-(v-minV)/(maxV-minV));
+  const gap = (W-padL*2)/pts.length;
+  const line = (key,color)=>{
+    const ps = pts.map((p,i)=>p[key]===null?null:`${padL+gap*i+gap/2},${yOf(p[key])}`).filter(Boolean);
+    return <polyline fill="none" stroke={color} strokeWidth="2" points={ps.join(' ')}/>;
+  };
+  return <div className="chart-wrap">
+    <svg width={W} height={H}>
+      {[0.1,0.2,0.3].map(g=><line key={g} x1={padL} x2={W-padL} y1={yOf(g)} y2={yOf(g)} stroke="#211D17" strokeWidth="1"/>)}
+      {[0.1,0.2,0.3].map(g=><text key={'t'+g} x={padL+2} y={yOf(g)-4} fontSize="9" fill="#6E675B" fontFamily="IBM Plex Mono">{g*100}%</text>)}
+      {line('payrollPct','#C9A227')}
+      {line('suppliesPct','#7A9CC6')}
+      {pts.map((p,i)=><text key={i} x={padL+gap*i+gap/2} y={H-8} fontSize="10" fill="#6E675B" textAnchor="middle" fontFamily="IBM Plex Mono">{p.label}</text>)}
+    </svg>
+    <div className="legend">
+      <span><span className="sw" style={{background:'#C9A227'}}></span>Payroll %</span>
+      <span><span className="sw" style={{background:'#7A9CC6'}}></span>Supplies %</span>
+    </div>
+  </div>;
+}
+
+// trend direction vs previous month: cost ratios going up is bad
+function TrendArrow({cur, prev, higherIsBad}){
+  if(cur===null||prev===null||prev===undefined) return null;
+  const d = cur - prev;
+  if(Math.abs(d) < 0.002) return <span className="faint"> →</span>;
+  const up = d > 0;
+  const bad = higherIsBad ? up : !up;
+  return <span className={bad?'neg':'pos'}> {up?'▲':'▼'} {(Math.abs(d)*100).toFixed(1)}pt</span>;
+}
+
+function YoYDelta({cur, prev}){
+  if(prev===null||prev===undefined||Math.abs(prev)<0.01) return <span className="faint">no data last year</span>;
+  const d = (cur-prev)/Math.abs(prev);
+  return <span className={d>=0?'pos':'neg'}>{d>=0?'+':''}{(d*100).toFixed(1)}% vs last year</span>;
 }
 
 // ================= DASHBOARD =================
@@ -337,6 +410,7 @@ function Dashboard({corps, canEditIds}){
   const [m, setM] = useState(now.getMonth()+1);
   const [meta, setMeta] = useState(null);
   const [pl, setPl] = useState(null);
+  const [yoy, setYoy] = useState(null);
   const [trend, setTrend] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -344,9 +418,11 @@ function Dashboard({corps, canEditIds}){
     (async()=>{
       setLoading(true);
       const mt = await loadCorpMeta(corpId);
-      const raw = await loadMonthRaw(corpId, y, m);
+      const [raw, rawLY] = await Promise.all([loadMonthRaw(corpId, y, m), loadMonthRaw(corpId, y-1, m)]);
       if(dead) return;
       setMeta(mt); setPl(computePL(mt, raw));
+      const ply = computePL(mt, rawLY);
+      setYoy((ply.totalSales!==0 || ply.totalExpenses!==0) ? ply : null);
       // 12-month trend
       const endD = `${y}-${pad(m)}-${pad(lastDay(y,m))}`;
       let sy=y, sm=m-11; while(sm<1){sm+=12;sy--;}
@@ -362,7 +438,7 @@ function Dashboard({corps, canEditIds}){
         const raw2 = { revenue:(rv.data||[]).filter(r=>r.date.startsWith(pref)),
                        expenses:(ex.data||[]).filter(r=>r.date.startsWith(pref)), inputs:[] };
         const p = computePL(mt, raw2);
-        if(p.totalSales!==0 || p.totalExpenses!==0) pts.push({label:`${pad(cm)}`, sales:p.totalSales, net:p.net});
+        if(p.totalSales!==0 || p.totalExpenses!==0) pts.push({label:`${pad(cm)}`, sales:p.totalSales, net:p.net, payrollPct:p.payrollPct, suppliesPct:p.suppliesPct});
         cm++; if(cm>12){cm=1;cy++;}
       }
       setTrend(pts); setLoading(false);
@@ -370,10 +446,10 @@ function Dashboard({corps, canEditIds}){
     return ()=>{dead=true};
   },[corpId,y,m]);
 
-  if(!editable.length) return <div className="card">접근 가능한 corporation이 없습니다.</div>;
+  if(!editable.length) return <div className="card">No corporations available for your account.</div>;
   return <div>
     <div className="page-head">
-      <div><div className="eyebrow">Dashboard</div><h2>월별 손익</h2></div>
+      <div><div className="eyebrow">Insights</div><h2>Monthly P&L</h2></div>
       <div style={{display:'flex',gap:14,alignItems:'center',flexWrap:'wrap'}}>
         <CorpTabs corps={editable} sel={corpId} onSel={setCorpId}/>
         <MonthPick y={y} m={m} onChange={(a,b)=>{setY(a);setM(b);}}/>
@@ -381,32 +457,61 @@ function Dashboard({corps, canEditIds}){
     </div>
     {loading || !pl ? <Spinner/> : <>
       <div className="kpis">
-        <div className="kpi"><div className="k-lbl">총 매출</div><div className="k-val">{fmt$(pl.totalSales)}</div></div>
-        <div className="kpi"><div className="k-lbl">총 비용</div><div className="k-val">{fmt$(pl.totalExpenses)}</div></div>
-        <div className="kpi"><div className="k-lbl">순이익</div><div className={'k-val '+(pl.net>=0?'pos':'neg')}>{fmt$(pl.net)}</div>
-          <div className="k-sub">마진 {fmtPct(pl.margin)}</div></div>
-        <div className="kpi"><div className="k-lbl">Payroll %</div><div className="k-val">{fmtPct(pl.payrollPct)}</div></div>
-        <div className="kpi"><div className="k-lbl">Supplies %</div><div className="k-val">{fmtPct(pl.suppliesPct)}</div></div>
+        <div className="kpi"><div className="k-lbl">Total Sales</div><div className="k-val">{fmt$(pl.totalSales)}</div>
+          <div className="k-sub"><YoYDelta cur={pl.totalSales} prev={yoy&&yoy.totalSales}/></div></div>
+        <div className="kpi"><div className="k-lbl">Total Expenses</div><div className="k-val">{fmt$(pl.totalExpenses)}</div>
+          <div className="k-sub"><YoYDelta cur={pl.totalExpenses} prev={yoy&&yoy.totalExpenses}/></div></div>
+        <div className="kpi"><div className="k-lbl">Net Profit</div><div className={'k-val '+(pl.net>=0?'pos':'neg')}>{fmt$(pl.net)}</div>
+          <div className="k-sub">Margin {fmtPct(pl.margin)} · <YoYDelta cur={pl.net} prev={yoy&&yoy.net}/></div></div>
+        <div className="kpi"><div className="k-lbl">Payroll %</div><div className="k-val">{fmtPct(pl.payrollPct)}
+          <TrendArrow cur={pl.payrollPct} prev={trend.length>1?trend[trend.length-2].payrollPct:null} higherIsBad={true}/></div>
+          {yoy && <div className="k-sub">Last year {fmtPct(yoy.payrollPct)}</div>}</div>
+        <div className="kpi"><div className="k-lbl">Supplies %</div><div className="k-val">{fmtPct(pl.suppliesPct)}
+          <TrendArrow cur={pl.suppliesPct} prev={trend.length>1?trend[trend.length-2].suppliesPct:null} higherIsBad={true}/></div>
+          {yoy && <div className="k-sub">Last year {fmtPct(yoy.suppliesPct)}</div>}</div>
       </div>
-      <div className="card"><h3>12개월 추이</h3><TrendChart points={trend}/></div>
+      <div className="card"><h3>12-Month Trend</h3><TrendChart points={trend}/></div>
+      <div className="grid2">
+        <div className="card"><h3>Cost Ratios · 12 Months</h3><RatioChart points={trend}/>
+          <div className="hint">Payroll and supplies as a share of sales. Rising lines mean costs are growing faster than sales.</div></div>
+        <div className="card"><h3>vs. {MONTHS[m-1]} {y-1}</h3>
+          {!yoy ? <div className="faint">No data for {MONTHS[m-1]} {y-1}.</div> :
+          <table className="t">
+            <thead><tr><th></th><th className="num">{y}</th><th className="num">{y-1}</th><th className="num">Change</th></tr></thead>
+            <tbody>
+              <tr><td>Sales</td><td className="num">{fmt$(pl.totalSales,0)}</td><td className="num">{fmt$(yoy.totalSales,0)}</td>
+                <td className="num"><YoYDelta cur={pl.totalSales} prev={yoy.totalSales}/></td></tr>
+              <tr><td>Expenses</td><td className="num">{fmt$(pl.totalExpenses,0)}</td><td className="num">{fmt$(yoy.totalExpenses,0)}</td>
+                <td className="num"><YoYDelta cur={pl.totalExpenses} prev={yoy.totalExpenses}/></td></tr>
+              <tr><td>Net Profit</td><td className={'num '+(pl.net>=0?'pos':'neg')}>{fmt$(pl.net,0)}</td>
+                <td className={'num '+(yoy.net>=0?'pos':'neg')}>{fmt$(yoy.net,0)}</td>
+                <td className="num"><YoYDelta cur={pl.net} prev={yoy.net}/></td></tr>
+              <tr><td>Payroll %</td><td className="num">{fmtPct(pl.payrollPct)}</td><td className="num">{fmtPct(yoy.payrollPct)}</td>
+                <td className="num"><TrendArrow cur={pl.payrollPct} prev={yoy.payrollPct} higherIsBad={true}/></td></tr>
+              <tr><td>Supplies %</td><td className="num">{fmtPct(pl.suppliesPct)}</td><td className="num">{fmtPct(yoy.suppliesPct)}</td>
+                <td className="num"><TrendArrow cur={pl.suppliesPct} prev={yoy.suppliesPct} higherIsBad={true}/></td></tr>
+            </tbody>
+          </table>}
+        </div>
+      </div>
       <div className="grid2">
         <div className="card">
-          <h3>매출 채널</h3>
+          <h3>Revenue Channels</h3>
           <table className="t"><tbody>
             {pl.channelRows.map(c=><tr key={c.id}>
-              <td>{c.name} {!c.counts_in_total && <span className="badge">합계 제외</span>}
+              <td>{c.name} {!c.counts_in_total && <span className="badge">Excluded</span>}
                 {Number(c.total_multiplier)!==1 && c.counts_in_total && <span className="badge">x{c.total_multiplier}</span>}</td>
               <td className="num">{fmt$(c.amount)}</td></tr>)}
-            <tr className="total"><td>총 매출</td><td className="num">{fmt$(pl.totalSales)}</td></tr>
+            <tr className="total"><td>Total Sales</td><td className="num">{fmt$(pl.totalSales)}</td></tr>
           </tbody></table>
         </div>
         <div className="card">
-          <h3>비용</h3>
+          <h3>Expenses</h3>
           <table className="t"><tbody>
             {pl.categoryRows.map(c=><tr key={c.id}><td>{c.name}</td><td className="num">{fmt$(c.amount)}</td></tr>)}
-            {pl.ruleRows.map(r=><tr key={r.code}><td>{r.name} <span className="badge gold">자동</span></td><td className="num">{fmt$(r.amount)}</td></tr>)}
-            <tr className="total"><td>총 비용</td><td className="num">{fmt$(pl.totalExpenses)}</td></tr>
-            <tr className="total"><td>순이익</td><td className={'num '+(pl.net>=0?'pos':'neg')}>{fmt$(pl.net)}</td></tr>
+            {pl.ruleRows.map(r=><tr key={r.code}><td>{r.name} <span className="badge gold">Auto</span></td><td className="num">{fmt$(r.amount)}</td></tr>)}
+            <tr className="total"><td>Total Expenses</td><td className="num">{fmt$(pl.totalExpenses)}</td></tr>
+            <tr className="total"><td>Net Profit</td><td className={'num '+(pl.net>=0?'pos':'neg')}>{fmt$(pl.net)}</td></tr>
           </tbody></table>
           {pl.dist.length>0 && <>
             <hr className="divider"/>
@@ -421,9 +526,10 @@ function Dashboard({corps, canEditIds}){
 }
 
 // ================= ENTRY (Maria) =================
-function Entry({corps, canEditIds, profile}){
+function Entry({corps, canEditIds, profile, presetCorp}){
   const editable = corps.filter(c=>canEditIds.has(c.id));
-  const [corpId, setCorpId] = useState(editable[0] && editable[0].id);
+  const [corpId, setCorpId] = useState(presetCorp || (editable[0] && editable[0].id));
+  useEffect(()=>{ if(presetCorp) setCorpId(presetCorp); },[presetCorp]);
   const [date, setDate] = useState(todayStr());
   const [meta, setMeta] = useState(null);
   const [dayRev, setDayRev] = useState({});
@@ -454,38 +560,41 @@ function Entry({corps, canEditIds, profile}){
     const { error } = await sb.from('daily_revenue').upsert(
       { corporation_id:corpId, channel_id:ch.id, date, amount, source:'manual', updated_by:profile.id, updated_at:new Date().toISOString() },
       { onConflict:'corporation_id,channel_id,date' });
-    if(error) showToast('저장 실패: '+error.message); else { showToast(ch.name+' 저장됨'); reload(); }
+    if(error) showToast('Save failed: '+error.message); else { showToast(ch.name+' saved'); reload(); }
   };
 
   const addExp = async () => {
-    if(!form.category_id || !form.amount){ showToast('카테고리와 금액을 입력하세요'); return; }
+    if(!form.category_id || !form.amount){ showToast('Select a category and enter an amount'); return; }
     setBusy(true);
     const { error } = await sb.from('expenses').insert({
       corporation_id:corpId, category_id:form.category_id, date,
       amount:parseFloat(form.amount), payee:form.payee||null, memo:form.memo||null,
       source:'manual', entered_by:profile.id });
     setBusy(false);
-    if(error) showToast('저장 실패: '+error.message);
-    else { setForm({category_id:'',amount:'',payee:'',memo:''}); showToast('비용 저장됨'); reload(); }
+    if(error) showToast('Save failed: '+error.message);
+    else { setForm({category_id:'',amount:'',payee:'',memo:''}); showToast('Expense saved'); reload(); }
   };
   const delExp = async id => {
-    if(!confirm('이 비용 항목을 삭제할까요?')) return;
+    if(!confirm('Delete this expense?')) return;
     const { error } = await sb.from('expenses').delete().eq('id',id);
-    if(error) showToast('삭제 실패: '+error.message); else reload();
+    if(error) showToast('Delete failed: '+error.message); else reload();
   };
+  const [pendCat, setPendCat] = useState({});
   const approvePending = async (p, ok) => {
-    if(ok){ const { error } = await sb.from('expenses').update({status:'confirmed'}).eq('id',p.id);
+    if(ok){ const upd = {status:'confirmed'};
+      if(pendCat[p.id]) upd.category_id = pendCat[p.id];
+      const { error } = await sb.from('expenses').update(upd).eq('id',p.id);
       if(error){ showToast(error.message); return; } }
     else { const { error } = await sb.from('expenses').delete().eq('id',p.id);
       if(error){ showToast(error.message); return; } }
-    showToast(ok?'승인됨':'거절됨'); reload();
+    showToast(ok?'Approved':'Rejected'); reload();
   };
 
   const catName = id => { const c=(meta&&meta.categories||[]).find(x=>x.id===id); return c?c.name:'?'; };
-  if(!editable.length) return <div className="card">접근 가능한 corporation이 없습니다.</div>;
+  if(!editable.length) return <div className="card">No corporations available for your account.</div>;
   return <div>
     <div className="page-head">
-      <div><div className="eyebrow">Daily Entry</div><h2>일일 입력</h2></div>
+      <div><div className="eyebrow">Daily Entry</div><h2>Daily Entry</h2></div>
       <div style={{display:'flex',gap:14,alignItems:'center',flexWrap:'wrap'}}>
         <CorpTabs corps={editable} sel={corpId} onSel={setCorpId}/>
         <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{width:160}}/>
@@ -493,27 +602,31 @@ function Entry({corps, canEditIds, profile}){
     </div>
 
     {pending.length>0 && <div className="card">
-      <h3>Slack 승인 대기 <span className="badge red">{pending.length}</span></h3>
+      <h3>Slack Pending Approval <span className="badge red">{pending.length}</span></h3>
       {pending.map(p=><div className="pend" key={p.id}>
         <div className="grow">
           <div><span className="mono">{p.date}</span> · {catName(p.category_id)} · <b className="mono">{fmt$(Number(p.amount))}</b></div>
           <div className="faint" style={{fontSize:12.5}}>{p.memo} {p.slack_user && '· @'+p.slack_user}</div>
         </div>
-        <button className="btn btn-sm btn-gold" onClick={()=>approvePending(p,true)}>승인</button>
-        <button className="btn btn-sm btn-danger" onClick={()=>approvePending(p,false)}>거절</button>
+        <select className="btn-sm" style={{width:150,padding:'5px 8px'}} value={pendCat[p.id]||p.category_id}
+          onChange={e=>setPendCat({...pendCat,[p.id]:e.target.value})}>
+          {(meta?meta.categories:[]).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <button className="btn btn-sm btn-gold" onClick={()=>approvePending(p,true)}>Approve</button>
+        <button className="btn btn-sm btn-danger" onClick={()=>approvePending(p,false)}>Reject</button>
       </div>)}
     </div>}
 
     <div className="grid2">
       <div className="card">
-        <h3>매출 <span className="faint" style={{fontWeight:400}}>{date}</span></h3>
+        <h3><span className="step-tag">1</span>Revenue <span className="faint" style={{fontWeight:400}}>{date}</span></h3>
         <table className="t"><tbody>
           {(meta?meta.channels.filter(c=>c.active):[]).map(c=>{
             const row = dayRev[c.id];
             const auto = row && row.source!=='manual' && row.source!=='import';
             return <tr key={c.id}>
               <td>{c.name} {auto && <span className="badge green">{row.source}</span>}
-                {row && row.verified && <span className="badge gold">확인됨</span>}</td>
+                {row && row.verified && <span className="badge gold">Verified</span>}</td>
               <td className="num" style={{width:150}}>
                 <input type="number" step="0.01" defaultValue={row?Number(row.amount):''} placeholder="0.00"
                   key={c.id+date+(row?row.amount:'')}
@@ -521,32 +634,38 @@ function Entry({corps, canEditIds, profile}){
               </td></tr>;
           })}
         </tbody></table>
-        <div className="hint">금액 입력 후 칸 밖을 클릭하면 저장됩니다. 자동 연동된 값도 필요하면 덮어쓸 수 있어요.</div>
+        <div className="big-total"><span className="bt-l">Sales today</span>
+          <span className="bt-v">{fmt$((meta?meta.channels:[]).reduce((a,c)=>{
+            const r=dayRev[c.id]; if(!r||!c.counts_in_total) return a;
+            return a+Number(r.amount)*Number(c.total_multiplier);},0))}</span></div>
+        <div className="hint">Amounts save when you click outside the field.</div>
       </div>
 
       <div className="card">
-        <h3>비용 추가</h3>
+        <h3><span className="step-tag">2</span>Add Expense</h3>
         <div className="form-row">
           <select value={form.category_id} onChange={e=>setForm({...form,category_id:e.target.value})}>
-            <option value="">카테고리</option>
+            <option value="">Category</option>
             {(meta?meta.categories.filter(c=>c.active):[]).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
-          <input className="w-sm" type="number" step="0.01" placeholder="금액" value={form.amount}
+          <input className="w-sm" type="number" step="0.01" placeholder="Amount" value={form.amount}
             onChange={e=>setForm({...form,amount:e.target.value})}/>
         </div>
         <div className="form-row">
-          <input placeholder="거래처 (선택)" value={form.payee} onChange={e=>setForm({...form,payee:e.target.value})}/>
-          <input placeholder="메모 (선택)" value={form.memo} onChange={e=>setForm({...form,memo:e.target.value})}/>
+          <input placeholder="Payee (optional)" value={form.payee} onChange={e=>setForm({...form,payee:e.target.value})}/>
+          <input placeholder="Memo (optional)" value={form.memo} onChange={e=>setForm({...form,memo:e.target.value})}/>
         </div>
-        <button className="btn btn-gold" disabled={busy} onClick={addExp}>비용 저장</button>
+        <button className="btn btn-gold" disabled={busy} onClick={addExp}>Save Expense</button>
         <hr className="divider"/>
-        <h3>이 날짜의 비용 {dayExp.length>0 && <span className="faint" style={{fontWeight:400}}>{fmt$(dayExp.reduce((a,e)=>a+Number(e.amount),0))}</span>}</h3>
-        {dayExp.length===0 ? <div className="faint">입력된 비용이 없습니다.</div> :
+        <h3>Expenses on This Date {dayExp.length>0 && <span className="faint" style={{fontWeight:400}}>{fmt$(dayExp.reduce((a,e)=>a+Number(e.amount),0))}</span>}</h3>
+        {dayExp.length===0 ? <div className="faint">No expenses entered.</div> :
           <table className="t"><tbody>
             {dayExp.map(e=><tr key={e.id}>
               <td>{catName(e.category_id)}
-                {e.source==='recurring' && <span className="badge blue">반복</span>}
-                {e.adjustment && <span className="badge gold">조정</span>}
+                {e.source==='recurring' && <span className="badge blue">Recurring</span>}
+                {e.source==='toast' && <span className="badge green">Toast</span>}
+                {e.source==='slack' && <span className="badge blue">Slack</span>}
+                {e.adjustment && <span className="badge gold">Adjustment</span>}
                 {e.payee && <span className="faint"> · {e.payee}</span>}
                 {e.memo && <div className="faint" style={{fontSize:12}}>{e.memo}</div>}</td>
               <td className="num">{fmt$(Number(e.amount))}</td>
@@ -588,18 +707,18 @@ function CashPage({corps, canEditIds, profile, isOwner}){
   useEffect(()=>{ reload(); },[reload]);
 
   const savePickup = async()=>{
-    if(!pk.period_start || !pk.period_end || !pk.counted_amount){ showToast('기간과 카운트 금액을 입력하세요'); return; }
+    if(!pk.period_start || !pk.period_end || !pk.counted_amount){ showToast('Enter the period and counted amount'); return; }
     const { data, error } = await sb.from('cash_pickups').insert({
       corporation_id:corpId, pickup_date:pk.pickup_date, period_start:pk.period_start,
       period_end:pk.period_end, counted_amount:parseFloat(pk.counted_amount), note:pk.note||null,
       created_by:profile.id }).select().single();
-    if(error){ showToast('저장 실패: '+error.message); return; }
+    if(error){ showToast('Save failed: '+error.message); return; }
     const { error: e2 } = await sb.from('daily_revenue').update({
       verified:true, pickup_id:data.id, verified_by:profile.id, verified_at:new Date().toISOString() })
       .eq('corporation_id',corpId).eq('channel_id',cashChId)
       .gte('date',pk.period_start).lte('date',pk.period_end);
-    if(e2){ showToast('확인 표시 실패: '+e2.message); return; }
-    showToast('픽업 저장, 기간 확인 완료');
+    if(e2){ showToast('Verification failed: '+e2.message); return; }
+    showToast('Pickup saved, period verified');
     setPk({pickup_date:todayStr(), period_start:'', period_end:'', counted_amount:'', note:''});
     reload();
   };
@@ -613,11 +732,11 @@ function CashPage({corps, canEditIds, profile, isOwner}){
   const recordedFor = (s,e) => Object.values(days)
     .filter(r=>r.date>=s && r.date<=e).reduce((a,r)=>a+Number(r.amount),0);
 
-  if(!stores.length) return <div className="card">접근 가능한 corporation이 없습니다.</div>;
+  if(!stores.length) return <div className="card">No corporations available for your account.</div>;
   return <div>
     <div className="page-head">
-      <div><div className="eyebrow">Cash</div><h2>현금 확인</h2>
-        <div className="sub">봉투 픽업 시 카운트한 기간을 확인 처리하면 달력에 금색으로 표시됩니다.</div></div>
+      <div><div className="eyebrow">Cash</div><h2>Cash Verification</h2>
+        <div className="sub">When you record an envelope pickup, the covered period is marked verified in gold on the calendar.</div></div>
       <div style={{display:'flex',gap:14,alignItems:'center',flexWrap:'wrap'}}>
         <CorpTabs corps={stores} sel={corpId} onSel={setCorpId}/>
         <MonthPick y={y} m={m} onChange={(a,b)=>{setY(a);setM(b);}}/>
@@ -625,9 +744,9 @@ function CashPage({corps, canEditIds, profile, isOwner}){
     </div>
     <div className="grid2">
       <div className="card">
-        <h3>현금 달력</h3>
+        <h3>Cash Calendar</h3>
         <div className="cal">
-          {KOR_DOW.map(d=><div key={d} className="dow">{d}</div>)}
+          {DOW.map(d=><div key={d} className="dow">{d}</div>)}
           {cells.map((d,i)=>{
             if(d===null) return <div key={'e'+i} className="day empty"></div>;
             const date=`${y}-${pad(m)}-${pad(d)}`;
@@ -641,32 +760,32 @@ function CashPage({corps, canEditIds, profile, isOwner}){
       </div>
       <div>
         {isOwner && <div className="card">
-          <h3>봉투 픽업 기록</h3>
+          <h3>Record Envelope Pickup</h3>
           <div className="form-row">
-            <div><label className="hint" style={{marginTop:0}}>픽업 날짜</label>
+            <div><label className="hint" style={{marginTop:0}}>Pickup date</label>
               <input type="date" value={pk.pickup_date} onChange={e=>setPk({...pk,pickup_date:e.target.value})}/></div>
-            <div><label className="hint" style={{marginTop:0}}>카운트 금액</label>
+            <div><label className="hint" style={{marginTop:0}}>Counted amount</label>
               <input type="number" step="0.01" placeholder="0.00" value={pk.counted_amount}
                 onChange={e=>setPk({...pk,counted_amount:e.target.value})}/></div>
           </div>
           <div className="form-row">
-            <div><label className="hint" style={{marginTop:0}}>커버 기간 시작</label>
+            <div><label className="hint" style={{marginTop:0}}>Period start</label>
               <input type="date" value={pk.period_start} onChange={e=>setPk({...pk,period_start:e.target.value})}/></div>
-            <div><label className="hint" style={{marginTop:0}}>커버 기간 끝</label>
+            <div><label className="hint" style={{marginTop:0}}>Period end</label>
               <input type="date" value={pk.period_end} onChange={e=>setPk({...pk,period_end:e.target.value})}/></div>
           </div>
-          <input placeholder="메모 (선택)" value={pk.note} onChange={e=>setPk({...pk,note:e.target.value})} style={{marginBottom:12}}/>
+          <input placeholder="Memo (optional)" value={pk.note} onChange={e=>setPk({...pk,note:e.target.value})} style={{marginBottom:12}}/>
           {pk.period_start && pk.period_end && <div className="hint" style={{marginBottom:12}}>
-            기간 내 기록된 현금 합계: <b className="mono">{fmt$(recordedFor(pk.period_start,pk.period_end))}</b>
-            {pk.counted_amount && <> · 차액: <b className={'mono '+(Math.abs(recordedFor(pk.period_start,pk.period_end)-parseFloat(pk.counted_amount))<0.01?'pos':'neg')}>
+            Recorded cash in period: <b className="mono">{fmt$(recordedFor(pk.period_start,pk.period_end))}</b>
+            {pk.counted_amount && <> · Difference: <b className={'mono '+(Math.abs(recordedFor(pk.period_start,pk.period_end)-parseFloat(pk.counted_amount))<0.01?'pos':'neg')}>
               {fmt$(parseFloat(pk.counted_amount)-recordedFor(pk.period_start,pk.period_end))}</b></>}
           </div>}
-          <button className="btn btn-gold" onClick={savePickup}>픽업 저장 + 기간 확인</button>
+          <button className="btn btn-gold" onClick={savePickup}>Save Pickup + Verify Period</button>
         </div>}
         <div className="card">
-          <h3>최근 픽업</h3>
-          {pickups.length===0 ? <div className="faint">기록 없음</div> :
-          <table className="t"><thead><tr><th>픽업일</th><th>기간</th><th className="num">카운트</th></tr></thead><tbody>
+          <h3>Recent Pickups</h3>
+          {pickups.length===0 ? <div className="faint">No records</div> :
+          <table className="t"><thead><tr><th>Pickup</th><th>Period</th><th className="num">Counted</th></tr></thead><tbody>
             {pickups.map(p=><tr key={p.id}>
               <td className="mono">{p.pickup_date}</td>
               <td className="mono" style={{fontSize:12}}>{p.period_start} ~ {p.period_end}</td>
@@ -680,7 +799,7 @@ function CashPage({corps, canEditIds, profile, isOwner}){
 }
 
 // ================= RECURRING =================
-function Recurring({corps, canEditIds, profile, isOwner}){
+function Recurring({corps, canEditIds, profile, isOwner, embedded}){
   const editable = corps.filter(c=>canEditIds.has(c.id));
   const [corpId, setCorpId] = useState(editable[0] && editable[0].id);
   const [meta, setMeta] = useState(null);
@@ -698,15 +817,15 @@ function Recurring({corps, canEditIds, profile, isOwner}){
   useEffect(()=>{ reload(); },[reload]);
 
   const add = async()=>{
-    if(!f.name||!f.category_id||!f.amount){ showToast('이름, 카테고리, 금액을 입력하세요'); return; }
+    if(!f.name||!f.category_id||!f.amount){ showToast('Enter a name, category, and amount'); return; }
     const { error } = await sb.from('recurring_expenses').insert({
       corporation_id:corpId, category_id:f.category_id, name:f.name, payee:f.payee||null,
       amount:parseFloat(f.amount), frequency:f.frequency,
       day_of_week: f.frequency==='weekly'?parseInt(f.day_of_week):null,
       day_of_month: f.frequency==='monthly'?parseInt(f.day_of_month):null });
-    if(error){ showToast('저장 실패: '+error.message); return; }
+    if(error){ showToast('Save failed: '+error.message); return; }
     setF({name:'',category_id:'',amount:'',frequency:'weekly',day_of_week:'5',day_of_month:'1',payee:''});
-    showToast('반복 비용 추가됨'); reload();
+    showToast('Recurring expense added'); reload();
   };
   const toggle = async r=>{
     await sb.from('recurring_expenses').update({active:!r.active}).eq('id',r.id); reload();
@@ -714,13 +833,13 @@ function Recurring({corps, canEditIds, profile, isOwner}){
 
   const addCategory = async()=>{
     const name = newCat.trim();
-    if(!name){ showToast('카테고리 이름을 입력하세요'); return; }
+    if(!name){ showToast('Enter a category name'); return; }
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'') || ('cat_'+Date.now());
     const maxOrd = Math.max(0, ...(meta?meta.categories:[]).map(c=>c.display_order||0));
     const { error } = await sb.from('expense_categories').insert({
       corporation_id:corpId, code:slug, name, display_order:maxOrd+1 });
-    if(error){ showToast(error.code==='23505' ? '같은 이름의 카테고리가 이미 있습니다' : '추가 실패: '+error.message); return; }
-    setNewCat(''); showToast('카테고리 추가됨: '+name); reload();
+    if(error){ showToast(error.code==='23505' ? 'A category with this name already exists' : 'Add failed: '+error.message); return; }
+    setNewCat(''); showToast('Category added: '+name); reload();
   };
 
   // materialize due entries for the current month up to today
@@ -745,67 +864,67 @@ function Recurring({corps, canEditIds, profile, isOwner}){
             source:'recurring', recurring_id:r.id, entered_by:profile.id});
       }
     });
-    if(!inserts.length){ showToast('생성할 항목이 없습니다 (이미 최신)'); return; }
+    if(!inserts.length){ showToast('Nothing to generate (already up to date)'); return; }
     const { error } = await sb.from('expenses').insert(inserts);
-    if(error) showToast('생성 실패: '+error.message);
-    else showToast(inserts.length+'건 생성됨');
+    if(error) showToast('Generate failed: '+error.message);
+    else showToast(inserts.length+' entries generated');
   };
 
   const catName = id => { const c=(meta&&meta.categories||[]).find(x=>x.id===id); return c?c.name:'?'; };
-  if(!editable.length) return <div className="card">접근 가능한 corporation이 없습니다.</div>;
+  if(!editable.length) return <div className="card">No corporations available for your account.</div>;
   return <div>
-    <div className="page-head">
-      <div><div className="eyebrow">Recurring</div><h2>반복 비용</h2>
-        <div className="sub">렌트, 론, 오너 주급 같은 고정 비용. "이번 달 생성"을 누르면 오늘까지의 예정 항목이 비용으로 기록됩니다.</div></div>
+    <div className="page-head" style={embedded?{marginBottom:14}:{}}>
+      <div>{!embedded && <><div className="eyebrow">Recurring</div><h2>Recurring Expenses</h2></>}
+        <div className="sub">Fixed costs like rent, loans, and owner weekly pay, set per corporation. Entries are generated automatically every day.</div></div>
       <div style={{display:'flex',gap:14,alignItems:'center',flexWrap:'wrap'}}>
         <CorpTabs corps={editable} sel={corpId} onSel={setCorpId}/>
-        <button className="btn" onClick={generate}>이번 달 생성</button>
+        <button className="btn" onClick={generate}>Generate This Month</button>
       </div>
     </div>
     {isOwner && <div className="card">
-      <h3>비용 카테고리 추가</h3>
-      <div className="hint" style={{marginTop:0,marginBottom:10}}>회계사비, Toast 이용비, Trash Removal처럼 손익에서 별도 줄로 보고 싶은 항목은 카테고리로 만드세요.</div>
+      <h3>Add Expense Category</h3>
+      <div className="hint" style={{marginTop:0,marginBottom:10}}>Create a category for anything you want as its own line on the P&L, like Accounting, Toast Fee, or Trash Removal.</div>
       <div className="form-row">
-        <input placeholder="카테고리 이름 (예: Accounting, Toast Fee, Trash Removal)" value={newCat} onChange={e=>setNewCat(e.target.value)}/>
-        <button className="btn" style={{flex:'0 0 auto'}} onClick={addCategory}>카테고리 추가</button>
+        <input placeholder="Category name (e.g. Accounting, Toast Fee, Trash Removal)" value={newCat} onChange={e=>setNewCat(e.target.value)}/>
+        <button className="btn" style={{flex:'0 0 auto'}} onClick={addCategory}>Add Category</button>
       </div>
     </div>}
     {isOwner && <div className="card">
-      <h3>새 반복 비용</h3>
+      <h3>New Recurring Expense</h3>
       <div className="form-row">
-        <input placeholder="이름 (예: John 주급, AD 렌트)" value={f.name} onChange={e=>setF({...f,name:e.target.value})}/>
+        <input placeholder="Name (e.g. John weekly pay, AD rent)" value={f.name} onChange={e=>setF({...f,name:e.target.value})}/>
         <select value={f.category_id} onChange={e=>setF({...f,category_id:e.target.value})}>
-          <option value="">카테고리</option>
+          <option value="">Category</option>
           {(meta?meta.categories:[]).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <input className="w-sm" type="number" step="0.01" placeholder="금액" value={f.amount} onChange={e=>setF({...f,amount:e.target.value})}/>
+        <input className="w-sm" type="number" step="0.01" placeholder="Amount" value={f.amount} onChange={e=>setF({...f,amount:e.target.value})}/>
       </div>
       <div className="form-row">
         <select className="w-sm" value={f.frequency} onChange={e=>setF({...f,frequency:e.target.value})}>
-          <option value="weekly">매주</option><option value="monthly">매월</option>
+          <option value="weekly">Weekly</option><option value="monthly">Monthly</option>
         </select>
         {f.frequency==='weekly'
           ? <select className="w-sm" value={f.day_of_week} onChange={e=>setF({...f,day_of_week:e.target.value})}>
-              {KOR_DOW.map((d,i)=><option key={i} value={i}>{d}요일</option>)}
+              {DOW.map((d,i)=><option key={i} value={i}>{d}</option>)}
             </select>
           : <select className="w-sm" value={f.day_of_month} onChange={e=>setF({...f,day_of_month:e.target.value})}>
-              {Array.from({length:31},(_,i)=><option key={i+1} value={i+1}>{i+1}일</option>)}
+              {Array.from({length:31},(_,i)=><option key={i+1} value={i+1}>Day {i+1}</option>)}
             </select>}
-        <input placeholder="거래처 (선택)" value={f.payee} onChange={e=>setF({...f,payee:e.target.value})}/>
-        <button className="btn btn-gold" style={{flex:'0 0 auto'}} onClick={add}>추가</button>
+        <input placeholder="Payee (optional)" value={f.payee} onChange={e=>setF({...f,payee:e.target.value})}/>
+        <button className="btn btn-gold" style={{flex:'0 0 auto'}} onClick={add}>Add</button>
       </div>
     </div>}
     <div className="card">
-      <h3>등록된 반복 비용</h3>
-      {rows.length===0 ? <div className="faint">없음</div> :
+      <h3>Registered Recurring Expenses</h3>
+      {rows.length===0 ? <div className="faint">None</div> :
       <table className="t">
-        <thead><tr><th>이름</th><th>카테고리</th><th>주기</th><th className="num">금액</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Category</th><th>Schedule</th><th className="num">Amount</th><th></th></tr></thead>
         <tbody>{rows.map(r=><tr key={r.id} style={{opacity:r.active?1:.45}}>
           <td>{r.name}{r.payee && <span className="faint"> · {r.payee}</span>}</td>
           <td>{catName(r.category_id)}</td>
-          <td>{r.frequency==='weekly' ? '매주 '+KOR_DOW[r.day_of_week]+'요일' : '매월 '+r.day_of_month+'일'}</td>
+          <td>{r.frequency==='weekly' ? 'Weekly · '+DOW[r.day_of_week] : 'Monthly · Day '+r.day_of_month}</td>
           <td className="num">{fmt$(Number(r.amount))}</td>
-          <td style={{textAlign:'right'}}>{isOwner && <button className="btn btn-sm" onClick={()=>toggle(r)}>{r.active?'중지':'재개'}</button>}</td>
+          <td style={{textAlign:'right'}}>{isOwner && <button className="btn btn-sm" onClick={()=>toggle(r)}>{r.active?'Pause':'Resume'}</button>}</td>
         </tr>)}</tbody>
       </table>}
     </div>
@@ -814,13 +933,14 @@ function Recurring({corps, canEditIds, profile, isOwner}){
 }
 
 // ================= MONTHLY CLOSE =================
-function ClosePage({corps, canEditIds, profile, isOwner}){
+function ClosePage({corps, canEditIds, profile, isOwner, preset}){
   const editable = corps.filter(c=>canEditIds.has(c.id));
-  const [corpId, setCorpId] = useState(editable[0] && editable[0].id);
+  const [corpId, setCorpId] = useState((preset&&preset.corpId) || (editable[0] && editable[0].id));
   const now = new Date();
   const prevM = now.getMonth()===0 ? {y:now.getFullYear()-1,m:12} : {y:now.getFullYear(),m:now.getMonth()};
-  const [y,setY] = useState(prevM.y);
-  const [m,setM] = useState(prevM.m);
+  const [y,setY] = useState((preset&&preset.y)||prevM.y);
+  const [m,setM] = useState((preset&&preset.m)||prevM.m);
+  useEffect(()=>{ if(preset){ setCorpId(preset.corpId); setY(preset.y); setM(preset.m); } },[preset]);
   const [meta,setMeta] = useState(null);
   const [pl,setPl] = useState(null);
   const [close,setClose] = useState(null);
@@ -846,23 +966,23 @@ function ClosePage({corps, canEditIds, profile, isOwner}){
   useEffect(()=>{ reload(); },[reload]);
 
   const addAdjustment = async()=>{
-    if(!adj.category_id||!adj.amount){ showToast('카테고리와 금액을 입력하세요'); return; }
+    if(!adj.category_id||!adj.amount){ showToast('Select a category and enter an amount'); return; }
     const dateEnd = `${y}-${pad(m)}-${pad(lastDay(y,m))}`;
     const { data, error } = await sb.from('expenses').insert({
       corporation_id:corpId, category_id:adj.category_id, date:dateEnd,
-      amount:parseFloat(adj.amount), memo:adj.memo||'월말 조정', adjustment:true,
+      amount:parseFloat(adj.amount), memo:adj.memo||'Month-end adjustment', adjustment:true,
       source:'manual', entered_by:profile.id }).select().single();
-    if(error){ showToast('실패: '+error.message); return; }
+    if(error){ showToast('Failed: '+error.message); return; }
     if(adj.reverse){
       let ny=y, nm=m+1; if(nm>12){nm=1;ny++;}
       const { error:e2 } = await sb.from('expenses').insert({
         corporation_id:corpId, category_id:adj.category_id, date:`${ny}-${pad(nm)}-01`,
-        amount:-parseFloat(adj.amount), memo:(adj.memo||'월말 조정')+' 자동 역분개',
+        amount:-parseFloat(adj.amount), memo:(adj.memo||'Month-end adjustment')+' auto reversal',
         adjustment:true, reversal_of:data.id, source:'manual', entered_by:profile.id });
-      if(e2){ showToast('역분개 실패: '+e2.message); return; }
+      if(e2){ showToast('Reversal failed: '+e2.message); return; }
     }
     setAdj({category_id:'',amount:'',memo:'',reverse:true});
-    showToast('조정 항목 추가됨'+(adj.reverse?' (다음 달 역분개 포함)':''));
+    showToast('Adjustment added'+(adj.reverse?' (with next-month reversal)':''));
     reload();
   };
 
@@ -877,38 +997,38 @@ function ClosePage({corps, canEditIds, profile, isOwner}){
     if(publish){ payload.published_at=new Date().toISOString(); payload.published_by=profile.id; }
     const { error } = await sb.from('monthly_close').upsert(payload,{onConflict:'corporation_id,year,month'});
     setBusy(false);
-    if(error){ showToast('실패: '+error.message); return; }
-    showToast(publish?'Publish 완료. 투자자에게 공개되었습니다.':'초안 저장됨'); reload();
+    if(error){ showToast('Failed: '+error.message); return; }
+    showToast(publish?'Published. Now visible to investors.':'Draft saved'); reload();
   };
   const unpublish = async()=>{
-    if(!confirm('공개를 취소할까요? 투자자에게 더 이상 보이지 않습니다.')) return;
+    if(!confirm('Unpublish this report? Investors will no longer see it.')) return;
     await sb.from('monthly_close').update({status:'draft'}).eq('id',close.id);
-    showToast('비공개로 전환됨'); reload();
+    showToast('Unpublished'); reload();
   };
 
   const upload = async e=>{
     const file = e.target.files[0]; if(!file) return;
-    if(!close){ showToast('먼저 초안을 저장하세요'); return; }
+    if(!close){ showToast('Save a draft first'); return; }
     setBusy(true);
     const path = crypto.randomUUID()+'/'+file.name;
     const { error } = await sb.storage.from('reports').upload(path, file);
-    if(error){ setBusy(false); showToast('업로드 실패: '+error.message); return; }
+    if(error){ setBusy(false); showToast('Upload failed: '+error.message); return; }
     await sb.from('report_files').insert({monthly_close_id:close.id, name:file.name, storage_path:path, uploaded_by:profile.id});
     setBusy(false); if(fileRef.current) fileRef.current.value='';
-    showToast('첨부 완료'); reload();
+    showToast('Attached'); reload();
   };
   const removeFile = async f=>{
-    if(!confirm('첨부를 삭제할까요?')) return;
+    if(!confirm('Delete this attachment?')) return;
     await sb.storage.from('reports').remove([f.storage_path]);
     await sb.from('report_files').delete().eq('id',f.id);
     reload();
   };
 
   const legacy = close && close.summary && close.summary.legacy;
-  if(!editable.length) return <div className="card">접근 가능한 corporation이 없습니다.</div>;
+  if(!editable.length) return <div className="card">No corporations available for your account.</div>;
   return <div>
     <div className="page-head">
-      <div><div className="eyebrow">Monthly Close</div><h2>월 마감 & Publish</h2></div>
+      <div><div className="eyebrow">Monthly Close</div><h2>Monthly Close & Publish</h2></div>
       <div style={{display:'flex',gap:14,alignItems:'center',flexWrap:'wrap'}}>
         <CorpTabs corps={editable} sel={corpId} onSel={setCorpId}/>
         <MonthPick y={y} m={m} onChange={(a,b)=>{setY(a);setM(b);}}/>
@@ -917,52 +1037,52 @@ function ClosePage({corps, canEditIds, profile, isOwner}){
     {!pl ? <Spinner/> : <div className="grid2">
       <div>
         <div className="card">
-          <h3>{monthLabel(y,m)} 손익 (실시간 계산)
-            {close && <span className={'badge '+(close.status==='published'?'green':'')}>{close.status==='published'?'공개됨':'초안'}</span>}</h3>
+          <h3>{monthLabel(y,m)} P&L (live)
+            {close && <span className={'badge '+(close.status==='published'?'green':'')}>{close.status==='published'?'Published':'Draft'}</span>}</h3>
           <table className="t"><tbody>
-            <tr><td>총 매출</td><td className="num">{fmt$(pl.totalSales)}</td></tr>
-            <tr><td>총 비용</td><td className="num">{fmt$(pl.totalExpenses)}</td></tr>
-            <tr className="total"><td>순이익</td><td className={'num '+(pl.net>=0?'pos':'neg')}>{fmt$(pl.net)} <span className="faint">({fmtPct(pl.margin)})</span></td></tr>
+            <tr><td>Total Sales</td><td className="num">{fmt$(pl.totalSales)}</td></tr>
+            <tr><td>Total Expenses</td><td className="num">{fmt$(pl.totalExpenses)}</td></tr>
+            <tr className="total"><td>Net Profit</td><td className={'num '+(pl.net>=0?'pos':'neg')}>{fmt$(pl.net)} <span className="faint">({fmtPct(pl.margin)})</span></td></tr>
             {pl.dist.map(d=><tr key={d.holder}><td className="muted">{d.holder} ({d.pct}%)</td><td className="num">{fmt$(d.amount)}</td></tr>)}
           </tbody></table>
-          {legacy && <div className="hint" style={{marginTop:10}}>이 달은 엑셀에서 이관된 원본 보드 스냅샷이 함께 저장되어 있습니다.</div>}
+          {legacy && <div className="hint" style={{marginTop:10}}>This month also has the original board snapshot imported from Excel.</div>}
         </div>
         {isOwner && <div className="card">
-          <h3>월말 조정 항목</h3>
+          <h3>Month-End Adjustments</h3>
           <div className="hint" style={{marginTop:0,marginBottom:12}}>
-            예: 페이롤이 다음 달 초에 나가지만 이번 달 비용인 경우. 역분개를 켜두면 다음 달 1일에 마이너스 항목이 자동 생성되어, 실제 출금을 평소대로 입력해도 이중 계산되지 않습니다.</div>
+            Example: payroll paid early next month that belongs to this month. With auto-reverse on, a negative entry is created on the 1st of next month, so recording the actual payment as usual never double-counts.</div>
           <div className="form-row">
             <select value={adj.category_id} onChange={e=>setAdj({...adj,category_id:e.target.value})}>
-              <option value="">카테고리</option>
+              <option value="">Category</option>
               {(meta?meta.categories:[]).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-            <input className="w-sm" type="number" step="0.01" placeholder="금액" value={adj.amount} onChange={e=>setAdj({...adj,amount:e.target.value})}/>
+            <input className="w-sm" type="number" step="0.01" placeholder="Amount" value={adj.amount} onChange={e=>setAdj({...adj,amount:e.target.value})}/>
           </div>
           <div className="form-row">
-            <input placeholder="메모 (예: 7/5 지급 예정 페이롤)" value={adj.memo} onChange={e=>setAdj({...adj,memo:e.target.value})}/>
+            <input placeholder="Memo (e.g. payroll due 7/5)" value={adj.memo} onChange={e=>setAdj({...adj,memo:e.target.value})}/>
           </div>
           <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:'var(--text2)',marginBottom:12}}>
             <input type="checkbox" style={{width:'auto'}} checked={adj.reverse} onChange={e=>setAdj({...adj,reverse:e.target.checked})}/>
-            다음 달 1일 자동 역분개
+            Auto-reverse on the 1st of next month
           </label>
-          <button className="btn" onClick={addAdjustment}>조정 추가 (이 달 말일자)</button>
+          <button className="btn" onClick={addAdjustment}>Add Adjustment (dated last day of month)</button>
         </div>}
       </div>
       <div>
         <div className="card">
-          <h3>투자자용 코멘트</h3>
-          <textarea rows="5" placeholder="이 달 요약 코멘트. Publish 시 투자자에게 그대로 보입니다." value={notes} onChange={e=>setNotes(e.target.value)}/>
+          <h3>Notes for Investors</h3>
+          <textarea rows="5" placeholder="Summary notes for the month. Shown to investors exactly as written when published." value={notes} onChange={e=>setNotes(e.target.value)}/>
           <hr className="divider"/>
-          <h3>첨부 (월 보고서 PDF 등)</h3>
+          <h3>Attachments (monthly report PDF, etc.)</h3>
           {files.map(f=><div key={f.id} className="pend"><div className="grow">{f.name}</div>
-            {isOwner && <button className="btn btn-sm btn-danger" onClick={()=>removeFile(f)}>삭제</button>}</div>)}
+            {isOwner && <button className="btn btn-sm btn-danger" onClick={()=>removeFile(f)}>Delete</button>}</div>)}
           {isOwner && <input type="file" ref={fileRef} onChange={upload} disabled={busy} style={{marginTop:8}}/>}
           <hr className="divider"/>
           {isOwner ? <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
-            <button className="btn" disabled={busy} onClick={()=>saveClose(false)}>초안 저장</button>
+            <button className="btn" disabled={busy} onClick={()=>saveClose(false)}>Save Draft</button>
             <button className="btn btn-gold" disabled={busy} onClick={()=>saveClose(true)}>Publish</button>
-            {close && close.status==='published' && <button className="btn btn-danger" onClick={unpublish}>공개 취소</button>}
-          </div> : <div className="hint">Publish는 Owner만 가능합니다.</div>}
+            {close && close.status==='published' && <button className="btn btn-danger" onClick={unpublish}>Unpublish</button>}
+          </div> : <div className="hint">Only the Owner can publish.</div>}
         </div>
       </div>
     </div>}
@@ -997,37 +1117,37 @@ function InvestorPortal({corps}){
     if(data && data.signedUrl) window.open(data.signedUrl,'_blank');
   };
 
-  if(!corps.length) return <div className="card">열람 가능한 corporation이 없습니다. 관리자에게 문의하세요.</div>;
+  if(!corps.length) return <div className="card">No corporations available. Contact HQ.</div>;
   return <div>
     <div className="page-head">
-      <div><div className="eyebrow">Investor Reports</div><h2>월간 보고</h2>
-        <div className="sub">Ugly HQ가 발행한 월별 요약입니다.</div></div>
+      <div><div className="eyebrow">Investor Reports</div><h2>Monthly Reports</h2>
+        <div className="sub">Monthly summaries published by Ugly HQ.</div></div>
       <CorpTabs corps={corps} sel={corpId} onSel={setCorpId}/>
     </div>
     {reports===null ? <Spinner/> : reports.length===0 ?
-      <div className="card faint">아직 발행된 보고서가 없습니다.</div> :
+      <div className="card faint">No reports published yet.</div> :
       reports.map(r=>{
         const s = r.summary||{};
         return <div className="inv-report" key={r.id}>
           <div className="rh">
-            <div className="m h-display">{r.year}년 {r.month}월</div>
-            <div className="faint mono" style={{fontSize:11}}>{r.published_at && new Date(r.published_at).toLocaleDateString()} 발행</div>
+            <div className="m h-display">{MONTHS[r.month-1]} {r.year}</div>
+            <div className="faint mono" style={{fontSize:11}}>Published {r.published_at && new Date(r.published_at).toLocaleDateString()}</div>
           </div>
           <div className="kpis" style={{marginBottom:12}}>
-            <div className="kpi"><div className="k-lbl">매출</div><div className="k-val">{fmt$(s.total_sales)}</div></div>
-            <div className="kpi"><div className="k-lbl">비용</div><div className="k-val">{fmt$(s.total_expenses)}</div></div>
-            <div className="kpi"><div className="k-lbl">순이익</div>
+            <div className="kpi"><div className="k-lbl">Sales</div><div className="k-val">{fmt$(s.total_sales)}</div></div>
+            <div className="kpi"><div className="k-lbl">Expenses</div><div className="k-val">{fmt$(s.total_expenses)}</div></div>
+            <div className="kpi"><div className="k-lbl">Net Profit</div>
               <div className={'k-val '+((s.net_profit||0)>=0?'pos':'neg')}>{fmt$(s.net_profit)}</div>
-              {s.net_margin!==null && s.net_margin!==undefined && <div className="k-sub">마진 {fmtPct(s.net_margin)}</div>}</div>
+              {s.net_margin!==null && s.net_margin!==undefined && <div className="k-sub">Margin {fmtPct(s.net_margin)}</div>}</div>
           </div>
           {r.notes && <div className="notes-block">{r.notes}</div>}
           {(s.revenue||[]).length>0 && <details>
-            <summary style={{cursor:'pointer',color:'var(--text2)',fontSize:13,marginBottom:8}}>상세 내역</summary>
+            <summary style={{cursor:'pointer',color:'var(--text2)',fontSize:13,marginBottom:8}}>Details</summary>
             <div className="grid2" style={{marginTop:10}}>
-              <table className="t"><thead><tr><th>매출</th><th className="num"></th></tr></thead><tbody>
+              <table className="t"><thead><tr><th>Revenue</th><th className="num"></th></tr></thead><tbody>
                 {(s.revenue||[]).map((x,i)=><tr key={i}><td>{x.name}</td><td className="num">{fmt$(x.amount)}</td></tr>)}
               </tbody></table>
-              <table className="t"><thead><tr><th>비용</th><th className="num"></th></tr></thead><tbody>
+              <table className="t"><thead><tr><th>Expenses</th><th className="num"></th></tr></thead><tbody>
                 {(s.expenses||[]).map((x,i)=><tr key={i}><td>{x.name}</td><td className="num">{fmt$(x.amount)}</td></tr>)}
               </tbody></table>
             </div>
@@ -1041,7 +1161,7 @@ function InvestorPortal({corps}){
 }
 
 // ================= ADMIN =================
-function Admin({corps, session}){
+function Admin({corps, session, embedded}){
   const [profiles, setProfiles] = useState([]);
   const [perms, setPerms] = useState([]);
   const [nf, setNf] = useState({email:'', password:'', full_name:'', role:'investor'});
@@ -1078,7 +1198,7 @@ function Admin({corps, session}){
   };
 
   const createAccount = async()=>{
-    if(!nf.email||!nf.password||!nf.full_name){ showToast('모든 필드를 입력하세요'); return; }
+    if(!nf.email||!nf.password||!nf.full_name){ showToast('Fill in all fields'); return; }
     setBusy(true);
     try{
       const res = await fetch(FN_BASE+'/create-account',{
@@ -1089,8 +1209,8 @@ function Admin({corps, session}){
           .map(([cid,v])=>({corporation_id:cid, can_view:!!v.can_view, can_edit:!!v.can_edit}))})
       });
       const j = await res.json();
-      if(!res.ok) throw new Error(j.error||'생성 실패');
-      showToast('계정 생성됨: '+nf.email);
+      if(!res.ok) throw new Error(j.error||'Create failed');
+      showToast('Account created: '+nf.email);
       setNf({email:'',password:'',full_name:'',role:'investor'}); setNfPerms({});
       reload();
     }catch(e){ showToast(e.message); }
@@ -1098,13 +1218,13 @@ function Admin({corps, session}){
   };
 
   return <div>
-    <div className="page-head"><div><div className="eyebrow">Admin</div><h2>계정 & 권한</h2></div></div>
+    {!embedded && <div className="page-head"><div><div className="eyebrow">Admin</div><h2>Accounts & Permissions</h2></div></div>}
     <div className="card">
-      <h3>새 계정 만들기</h3>
+      <h3>Create Account</h3>
       <div className="form-row">
-        <input placeholder="이메일" value={nf.email} onChange={e=>setNf({...nf,email:e.target.value})}/>
-        <input placeholder="임시 비밀번호" type="text" value={nf.password} onChange={e=>setNf({...nf,password:e.target.value})}/>
-        <input placeholder="이름" value={nf.full_name} onChange={e=>setNf({...nf,full_name:e.target.value})}/>
+        <input placeholder="Email" value={nf.email} onChange={e=>setNf({...nf,email:e.target.value})}/>
+        <input placeholder="Temporary password" type="text" value={nf.password} onChange={e=>setNf({...nf,password:e.target.value})}/>
+        <input placeholder="Full name" value={nf.full_name} onChange={e=>setNf({...nf,full_name:e.target.value})}/>
         <select className="w-sm" value={nf.role} onChange={e=>setNf({...nf,role:e.target.value})}>
           <option value="investor">Investor</option>
           <option value="assistant">Assistant</option>
@@ -1112,7 +1232,7 @@ function Admin({corps, session}){
         </select>
       </div>
       {nf.role!=='owner' && <table className="t" style={{marginBottom:12}}>
-        <thead><tr><th>Corporation</th><th>열람 (투자자)</th><th>입력 (어시스턴트)</th></tr></thead>
+        <thead><tr><th>Corporation</th><th>View (investor)</th><th>Edit (assistant)</th></tr></thead>
         <tbody>{corps.map(c=>{
           const v = nfPerms[c.id]||{};
           return <tr key={c.id}><td>{c.name}</td>
@@ -1122,20 +1242,20 @@ function Admin({corps, session}){
               onChange={e=>setNfPerms({...nfPerms,[c.id]:{...v,can_edit:e.target.checked}})}/></td>
           </tr>;})}
         </tbody></table>}
-      <button className="btn btn-gold" disabled={busy} onClick={createAccount}>계정 생성</button>
-      <div className="hint">계정 생성은 Netlify 함수(create-account)가 배포되어 있어야 작동합니다.</div>
+      <button className="btn btn-gold" disabled={busy} onClick={createAccount}>Create Account</button>
+      <div className="hint">Account creation requires the create-account Netlify function to be deployed.</div>
     </div>
     <div className="card">
-      <h3>계정 목록 & 권한</h3>
+      <h3>Accounts & Permissions</h3>
       {profiles.map(p=><div key={p.id} style={{marginBottom:18,opacity:p.active?1:.5}}>
         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8,flexWrap:'wrap'}}>
           <b>{p.full_name||p.email}</b>
           <span className="badge gold">{p.role}</span>
           <span className="faint" style={{fontSize:12}}>{p.email}</span>
-          <button className="btn btn-sm" style={{marginLeft:'auto'}} onClick={()=>toggleActive(p)}>{p.active?'비활성화':'활성화'}</button>
+          <button className="btn btn-sm" style={{marginLeft:'auto'}} onClick={()=>toggleActive(p)}>{p.active?'Deactivate':'Activate'}</button>
         </div>
         {p.role!=='owner' && <table className="t" style={{maxWidth:560}}>
-          <thead><tr><th>Corp</th><th>열람</th><th>입력</th></tr></thead>
+          <thead><tr><th>Corp</th><th>View</th><th>Edit</th></tr></thead>
           <tbody>{corps.map(c=>{
             const x = permOf(p.id,c.id);
             return <tr key={c.id}><td>{c.code}</td>
@@ -1146,6 +1266,113 @@ function Admin({corps, session}){
       </div>)}
     </div>
     {toast && <div className="toast">{toast}</div>}
+  </div>;
+}
+
+
+
+// ================= SETTINGS =================
+function Settings({corps, canEditIds, profile, isOwner, session}){
+  const [sub, setSub] = useState('recurring');
+  return <div>
+    <div className="page-head">
+      <div><div className="eyebrow">Settings</div><h2>Settings</h2></div>
+      <div className="corp-tabs">
+        <button className={'corp-tab'+(sub==='recurring'?' on':'')} onClick={()=>setSub('recurring')}>Recurring & Categories</button>
+        <button className={'corp-tab'+(sub==='accounts'?' on':'')} onClick={()=>setSub('accounts')}>Accounts</button>
+      </div>
+    </div>
+    {sub==='recurring'
+      ? <Recurring corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} embedded={true}/>
+      : <Admin corps={corps} session={session} embedded={true}/>}
+  </div>;
+}
+
+// ================= HOME (TODAY) =================
+function Home({corps, canEditIds, profile, isOwner, goEntry, goClose}){
+  const editable = corps.filter(c=>canEditIds.has(c.id));
+  const ids = editable.map(c=>c.id);
+  const [data, setData] = useState(null);
+  const date = todayStr();
+  const now = new Date();
+  const prev = now.getMonth()===0 ? {y:now.getFullYear()-1,m:12} : {y:now.getFullYear(),m:now.getMonth()};
+
+  useEffect(()=>{ if(!ids.length){ setData({}); return; } let dead=false;
+    (async()=>{
+      const monthStart = `${now.getFullYear()}-${pad(now.getMonth()+1)}-01`;
+      const [chAll, revToday, expToday, pend, revMonth, closes] = await Promise.all([
+        sb.from('revenue_channels').select('id,corporation_id,code,counts_in_total,total_multiplier').in('corporation_id',ids),
+        sb.from('daily_revenue').select('corporation_id,channel_id,amount,source').in('corporation_id',ids).eq('date',date),
+        sb.from('expenses').select('corporation_id').in('corporation_id',ids).eq('date',date).eq('status','confirmed'),
+        sb.from('expenses').select('corporation_id').in('corporation_id',ids).eq('status','pending'),
+        sb.from('daily_revenue').select('corporation_id,date,amount').in('corporation_id',ids).gte('date',monthStart).lte('date',date).gt('amount',0),
+        isOwner ? sb.from('monthly_close').select('corporation_id,status').in('corporation_id',ids).eq('year',prev.y).eq('month',prev.m) : Promise.resolve({data:[]}),
+      ]);
+      if(dead) return;
+      const chBy = {}; (chAll.data||[]).forEach(c=>chBy[c.id]=c);
+      const per = {};
+      editable.forEach(c=>per[c.id]={sales:0,revRows:0,synced:false,exp:0,pending:0,daysDone:new Set(),closed:false});
+      (revToday.data||[]).forEach(r=>{
+        const p=per[r.corporation_id]; if(!p) return;
+        const ch=chBy[r.channel_id];
+        if(ch && ch.counts_in_total) p.sales += Number(r.amount)*Number(ch.total_multiplier);
+        if(Number(r.amount)>0) p.revRows++;
+        if(r.source!=='manual' && r.source!=='import') p.synced=true;
+      });
+      (expToday.data||[]).forEach(r=>{ if(per[r.corporation_id]) per[r.corporation_id].exp++; });
+      (pend.data||[]).forEach(r=>{ if(per[r.corporation_id]) per[r.corporation_id].pending++; });
+      (revMonth.data||[]).forEach(r=>{ if(per[r.corporation_id]) per[r.corporation_id].daysDone.add(r.date); });
+      (closes.data||[]).forEach(r=>{ if(per[r.corporation_id]) per[r.corporation_id].closed = r.status==='published'; });
+      setData(per);
+    })();
+    return ()=>{dead=true};
+  },[corps.length]);
+
+  if(!editable.length) return <div className="card">No corporations available for your account.</div>;
+  if(!data) return <Spinner/>;
+  const dayOfMonth = now.getDate();
+  const totalPending = ids.reduce((a,id)=>a+(data[id]?data[id].pending:0),0);
+  const unclosed = isOwner ? editable.filter(c=>data[c.id] && !data[c.id].closed) : [];
+  const firstName = (profile.full_name||'').split(' ')[0] || 'there';
+
+  return <div>
+    <div className="greet">Good {now.getHours()<12?'morning':now.getHours()<18?'afternoon':'evening'}, {firstName}.</div>
+    <div className="greet-sub">{MONTHS[now.getMonth()]} {now.getDate()} · Tap a store to enter today's numbers.</div>
+
+    {(totalPending>0 || unclosed.length>0) && <div style={{marginBottom:20}}>
+      {totalPending>0 && <div className="quest">
+        <div className="q-ico">!</div>
+        <div className="grow"><div className="q-t">{totalPending} Slack expense{totalPending>1?'s':''} waiting for approval</div>
+          <div className="q-s">Review them on the entry screen of each store</div></div>
+      </div>}
+      {unclosed.map(c=><div className="quest" key={c.id}>
+        <div className="q-ico">◆</div>
+        <div className="grow"><div className="q-t">{MONTHS[prev.m-1]} not published yet · {c.code}</div>
+          <div className="q-s">Close the month and publish it to investors</div></div>
+        <button className="btn btn-sm btn-gold" onClick={()=>goClose(c.id, prev.y, prev.m)}>Close now</button>
+      </div>)}
+    </div>}
+
+    <div className="home-grid">
+      {editable.map(c=>{
+        const p = data[c.id];
+        const done = p.revRows>0;
+        const pct = Math.min(100, Math.round(p.daysDone.size/dayOfMonth*100));
+        return <div key={c.id} className={'home-card'+(done?' done':'')} onClick={()=>goEntry(c.id)}>
+          {done && <div className="hc-check">✓</div>}
+          <div className="hc-code">{c.code}</div>
+          <div className="hc-name">{c.name}</div>
+          <div className="hc-amt"><span className="cur">$</span>{p.sales.toLocaleString('en-US',{maximumFractionDigits:0})}<span className="cur"> today</span></div>
+          <div className="hc-status">
+            <span><span className={'dot'+(done?' ok':'')}></span>Revenue</span>
+            <span><span className={'dot'+(p.exp>0?' ok':'')}></span>{p.exp} expense{p.exp===1?'':'s'}</span>
+            {p.pending>0 && <span><span className="dot warn"></span>{p.pending} pending</span>}
+          </div>
+          <div className="progress"><div className="fill" style={{width:pct+'%'}}></div></div>
+          <div className="progress-lbl">{p.daysDone.size} of {dayOfMonth} days entered this month</div>
+        </div>;
+      })}
+    </div>
   </div>;
 }
 
@@ -1160,35 +1387,35 @@ function Login({onDone}){
     setBusy(true); setErr(null);
     const { error } = await sb.auth.signInWithPassword({email, password:pw});
     setBusy(false);
-    if(error) setErr('로그인에 실패했습니다. 이메일과 비밀번호를 확인하세요.');
+    if(error) setErr('Sign in failed. Check your email and password.');
     else onDone();
   };
   return <div className="login-wrap">
     <div className="login-box">
       <div className="eyebrow">Ugly Donuts & Corn Dogs</div>
       <h1>Finance <em style={{color:'var(--gold)'}}>Tool</em></h1>
-      <div className="sub">HQ 재무 관리 및 투자자 보고</div>
+      <div className="sub">HQ financial management & investor reporting</div>
       {err && <div className="login-err">{err}</div>}
       <form onSubmit={go}>
-        <div className="field"><label>이메일</label>
+        <div className="field"><label>Email</label>
           <input type="email" value={email} onChange={e=>setEmail(e.target.value)} autoFocus/></div>
-        <div className="field"><label>비밀번호</label>
+        <div className="field"><label>Password</label>
           <input type="password" value={pw} onChange={e=>setPw(e.target.value)}/></div>
         <button type="submit" className="btn btn-gold" style={{width:'100%',padding:'11px'}} disabled={busy}>
-          {busy?'확인 중...':'로그인'}</button>
+          {busy?'Signing in...':'Sign In'}</button>
       </form>
     </div>
   </div>;
 }
 
 const NAV = [
-  {id:'dashboard', label:'대시보드', roles:['owner','assistant']},
-  {id:'entry',     label:'일일 입력', roles:['owner','assistant']},
-  {id:'cash',      label:'현금 확인', roles:['owner','assistant']},
-  {id:'recurring', label:'반복 비용', roles:['owner','assistant']},
-  {id:'close',     label:'월 마감',   roles:['owner','assistant']},
-  {id:'investor',  label:'투자자 보고', roles:['owner','investor']},
-  {id:'admin',     label:'계정 관리', roles:['owner']},
+  {id:'home',      label:'Home', roles:['owner','assistant']},
+  {id:'entry',     label:'Daily Entry', roles:['owner','assistant']},
+  {id:'insights',  label:'Insights', roles:['owner','assistant']},
+  {id:'cash',      label:'Cash', roles:['owner','assistant']},
+  {id:'close',     label:'Close & Publish', roles:['owner']},
+  {id:'investor',  label:'Reports', roles:['owner','investor']},
+  {id:'settings',  label:'Settings', roles:['owner']},
 ];
 
 function App(){
@@ -1196,7 +1423,11 @@ function App(){
   const [profile,setProfile] = useState(null);
   const [corps,setCorps] = useState([]);
   const [perms,setPerms] = useState([]);
-  const [tab,setTab] = useState(localStorage.getItem('ft_tab')||'dashboard');
+  const [tab,setTab] = useState(localStorage.getItem('ft_tab')||'home');
+  const [entryCorp,setEntryCorp] = useState(null);
+  const [closePreset,setClosePreset] = useState(null);
+  const goEntry = (corpId)=>{ setEntryCorp(corpId); setTab('entry'); };
+  const goClose = (corpId,y,m)=>{ setClosePreset({corpId,y,m}); setTab('close'); };
   const [fatal,setFatal] = useState(null);
 
   useEffect(()=>{
@@ -1209,7 +1440,7 @@ function App(){
     (async()=>{
       const p = await sb.from('profiles').select('*').eq('id',session.user.id).maybeSingle();
       if(dead) return;
-      if(!p.data || !p.data.active){ setFatal('이 계정은 Finance Tool 접근 권한이 없습니다.'); return; }
+      if(!p.data || !p.data.active){ setFatal('This account does not have access to Finance Tool.'); return; }
       setProfile(p.data);
       const [c, pm] = await Promise.all([
         sb.from('corporations').select('*').order('display_order'),
@@ -1227,7 +1458,7 @@ function App(){
   if(!session) return <Login onDone={()=>{}}/>;
   if(fatal) return <div className="login-wrap"><div className="login-box">
     <div className="login-err">{fatal}</div>
-    <button className="btn" onClick={()=>{setFatal(null);sb.auth.signOut();}}>로그아웃</button></div></div>;
+    <button className="btn" onClick={()=>{setFatal(null);sb.auth.signOut();}}>Sign Out</button></div></div>;
   if(!profile) return <div className="login-wrap"><Spinner/></div>;
 
   const isOwner = profile.role==='owner';
@@ -1238,13 +1469,13 @@ function App(){
   const effTab = nav.some(n=>n.id===tab) ? tab : nav[0].id;
 
   const page = {
-    dashboard: <Dashboard corps={corps} canEditIds={canEditIds}/>,
-    entry:     <Entry corps={corps} canEditIds={canEditIds} profile={profile}/>,
+    home:      <Home corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} goEntry={goEntry} goClose={goClose}/>,
+    entry:     <Entry corps={corps} canEditIds={canEditIds} profile={profile} presetCorp={entryCorp}/>,
+    insights:  <Dashboard corps={corps} canEditIds={canEditIds}/>,
     cash:      <CashPage corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner}/>,
-    recurring: <Recurring corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner}/>,
-    close:     <ClosePage corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner}/>,
+    close:     <ClosePage corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} preset={closePreset}/>,
     investor:  <InvestorPortal corps={isOwner?corps:viewCorps}/>,
-    admin:     <Admin corps={corps} session={session}/>,
+    settings:  <Settings corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} session={session}/>,
   }[effTab];
 
   return <div className="shell">
@@ -1256,7 +1487,7 @@ function App(){
         <div className="who">{profile.full_name||profile.email}</div>
         <div className="role">{profile.role}</div>
         <button className="btn btn-sm btn-ghost" style={{marginTop:8,padding:'4px 0',color:'var(--text3)'}}
-          onClick={()=>sb.auth.signOut()}>로그아웃</button>
+          onClick={()=>sb.auth.signOut()}>Sign Out</button>
       </div>
     </div>
     <div className="main">{page}</div>

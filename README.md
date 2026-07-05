@@ -5,18 +5,31 @@ Internal financial management and investor reporting app for Ugly Donuts & Corn 
 ## Structure
 ```
 index.html                        # Single-page app (React via Babel CDN)
-netlify.toml                      # Netlify config + scheduled function
+netlify.toml                      # Netlify config + scheduled functions
 package.json                      # Function dependency (@supabase/supabase-js)
 netlify/functions/
-  create-account.js               # Owner-only account creation (auth + profile + permissions)
-  recurring-cron.js               # Daily cron: materializes recurring expenses
+  create-account.js               # Owner-only account creation
+  recurring-cron.js               # Daily: generates due recurring expenses
+  toast-sync.js                   # Daily: store sales + tips from Toast
+  quickbooks-sync.js              # Daily: HQ revenue from QuickBooks Online
+  qbo-auth.js                     # One-time QuickBooks OAuth connection
+  ummas-revenue.js                # Webhook: Ummas website posts daily revenue
+  slack-expense.js                # Slack channel -> pending expenses
 ```
 
 ## Netlify environment variables
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_KEY` (service_role secret, never expose in client code)
-- `ALLOWED_ORIGIN` (deployed site URL, e.g. https://uglyfinance.netlify.app)
+Core:
+- SUPABASE_URL, SUPABASE_SERVICE_KEY, ALLOWED_ORIGIN, SITE_URL
 
-## Database
-Supabase project (separate from ops/CRM). One-time setup scripts are kept
-outside this repo: schema, historical import, storage policies.
+Toast (after Standard API access approval):
+- TOAST_CLIENT_ID, TOAST_CLIENT_SECRET
+- TOAST_RESTAURANTS = "AD:guid,BW:guid,FH:guid"
+
+QuickBooks (after creating an Intuit developer app):
+- QBO_CLIENT_ID, QBO_CLIENT_SECRET, QBO_SETUP_SECRET
+
+Ummas website:
+- UMMAS_WEBHOOK_SECRET
+
+Slack (after creating a Slack app):
+- SLACK_SIGNING_SECRET, SLACK_CHANNEL_ID
