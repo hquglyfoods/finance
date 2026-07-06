@@ -10,25 +10,20 @@ package.json                      # Function dependency (@supabase/supabase-js)
 netlify/functions/
   create-account.js               # Owner-only account creation
   recurring-cron.js               # Daily: generates due recurring expenses
-  toast-sync.js                   # Daily: store sales + tips from Toast (AD/BW/FH)
-  inventory-sync.js               # Daily: HQ invoices + Ummas orders from the
-                                  #        Inventory app Supabase (read-only)
-  slack-expense.js                # Slack channel -> pending expenses
+  toast-sync.js                   # Hourly: store sales + tips from Toast (AD/BW/FH)
+  inventory-sync.js               # Hourly: HQ invoices + Ummas orders from Inventory app
+  slack-expense.js                # expense-* Slack channels -> AI-parsed pending expenses
 ```
 
-## Data sources
-- Toast API: AD/BW/FH daily sales by channel + card tips (expense).
-- Inventory app Supabase (single source of truth for QuickBooks + Ummas + Wix):
-  - source 'quickbooks' to a company store  -> HQ revenue + that store's HQ Supplies expense
-  - source 'quickbooks' to Pearland          -> HQ revenue only (franchisee)
-  - source 'ummasrecipe-store' / 'wix'       -> UMMA revenue
-  Finance Tool reads it read-only with a dedicated key. No direct QuickBooks
-  connection is needed (QuickBooks flows QB -> Zapier -> Inventory app).
-- Slack: expense channel messages -> pending expenses for approval.
+## UI
+Desktop: left sidebar. Mobile: top brand bar + bottom tab bar with icons.
+Forms, KPI cards, approvals, tables, and the cash calendar all adapt to phone
+width. Toasts float above the tab bar and never block taps. Long names wrap
+inside table cells without horizontal overflow.
 
 ## Netlify environment variables
 Core: SUPABASE_URL, SUPABASE_SERVICE_KEY, ALLOWED_ORIGIN, SITE_URL
 Toast: TOAST_CLIENT_ID, TOAST_CLIENT_SECRET, TOAST_RESTAURANTS="AD:guid,BW:guid,FH:guid"
-Inventory (read-only): INV_SUPABASE_URL, INV_SUPABASE_READ_KEY
-  Optional: INV_CUSTOMER_MAP, INV_UMMA_MAP
-Slack: SLACK_SIGNING_SECRET, SLACK_CHANNEL_ID
+Inventory (read-only): INV_SUPABASE_URL, INV_SUPABASE_READ_KEY  [optional INV_CUSTOMER_MAP, INV_UMMA_MAP]
+Slack: SLACK_SIGNING_SECRET, SLACK_BOT_TOKEN, ANTHROPIC_API_KEY,
+       SLACK_CHANNEL_MAP="C06EWSFHS86=AD,C06ENV96HDM=BW,C06FS9MH0F2=FH"

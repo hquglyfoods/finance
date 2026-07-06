@@ -124,11 +124,18 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .divider{border:none;border-top:1px solid var(--border-soft);margin:18px 0}
 
 /* toast */
-.toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--gold-soft);color:var(--text);border-radius:8px;padding:11px 20px;font-size:13.5px;z-index:99;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+.toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--gold-soft);color:var(--text);border-radius:8px;padding:11px 20px;font-size:13.5px;z-index:120;box-shadow:0 8px 30px rgba(0,0,0,.5);pointer-events:none;max-width:calc(100vw - 32px);text-align:center}
 
 /* pending queue */
 .pend{display:flex;align-items:center;gap:12px;padding:11px 12px;border:1px solid var(--border-soft);border-radius:8px;margin-bottom:8px;background:var(--panel2)}
 .pend .grow{flex:1;min-width:0}
+@media(max-width:820px){
+  .approve-row{flex-direction:column;align-items:stretch !important;gap:10px}
+  .approve-row .ar-fields{display:flex;gap:8px}
+  .approve-row .ar-fields>div{flex:1}
+  .approve-row .ar-actions{display:flex;gap:8px}
+  .approve-row .ar-actions button{flex:1}
+}
 
 /* investor */
 .inv-report{border:1px solid var(--border-soft);border-radius:10px;padding:20px 22px;margin-bottom:14px;background:var(--panel)}
@@ -143,11 +150,48 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 
 @media(max-width:820px){
   .shell{flex-direction:column}
-  .side{width:100%;height:auto;position:static;flex-direction:row;align-items:center;gap:4px;overflow-x:auto;padding:10px 12px}
-  .side .brand,.side .brand-sub,.side .foot{display:none}
-  .nav-item{width:auto;white-space:nowrap;margin-bottom:0}
-  .main{padding:20px 16px 70px}
+  /* top bar: brand + sign out only */
+  .side{width:100%;height:auto;position:sticky;top:0;z-index:20;flex-direction:row;align-items:center;
+    gap:10px;padding:12px 16px;border-right:none;border-bottom:1px solid var(--border-soft)}
+  .side .brand{display:block;font-size:17px;padding:0}
+  .side .brand-sub{display:none}
+  .side .nav-item{display:none}
+  .side .foot{display:flex;align-items:center;gap:10px;margin:0 0 0 auto;padding:0;border:none}
+  .side .foot .role{display:none}
+  .side .foot .who{font-size:12.5px}
+  .side .foot button{margin-top:0 !important}
+  /* bottom tab bar */
+  .tabbar{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;background:var(--panel);
+    border-top:1px solid var(--border);padding:6px 4px 8px;justify-content:space-around}
+  .tabbar button{flex:1;background:none;border:none;color:var(--text3);font-size:10px;font-weight:600;
+    display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 2px;letter-spacing:.02em}
+  .tabbar button .ic{font-size:17px;line-height:1}
+  .tabbar button.on{color:var(--gold)}
+  .main{padding:18px 14px 84px}
+  .page-head{margin-bottom:18px}
+  .page-head h2{font-size:23px}
+  /* headers: stack controls full width */
+  .page-head>div:last-child{width:100%}
+  .corp-tabs{width:100%}
+  .corp-tab{flex:1;text-align:center;padding:8px 6px}
+  .month-pick{width:100%;justify-content:space-between}
+  .month-pick .lbl{flex:1}
+  /* KPIs: 2-up instead of 1-up */
+  .kpis{grid-template-columns:1fr 1fr;gap:8px}
+  .kpi{padding:12px 13px}
+  .kpi .k-val{font-size:18px}
+  .greet{font-size:22px}
+  /* forms stack */
+  .form-row>*{flex:1 1 100%;min-width:0}
+  .form-row .w-sm{flex:1 1 100%}
+  /* cash calendar tighter */
+  .cal{gap:3px}
+  .cal .day{min-height:52px;padding:5px 5px}
+  .cal .day .amt{font-size:11px}
+  .toast{bottom:92px}
 }
+.tabbar{display:none}
+@media(max-width:820px){.tabbar{display:flex}}
 
 /* ---------- home (today) ---------- */
 .home-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;margin-bottom:22px}
@@ -1283,6 +1327,106 @@ function Admin({corps, session, embedded}){
 
 
 
+// ================= APPROVALS CENTER =================
+function Approvals({corps, canEditIds, profile, isOwner}){
+  const editable = corps.filter(c=>canEditIds.has(c.id));
+  const ids = editable.map(c=>c.id);
+  const [items, setItems] = useState(null);
+  const [metaByCorp, setMetaByCorp] = useState({});
+  const [edit, setEdit] = useState({}); // id -> {category_id, amount}
+  const [toast, showToast] = useToast();
+
+  const reload = useCallback(async()=>{
+    if(!ids.length){ setItems([]); return; }
+    const { data } = await sb.from('expenses').select('*')
+      .in('corporation_id', ids).eq('status','pending').order('date',{ascending:false});
+    // load category lists per corp present
+    const need = [...new Set((data||[]).map(e=>e.corporation_id))];
+    const mm = {...metaByCorp};
+    for(const cid of need){ if(!mm[cid]){
+      const { data:cats } = await sb.from('expense_categories').select('id,code,name')
+        .eq('corporation_id',cid).eq('active',true).order('display_order');
+      mm[cid]=cats||[];
+    }}
+    setMetaByCorp(mm); setItems(data||[]);
+  },[ids.join(',')]);
+  useEffect(()=>{ reload(); },[reload]);
+
+  const corpCode = id => { const c=corps.find(x=>x.id===id); return c?c.code:'?'; };
+  const catsFor = id => metaByCorp[id]||[];
+  const catName = (cid,catId) => { const c=catsFor(cid).find(x=>x.id===catId); return c?c.name:'?'; };
+
+  const approve = async (e) => {
+    const ed = edit[e.id]||{};
+    const finalCat = ed.category_id || e.category_id;
+    const finalAmt = ed.amount!==undefined ? parseFloat(ed.amount) : Number(e.amount);
+    const upd = { status:'confirmed', category_id:finalCat, amount:finalAmt };
+    const { error } = await sb.from('expenses').update(upd).eq('id',e.id);
+    if(error){ showToast(error.message); return; }
+    // learn: if this came from slack, record the signal -> chosen category
+    if(e.source==='slack' && e.memo){
+      const cat = catsFor(e.corporation_id).find(x=>x.id===finalCat);
+      const signal = e.memo.toLowerCase().replace(/\[.*?\]|\(.*?\)/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim().slice(0,80);
+      if(cat && signal.length>2){
+        await sb.from('slack_learnings').insert({
+          corporation_id:e.corporation_id, signal, category_code:cat.code,
+          category_name:cat.name, approved_by:profile.id });
+      }
+    }
+    showToast('Approved'); reload();
+  };
+  const reject = async (e) => {
+    if(!confirm('Reject and delete this item?')) return;
+    const { error } = await sb.from('expenses').delete().eq('id',e.id);
+    if(error){ showToast(error.message); return; } reload();
+  };
+
+  if(items===null) return <div><div className="page-head"><div><div className="eyebrow">Approvals</div><h2>Approval Center</h2></div></div><Spinner/></div>;
+  return <div>
+    <div className="page-head">
+      <div><div className="eyebrow">Approvals</div><h2>Approval Center</h2>
+        <div className="sub">Items captured from Slack and other sources, waiting to be confirmed. Approving teaches the AI to classify better next time.</div></div>
+      {items.length>0 && <span className="badge red" style={{fontSize:12}}>{items.length} pending</span>}
+    </div>
+    {items.length===0 ? <div className="card faint">Nothing waiting for approval. You're all caught up.</div> :
+      <div className="card">
+        {items.map(e=>{
+          const ed = edit[e.id]||{};
+          return <div className="pend approve-row" key={e.id} style={{alignItems:'flex-start',flexWrap:'wrap'}}>
+            <div className="grow" style={{minWidth:180}}>
+              <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                <span className="badge gold">{corpCode(e.corporation_id)}</span>
+                <span className="mono">{e.date}</span>
+                {e.source==='slack' && <span className="badge blue">Slack</span>}
+                {e.slack_user && <span className="faint" style={{fontSize:12}}>@{e.slack_user}</span>}
+              </div>
+              <div style={{marginTop:5}}>{e.memo||<span className="faint">(no description)</span>}</div>
+            </div>
+            <div className="ar-fields">
+              <div style={{width:120}}>
+                <label className="faint" style={{fontSize:11}}>Amount</label>
+                <input type="number" step="0.01" defaultValue={Number(e.amount)}
+                  onChange={ev=>setEdit({...edit,[e.id]:{...ed,amount:ev.target.value}})} style={{textAlign:'right'}}/>
+              </div>
+              <div style={{width:180}}>
+                <label className="faint" style={{fontSize:11}}>Category</label>
+                <select value={ed.category_id||e.category_id}
+                  onChange={ev=>setEdit({...edit,[e.id]:{...ed,category_id:ev.target.value}})}>
+                  {catsFor(e.corporation_id).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="ar-actions" style={{display:'flex',gap:6,alignItems:'flex-end',paddingTop:16}}>
+              <button className="btn btn-sm btn-gold" onClick={()=>approve(e)}>Approve</button>
+              <button className="btn btn-sm btn-danger" onClick={()=>reject(e)}>Reject</button>
+            </div>
+          </div>;
+        })}
+      </div>}
+    {toast && <div className="toast">{toast}</div>}
+  </div>;
+}
+
 // ================= SETTINGS =================
 function Settings({corps, canEditIds, profile, isOwner, session}){
   const [sub, setSub] = useState('recurring');
@@ -1301,7 +1445,7 @@ function Settings({corps, canEditIds, profile, isOwner, session}){
 }
 
 // ================= HOME (TODAY) =================
-function Home({corps, canEditIds, profile, isOwner, goEntry, goClose}){
+function Home({corps, canEditIds, profile, isOwner, goEntry, goClose, goApprovals}){
   const editable = corps.filter(c=>canEditIds.has(c.id));
   const ids = editable.map(c=>c.id);
   const [data, setData] = useState(null);
@@ -1354,8 +1498,9 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goClose}){
     {(totalPending>0 || unclosed.length>0) && <div style={{marginBottom:20}}>
       {totalPending>0 && <div className="quest">
         <div className="q-ico">!</div>
-        <div className="grow"><div className="q-t">{totalPending} Slack expense{totalPending>1?'s':''} waiting for approval</div>
-          <div className="q-s">Review them on the entry screen of each store</div></div>
+        <div className="grow"><div className="q-t">{totalPending} item{totalPending>1?'s':''} waiting for approval</div>
+          <div className="q-s">Review and confirm in the Approval Center</div></div>
+        <button className="btn btn-sm btn-gold" onClick={goApprovals}>Review</button>
       </div>}
       {unclosed.map(c=><div className="quest" key={c.id}>
         <div className="q-ico">◆</div>
@@ -1421,13 +1566,14 @@ function Login({onDone}){
 }
 
 const NAV = [
-  {id:'home',      label:'Home', roles:['owner','assistant']},
-  {id:'entry',     label:'Daily Entry', roles:['owner','assistant']},
-  {id:'insights',  label:'Insights', roles:['owner','assistant']},
-  {id:'cash',      label:'Cash', roles:['owner','assistant']},
-  {id:'close',     label:'Close & Publish', roles:['owner']},
-  {id:'investor',  label:'Reports', roles:['owner','investor']},
-  {id:'settings',  label:'Settings', roles:['owner']},
+  {id:'home',      label:'Home',    full:'Home',            ic:'⌂', roles:['owner','assistant']},
+  {id:'entry',     label:'Entry',   full:'Daily Entry',     ic:'✎', roles:['owner','assistant']},
+  {id:'approvals', label:'Approve', full:'Approvals',       ic:'✓', roles:['owner','assistant']},
+  {id:'insights',  label:'Insights',full:'Insights',        ic:'≈', roles:['owner','assistant']},
+  {id:'cash',      label:'Cash',    full:'Cash',            ic:'▤', roles:['owner','assistant']},
+  {id:'close',     label:'Close',   full:'Close & Publish', ic:'◆', roles:['owner']},
+  {id:'investor',  label:'Reports', full:'Reports',         ic:'▦', roles:['owner','investor']},
+  {id:'settings',  label:'Settings',full:'Settings',        ic:'⚙', roles:['owner']},
 ];
 
 function App(){
@@ -1440,6 +1586,7 @@ function App(){
   const [closePreset,setClosePreset] = useState(null);
   const goEntry = (corpId)=>{ setEntryCorp(corpId); setTab('entry'); };
   const goClose = (corpId,y,m)=>{ setClosePreset({corpId,y,m}); setTab('close'); };
+  const goApprovals = ()=>setTab('approvals');
   const [fatal,setFatal] = useState(null);
 
   useEffect(()=>{
@@ -1481,7 +1628,8 @@ function App(){
   const effTab = nav.some(n=>n.id===tab) ? tab : nav[0].id;
 
   const page = {
-    home:      <Home corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} goEntry={goEntry} goClose={goClose}/>,
+    home:      <Home corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} goEntry={goEntry} goClose={goClose} goApprovals={goApprovals}/>,
+    approvals: <Approvals corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner}/>,
     entry:     <Entry corps={corps} canEditIds={canEditIds} profile={profile} presetCorp={entryCorp}/>,
     insights:  <Dashboard corps={corps} canEditIds={canEditIds}/>,
     cash:      <CashPage corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner}/>,
@@ -1494,7 +1642,7 @@ function App(){
     <div className="side">
       <div className="brand">Ugly <em>Finance</em></div>
       <div className="brand-sub">Finance Tool</div>
-      {nav.map(n=><button key={n.id} className={'nav-item'+(effTab===n.id?' on':'')} onClick={()=>setTab(n.id)}>{n.label}</button>)}
+      {nav.map(n=><button key={n.id} className={'nav-item'+(effTab===n.id?' on':'')} onClick={()=>setTab(n.id)}>{n.full||n.label}</button>)}
       <div className="foot">
         <div className="who">{profile.full_name||profile.email}</div>
         <div className="role">{profile.role}</div>
@@ -1503,6 +1651,10 @@ function App(){
       </div>
     </div>
     <div className="main">{page}</div>
+    <nav className="tabbar">
+      {nav.map(n=><button key={n.id} className={effTab===n.id?'on':''} onClick={()=>setTab(n.id)}>
+        <span className="ic">{n.ic}</span>{n.label}</button>)}
+    </nav>
   </div>;
 }
 

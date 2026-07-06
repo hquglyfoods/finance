@@ -5,13 +5,13 @@
 [functions]
   node_bundler = "esbuild"
 
-# Daily 8:30 UTC: Toast store sales + tips (AD/BW/FH)
+# Hourly: Toast store sales + tips (AD/BW/FH)
 [functions."toast-sync"]
-  schedule = "30 8 * * *"
+  schedule = "@hourly"
 
-# Daily 8:45 UTC: HQ invoices + Ummas orders from the Inventory app Supabase
+# Hourly: HQ invoices + Ummas orders from the Inventory app Supabase
 [functions."inventory-sync"]
-  schedule = "45 8 * * *"
+  schedule = "@hourly"
 
 # Daily 9:00 UTC: generate due recurring expenses
 [functions."recurring-cron"]
