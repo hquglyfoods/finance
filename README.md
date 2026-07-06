@@ -1,10 +1,17 @@
-# Ugly Finance Tool - bottom bar tuning
+# Ugly Finance Tool - recurring expense: Edit vs Schedule raise
 
-- The ⋮ (More) button no longer takes an equal fifth of the bar. It is now a thin
-  ~30px control, so the five main tabs (Home, Entry, Approve, Insights, Cash) each
-  get more room and read more clearly.
-- The bottom bar and its icons are ~10% larger (icons 25px -> 28px, labels 10px ->
-  11px, a bit more height and spacing) for easier tapping.
-- The ⋮ dots are centered vertically to line up with the other icons.
+Recurring Expenses (in Settings) now separates two actions:
+- EDIT: fix the rule itself - name, category, amount, and especially the SCHEDULE
+  (frequency / day of week / day of month). Use this when you picked the wrong
+  frequency or day. It also has a Delete button. Changes apply going forward; past
+  generated entries are kept.
+- SCHEDULE RAISE: set a future amount/rate change on a date (e.g. a lease increase).
+  The current amount runs until the effective date, then the new amount takes over.
+  (This is the old "Change" button, renamed and clarified.)
+
+Also:
+- New recurring expenses default to Monthly, Day 1.
+- The "Payee" field is renamed "Memo" everywhere in recurring (it was already being
+  used as a memo).
 
 No SQL this round.

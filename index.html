@@ -413,6 +413,7 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   .home-grid{grid-template-columns:1fr 1fr;gap:9px}
   .home-card{padding:12px 12px;border-radius:11px}
   .home-card .hc-code{font-size:9.5px;letter-spacing:.12em}
+  .home-card .hc-code-big{font-size:24px;letter-spacing:0.01em;margin-bottom:8px}
   .home-card .hc-name{font-size:13.5px;margin:2px 0 6px;line-height:1.15;min-height:2.3em;-webkit-line-clamp:2}
   .home-card .hc-amt{font-family:var(--font-d);font-weight:800;font-size:20px;margin-bottom:6px}
   .home-card .hc-amt .cur{font-size:11px}
@@ -439,6 +440,7 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .home-card:hover{border-color:var(--gold-soft);transform:translateY(-1px)}
 .home-card.done{border-color:var(--gold-soft);background:linear-gradient(180deg, var(--gold-dim), var(--panel))}
 .home-card .hc-code{font-family:var(--font-m);font-size:11px;letter-spacing:.14em;color:var(--gold)}
+.home-card .hc-code-big{font-family:var(--font-d);font-weight:800;font-size:28px;letter-spacing:0.01em;color:var(--gold-strong);margin-bottom:10px}
 .home-card .hc-name{font-family:var(--font-d);font-size:16px;font-weight:700;letter-spacing:-0.01em;margin:4px 0 12px;line-height:1.25;
   min-height:2.5em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .home-card .progress-lbl{margin-bottom:0}
@@ -1971,8 +1973,9 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
   const [corpId, setCorpId] = useState(editable[0] && editable[0].id);
   const [meta, setMeta] = useState(null);
   const [rows, setRows] = useState([]);
-  const [f, setF] = useState({name:'', category_id:'', amount:'', frequency:'weekly', day_of_week:'5', day_of_month:'1', payee:''});
+  const [f, setF] = useState({name:'', category_id:'', amount:'', frequency:'monthly', day_of_week:'5', day_of_month:'1', payee:''});
   const [sched, setSched] = useState(null);
+  const [edit, setEdit] = useState(null);   // full-edit an existing recurring row
   const [newCat, setNewCat] = useState('');
   const [toast, showToast] = useToast();
 
@@ -1992,7 +1995,7 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
       day_of_week: f.frequency==='weekly'?parseInt(f.day_of_week):null,
       day_of_month: f.frequency==='monthly'?parseInt(f.day_of_month):null });
     if(error){ showToast('Save failed: '+error.message); return; }
-    setF({name:'',category_id:'',amount:'',frequency:'weekly',day_of_week:'5',day_of_month:'1',payee:''});
+    setF({name:'',category_id:'',amount:'',frequency:'monthly',day_of_week:'5',day_of_month:'1',payee:''});
     showToast('Recurring expense added'); reload();
   };
   const toggle = async r=>{
@@ -2008,6 +2011,23 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
   const clearSched = async(id)=>{
     await sb.from('recurring_expenses').update({next_amount:null, next_amount_from:null}).eq('id',id);
     setSched(null); showToast('Scheduled change removed'); reload();
+  };
+  // full edit of an existing recurring row (fix a wrong schedule, amount, name, etc.)
+  const updateRec = async()=>{
+    if(!edit.name||!edit.category_id||!edit.amount){ showToast('Enter a name, category, and amount'); return; }
+    const { error } = await sb.from('recurring_expenses').update({
+      category_id:edit.category_id, name:edit.name, payee:edit.payee||null,
+      amount:parseFloat(edit.amount), frequency:edit.frequency,
+      day_of_week: edit.frequency==='weekly'?parseInt(edit.day_of_week):null,
+      day_of_month: edit.frequency==='monthly'?parseInt(edit.day_of_month):null }).eq('id',edit.id);
+    if(error){ showToast('Update failed: '+error.message); return; }
+    setEdit(null); showToast('Recurring expense updated'); reload();
+  };
+  const deleteRec = async(r)=>{
+    if(!confirm(`Delete "${r.name}"? This stops it from generating. Past entries are kept.`)) return;
+    const { error } = await sb.from('recurring_expenses').delete().eq('id',r.id);
+    if(error){ showToast('Delete failed: '+error.message); return; }
+    setEdit(null); showToast('Recurring expense deleted'); reload();
   };
 
   const addCategory = async()=>{
@@ -2135,7 +2155,7 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
               {Array.from({length:31},(_,i)=><option key={i+1} value={i+1}>Day {i+1}</option>)}
               <option value="99">Last day of month</option>
             </select>}
-        <input placeholder="Payee (optional)" value={f.payee} onChange={e=>setF({...f,payee:e.target.value})}/>
+        <input placeholder="Memo (optional)" value={f.payee} onChange={e=>setF({...f,payee:e.target.value})}/>
         <button className="btn btn-gold" style={{flex:'0 0 auto'}} onClick={add}>Add</button>
       </div>
     </div>}
@@ -2152,14 +2172,46 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
             {r.next_amount!=null && r.next_amount_from && <div className="faint" style={{fontSize:11}}>→ {fmt$(Number(r.next_amount))} from {r.next_amount_from}</div>}
           </td>
           <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
-            {isOwner && <button className="btn btn-sm" onClick={()=>setSched(sched&&sched.id===r.id?null:{id:r.id, amount:r.next_amount??'', from:r.next_amount_from||''})}>Change</button>}
+            {isOwner && <button className="btn btn-sm" onClick={()=>{ setSched(null); setEdit(edit&&edit.id===r.id?null:{id:r.id, name:r.name, category_id:r.category_id, amount:String(r.amount), frequency:r.frequency, day_of_week:String(r.day_of_week??5), day_of_month:String(r.day_of_month??1), payee:r.payee||''}); }}>Edit</button>}
+            {isOwner && <button className="btn btn-sm" style={{marginLeft:6}} onClick={()=>{ setEdit(null); setSched(sched&&sched.id===r.id?null:{id:r.id, amount:r.next_amount??'', from:r.next_amount_from||''}); }}>Schedule raise</button>}
             {isOwner && <button className="btn btn-sm" onClick={()=>toggle(r)} style={{marginLeft:6}}>{r.active?'Pause':'Resume'}</button>}
           </td>
         </tr>)}</tbody>
       </table>}
+      {edit && <div className="card" style={{marginTop:14,background:'var(--panel2)'}}>
+        <h3>Edit recurring expense</h3>
+        <div className="hint" style={{marginTop:0,marginBottom:10}}>Fix the name, category, amount, or the schedule (e.g. you picked the wrong frequency or day). This changes the rule going forward; past entries are kept.</div>
+        <div className="form-row">
+          <input placeholder="Name" value={edit.name} onChange={e=>setEdit({...edit,name:e.target.value})}/>
+          <select value={edit.category_id} onChange={e=>setEdit({...edit,category_id:e.target.value})}>
+            <option value="">Category</option>
+            {(meta?meta.categories:[]).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <input className="w-sm" type="number" step="0.01" placeholder="Amount" value={edit.amount} onChange={e=>setEdit({...edit,amount:e.target.value})}/>
+        </div>
+        <div className="form-row">
+          <select className="w-sm" value={edit.frequency} onChange={e=>setEdit({...edit,frequency:e.target.value})}>
+            <option value="weekly">Weekly</option><option value="monthly">Monthly</option>
+          </select>
+          {edit.frequency==='weekly'
+            ? <select className="w-sm" value={edit.day_of_week} onChange={e=>setEdit({...edit,day_of_week:e.target.value})}>
+                {DOW.map((d,i)=><option key={i} value={i}>{d}</option>)}
+              </select>
+            : <select className="w-sm" value={edit.day_of_month} onChange={e=>setEdit({...edit,day_of_month:e.target.value})}>
+                {Array.from({length:31},(_,i)=><option key={i+1} value={i+1}>Day {i+1}</option>)}
+                <option value="99">Last day of month</option>
+              </select>}
+          <input placeholder="Memo (optional)" value={edit.payee} onChange={e=>setEdit({...edit,payee:e.target.value})}/>
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <button className="btn btn-gold btn-sm" onClick={updateRec}>Save changes</button>
+          <button className="btn btn-sm btn-danger" onClick={()=>deleteRec(rows.find(x=>x.id===edit.id))}>Delete</button>
+          <button className="btn btn-sm" onClick={()=>setEdit(null)}>Cancel</button>
+        </div>
+      </div>}
       {sched && <div className="card" style={{marginTop:14,background:'var(--panel2)'}}>
         <h3>Schedule an amount change</h3>
-        <div className="hint" style={{marginTop:0,marginBottom:10}}>The current amount stays until the effective date. From that date, recurring runs use the new amount. (e.g. a lease raise.)</div>
+        <div className="hint" style={{marginTop:0,marginBottom:10}}>Use this when the amount or rate changes on a future date (e.g. a lease raise). The current amount stays until the effective date, then recurring runs use the new amount. To just fix a mistake now, use Edit instead.</div>
         <div className="form-row">
           <div><label className="hint" style={{marginTop:0}}>New amount</label>
             <input type="number" step="0.01" placeholder="0.00" value={sched.amount} onChange={e=>setSched({...sched,amount:e.target.value})}/></div>
@@ -3129,8 +3181,7 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose
         const pct = Math.min(100, Math.round(p.daysDone.size/dayOfMonth*100));
         return <div key={c.id} className={'home-card'+(done?' done':'')} onClick={()=>goInsights(c.id)}>
           {done && <div className="hc-check">✓</div>}
-          <div className="hc-code">{c.code}</div>
-          <div className="hc-name">{c.name}</div>
+          <div className="hc-code hc-code-big">{c.code}</div>
           <div className="hc-amt"><span className="cur">$</span>{p.sales.toLocaleString('en-US',{maximumFractionDigits:0})}<span className="cur"> today</span></div>
           {p.pending>0 && <div className="hc-status"><span><span className="dot warn"></span>{p.pending} pending</span></div>}
           <div className="hc-actions">
