@@ -1564,6 +1564,101 @@ function PwaCard({profile}){
   </div>;
 }
 
+// ================= TOAST DIAGNOSTICS (owner) =================
+function ToastDiag({session}){
+  const [store, setStore] = useState('AD');
+  const [date, setDate] = useState(()=>{ const d=new Date(); d.setDate(d.getDate()-1);
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; });
+  const [res, setRes] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const run = async ()=>{
+    setBusy(true); setErr(''); setRes(null);
+    try{
+      const ymd = date.replace(/-/g,'');
+      const r = await fetch(`/.netlify/functions/toast-diag?store=${store}&date=${ymd}`, {
+        headers: { Authorization: 'Bearer ' + session.access_token },
+      });
+      const j = await r.json();
+      if(j.error){ setErr(j.error); } else { setRes(j); }
+    }catch(e){ setErr(e.message); }
+    setBusy(false);
+  };
+
+  return <div>
+    <div className="card">
+      <h3>Toast Data Check</h3>
+      <div className="hint" style={{marginTop:0,marginBottom:12}}>Pull one business day straight from Toast and compare it against your Toast dashboard. Use this to confirm delivery and all payments are coming through.</div>
+      <div className="form-row">
+        <div><label className="hint" style={{marginTop:0}}>Store</label>
+          <select value={store} onChange={e=>setStore(e.target.value)}>
+            <option value="AD">AD</option><option value="BW">BW</option><option value="FH">FH</option>
+          </select></div>
+        <div><label className="hint" style={{marginTop:0}}>Business date</label>
+          <input type="date" value={date} onChange={e=>setDate(e.target.value)}/></div>
+        <div style={{display:'flex',alignItems:'flex-end'}}>
+          <button className="btn btn-gold" disabled={busy} onClick={run}>{busy?'Loading...':'Run check'}</button></div>
+      </div>
+      {err && <div className="neg" style={{marginTop:10}}>Error: {err}</div>}
+    </div>
+
+    {res && <>
+      <div className="card">
+        <h3>Totals</h3>
+        <table className="t"><tbody>
+          <tr><td>Orders returned</td><td className="num mono">{res.ordersReturned}</td></tr>
+          <tr><td>Pages walked</td><td className="num mono">{res.pagesWalked}</td></tr>
+          <tr><td>Sales (excl. tips)</td><td className="num mono">{fmt$(res.salesExTips)}</td></tr>
+          <tr><td>Tips</td><td className="num mono">{fmt$(res.tips)}</td></tr>
+          <tr><td>Refunds</td><td className="num mono">{fmt$(res.refunds)}</td></tr>
+          <tr><td>Voided</td><td className="num mono">{fmt$(res.voided)}</td></tr>
+        </tbody></table>
+        <div className="hint" style={{marginTop:8}}>Compare "Sales (excl. tips)" with your Toast dashboard Net Sales for the same day. If they differ, some orders are not being pulled.</div>
+      </div>
+
+      <div className="grid2">
+        <div className="card">
+          <h3>By payment channel</h3>
+          <table className="t"><tbody>
+            <tr><td>Cash</td><td className="num mono">{fmt$(res.channels.cash)}</td></tr>
+            <tr><td>Card (credit)</td><td className="num mono">{fmt$(res.channels.credit)}</td></tr>
+            <tr><td>Other (online/3rd-party)</td><td className="num mono">{fmt$(res.channels.other)}</td></tr>
+          </tbody></table>
+        </div>
+        <div className="card">
+          <h3>Other payment breakdown</h3>
+          {Object.keys(res.otherPaymentBreakdown||{}).length===0
+            ? <div className="faint">None</div>
+            : <table className="t"><tbody>
+                {Object.entries(res.otherPaymentBreakdown).map(([k,v])=>
+                  <tr key={k}><td>{k}</td><td className="num mono">{fmt$(v)}</td></tr>)}
+              </tbody></table>}
+          <div className="hint" style={{marginTop:8}}>Delivery platforms (Uber, DoorDash, GrubHub) should appear here if Toast tags them. If they show as blank/OTHER, Toast is not labeling the platform.</div>
+        </div>
+      </div>
+
+      <div className="grid2">
+        <div className="card">
+          <h3>By order source</h3>
+          <table className="t"><tbody>
+            {Object.entries(res.byOrderSource||{}).map(([k,v])=>
+              <tr key={k}><td>{k}</td><td className="num mono">{v.count} · {fmt$(v.amount)}</td></tr>)}
+          </tbody></table>
+          <div className="hint" style={{marginTop:8}}>Delivery orders usually show a source like "Uber Eats" or "DoorDash" here. If you only see Kiosk and API, delivery is not reaching the orders API.</div>
+        </div>
+        <div className="card">
+          <h3>By payment type</h3>
+          <table className="t"><tbody>
+            {Object.entries(res.byPaymentType||{}).map(([k,v])=>
+              <tr key={k}><td>{k}</td><td className="num mono">{v.count} · {fmt$(v.amount)}{v.tip?` (tip ${fmt$(v.tip)})`:''}</td></tr>)}
+          </tbody></table>
+        </div>
+      </div>
+    </>}
+  </div>;
+}
+
 // ================= SETTINGS =================
 function Settings({corps, canEditIds, profile, isOwner, session}){
   const [sub, setSub] = useState('recurring');
@@ -1574,11 +1669,13 @@ function Settings({corps, canEditIds, profile, isOwner, session}){
         <button className={'corp-tab'+(sub==='recurring'?' on':'')} onClick={()=>setSub('recurring')}>Recurring & Categories</button>
         <button className={'corp-tab'+(sub==='accounts'?' on':'')} onClick={()=>setSub('accounts')}>Accounts</button>
         <button className={'corp-tab'+(sub==='device'?' on':'')} onClick={()=>setSub('device')}>App & Alerts</button>
+        <button className={'corp-tab'+(sub==='diag'?' on':'')} onClick={()=>setSub('diag')}>Diagnostics</button>
       </div>
     </div>
     {sub==='recurring' && <Recurring corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} embedded={true}/>}
     {sub==='accounts' && <Admin corps={corps} session={session} embedded={true}/>}
     {sub==='device' && <PwaCard profile={profile}/>}
+    {sub==='diag' && <ToastDiag session={session}/>}
   </div>;
 }
 
