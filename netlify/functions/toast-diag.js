@@ -88,6 +88,8 @@ exports.handler = async (event) => {
     let cash = 0, credit = 0, other = 0, tips = 0, refunds = 0, voided = 0;
     let salesExTips = 0;
 
+    const TAX_RATE = { AD: 0.06625, BW: 0.08875, FH: 0.08875 };
+    let taxCollected = 0;        // sum of check.taxAmount if Toast provides it
     const byBizDate = {};        // order.businessDate -> count
     const byDiningName = {};      // diningOption name -> $ (delivery lives here)
     let mismatchDate = 0;
@@ -107,6 +109,7 @@ exports.handler = async (event) => {
         doName = o.diningOption.name || (g && diningNames[g]) || o.diningOption.behavior || g || 'unknown';
       }
       for (const chk of o.checks || []) {
+        if (chk.taxAmount != null) taxCollected += Number(chk.taxAmount || 0);
         for (const p of chk.payments || []) {
           if (p.paymentStatus === 'VOIDED') continue;
           byDiningName[doName] = (byDiningName[doName] || 0) + Number(p.amount || 0) - Number(p.tipAmount || 0);
@@ -154,6 +157,10 @@ exports.handler = async (event) => {
       ordersWithWrongBusinessDate: mismatchDate,
       byDiningOptionName: (()=>{ const o={}; for(const k in byDiningName) o[k]=+byDiningName[k].toFixed(2); return o; })(),
       diningOptionsResolved: Object.keys(diningNames).length,
+      taxCollectedFromChecks: +taxCollected.toFixed(2),
+      salesExTaxActual: +(salesExTips - taxCollected).toFixed(2),
+      salesExTaxEstimate: +(salesExTips / (1 + (TAX_RATE[q.store] || 0))).toFixed(2),
+      taxRateUsed: TAX_RATE[q.store] || 0,
     }) };
   } catch (e) {
     return { statusCode: 200, headers, body: JSON.stringify({ error: e.message }) };

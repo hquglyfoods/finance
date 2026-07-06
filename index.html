@@ -1617,6 +1617,17 @@ function ToastDiag({session}){
         <div className="hint" style={{marginTop:8}}>Compare "Sales (excl. tips)" with your Toast dashboard Net Sales for the same day. If they differ, some orders are not being pulled.</div>
       </div>
 
+      <div className="card">
+        <h3>Tax reconciliation (vs Toast Net Sales)</h3>
+        <table className="t"><tbody>
+          <tr><td>Our sales (incl. tax, excl. tips)</td><td className="num mono">{fmt$(res.salesExTips)}</td></tr>
+          <tr><td>Tax collected (from Toast checks)</td><td className="num mono">{fmt$(res.taxCollectedFromChecks)}</td></tr>
+          <tr><td>Sales excl. tax (actual)</td><td className="num mono">{fmt$(res.salesExTaxActual)}</td></tr>
+          <tr><td>Sales excl. tax (estimate at {(res.taxRateUsed*100).toFixed(3)}%)</td><td className="num mono">{fmt$(res.salesExTaxEstimate)}</td></tr>
+        </tbody></table>
+        <div className="hint" style={{marginTop:8}}>Toast dashboard "Net Sales" is usually excl. tax. Compare it with "Sales excl. tax (actual)". If they match, everything is correct and the only difference was tax. Our app will show sales incl. tax and book the tax as an automatic expense.</div>
+      </div>
+
       <div className="grid2">
         <div className="card">
           <h3>By payment channel</h3>
