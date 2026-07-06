@@ -171,7 +171,7 @@ exports.handler = async (event) => {
   await admin.from('expenses').insert({
     corporation_id: corp.id, category_id: cat.id, date: iso,
     amount: +amount.toFixed(2), memo: memoBits.join(' ').slice(0, 300),
-    source: 'slack', status: 'pending',
+    source: 'slack', status: 'pending', method: 'cash',
     slack_ts: ev.ts, slack_user: ev.user || null,
   });
   // A Supabase database webhook on expenses INSERT (status=pending) fires

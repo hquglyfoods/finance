@@ -79,6 +79,25 @@ a{color:var(--gold);text-decoration:none}
 @keyframes fadein{from{opacity:0}to{opacity:1}}
 @keyframes slideup{from{transform:translateY(100%)}to{transform:translateY(0)}}
 .side .foot{margin-top:auto;padding:12px 10px;border-top:1px solid var(--border-soft);font-size:12.5px}
+.acct{position:relative;width:100%}
+.acct-btn{display:flex;align-items:center;gap:9px;width:100%;background:none;border:none;padding:6px 4px;cursor:pointer;text-align:left;position:relative}
+.acct-av{flex:0 0 30px;width:30px;height:30px;border-radius:50%;background:var(--gold-dim);color:var(--gold-strong);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;font-family:var(--font-b)}
+.acct-name{flex:1;font-size:13px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acct-dots{color:var(--text3);font-size:18px;line-height:1}
+.acct-badge{position:absolute;top:2px;left:22px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:var(--red);color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.acct-menu{position:absolute;bottom:calc(100% + 8px);left:0;right:0;background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-lg);padding:6px;z-index:250;min-width:210px}
+.acct-head{padding:10px 12px 8px}
+.acct-head-name{font-weight:700;font-size:14px;color:var(--text)}
+.acct-head-role{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+.acct-sep{height:1px;background:var(--border-soft);margin:6px 0}
+.acct-item{display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:none;padding:10px 12px;border-radius:8px;font-size:13.5px;color:var(--text);cursor:pointer;text-align:left;font-weight:500}
+.acct-item:hover{background:var(--panel2)}
+.acct-item.static{cursor:default}
+.acct-item.static:hover{background:none}
+.acct-item.danger{color:var(--red)}
+.acct-item.muted{color:var(--text3)}
+.acct-item-badge{background:var(--red);color:#fff;font-size:11px;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 5px}
+.acct-ok{color:var(--green);font-size:10px}
 .side .foot .who{color:var(--text);font-weight:500}
 .side .foot .role{font-family:var(--font-m);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)}
 
@@ -120,6 +139,9 @@ a{color:var(--gold);text-decoration:none}
 .spendmeta{font-size:11.5px;color:var(--text3);margin-top:4px}
 .spendtotal{display:flex;justify-content:space-between;align-items:baseline;margin-top:16px;padding-top:14px;border-top:1px solid var(--border);font-weight:600;font-size:15px}
 .ie-toggle{display:flex;gap:10px;margin-bottom:20px}
+.method-seg{display:flex;gap:6px;margin:4px 0 8px;background:var(--panel2);border-radius:8px;padding:4px;width:fit-content}
+.method-opt{padding:7px 16px;border-radius:6px;border:none;background:transparent;color:var(--text2);font-weight:600;font-size:13px;cursor:pointer}
+.method-opt.on{background:var(--panel);color:var(--gold-strong);box-shadow:var(--shadow)}
 .ie-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:16px;border-radius:12px;border:1.5px solid var(--border);background:var(--panel);color:var(--text2);font-size:16px;font-weight:600}
 .ie-btn .ie-ic{font-size:20px;font-weight:700;line-height:1}
 .ie-btn.income.on{border-color:var(--green);background:var(--green-dim);color:var(--green)}
@@ -128,6 +150,9 @@ a{color:var(--gold);text-decoration:none}
 .month-pick .lbl{font-family:var(--font-m);font-size:14px;min-width:86px;text-align:center}
 .month-pick button{width:30px;height:30px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text2)}
 .month-pick button:hover{color:var(--gold);border-color:var(--gold-soft)}
+.mp-sel{font-family:var(--font-m);font-size:13.5px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);width:auto;cursor:pointer}
+.mp-sel:hover{border-color:var(--gold-soft)}
+.mp-year{min-width:74px}
 
 /* cards */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:22px}
@@ -157,13 +182,21 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 /* cash calendar */
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
 .cal .dow{font-family:var(--font-m);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);text-align:center;padding:4px 0}
-.cal .day{min-height:64px;border:1px solid var(--border-soft);border-radius:8px;padding:7px 8px;background:var(--panel2);position:relative}
+.cal .day{min-height:74px;border:1px solid var(--border-soft);border-radius:8px;padding:7px 8px;background:var(--panel2);position:relative}
 .cal .day.empty{background:transparent;border-color:transparent}
 .cal .day .d{font-family:var(--font-m);font-size:11px;color:var(--text3)}
 .cal .day .amt{font-family:var(--font-m);font-size:12.5px;margin-top:6px}
 .cal .day.verified{background:var(--gold-dim);border-color:var(--gold-soft)}
 .cal .day.verified .d{color:var(--gold)}
 .cal .day.verified::after{content:'✓';position:absolute;top:6px;right:8px;color:var(--gold);font-size:11px}
+.cal .day.has-cashexp{border-color:var(--red-soft)}
+.cal .day.has-cashexp::before{content:'';position:absolute;top:7px;right:8px;width:7px;height:7px;border-radius:50%;background:var(--red)}
+.cal .day .cashexp{font-family:var(--font-m);font-size:11px;color:var(--red);margin-top:2px}
+.cal .day .envelope{font-family:var(--font-m);font-size:11px;color:var(--gold-strong);margin-top:1px;font-weight:600}
+.cal-legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:12px;color:var(--text2);align-items:center}
+.cal-legend .lg-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.cal-legend .lg-dot.gold{background:var(--gold)}
+.cal-legend .lg-dot.red{background:var(--red)}
 
 /* forms */
 .form-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
@@ -218,14 +251,20 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   .side .foot .role{display:none}
   .side .foot .who{font-size:12.5px}
   .side .foot button{margin-top:0 !important}
+  .acct{width:auto}
+  .acct-btn{padding:4px}
+  .acct-name{display:none}
+  .acct-dots{display:none}
+  .acct-menu{bottom:auto;top:calc(100% + 8px);left:auto;right:0;min-width:220px}
   /* bottom tab bar */
   .tabbar{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;background:var(--panel);
-    border-top:1px solid var(--border);padding:8px 4px calc(8px + env(safe-area-inset-bottom));justify-content:space-around}
-  .tabbar button{flex:1;background:none;border:none;color:var(--text3);font-size:10.5px;font-weight:600;
+    border-top:1px solid var(--border);padding:10px 4px calc(16px + env(safe-area-inset-bottom));justify-content:space-around}
+  .tabbar button{flex:1;background:none;border:none;color:var(--text3);font-size:10px;font-weight:600;
     display:flex;flex-direction:column;align-items:center;gap:4px;padding:2px;letter-spacing:.01em}
-  .tabbar button .ic{font-size:20px;line-height:1;position:relative}
+  .tabbar button .ic{font-size:25px;line-height:1;position:relative}
+  .tabbar button.more-btn .ic{font-size:27px;letter-spacing:2px}
   .tabbar button.on{color:var(--gold)}
-  .main{padding:18px 14px calc(96px + env(safe-area-inset-bottom))}
+  .main{padding:18px 14px calc(108px + env(safe-area-inset-bottom))}
   .page-head{margin-bottom:18px}
   .page-head h2{font-size:23px}
   /* headers: stack controls full width */
@@ -258,6 +297,8 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .home-card.done{border-color:var(--gold-soft);background:linear-gradient(180deg, var(--gold-dim), var(--panel))}
 .home-card .hc-code{font-family:var(--font-m);font-size:11px;letter-spacing:.14em;color:var(--gold)}
 .home-card .hc-name{font-family:var(--font-d);font-size:17px;font-weight:700;letter-spacing:-0.01em;margin:4px 0 12px}
+.home-card .hc-enter{margin-top:14px;width:100%;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--gold-strong);font-weight:600;font-size:13px;cursor:pointer}
+.home-card .hc-enter:hover{border-color:var(--gold-soft);background:var(--gold-dim)}
 .home-card .hc-amt{font-family:var(--font-m);font-size:24px;margin-bottom:12px}
 .home-card .hc-amt .cur{font-size:14px;color:var(--text3)}
 .home-card .hc-status{display:flex;gap:14px;font-size:12.5px;color:var(--text2);margin-bottom:14px}
@@ -532,10 +573,17 @@ function CorpTabs({corps, sel, onSel}){
 }
 function MonthPick({y, m, onChange}){
   const mv = (d) => { let ny=y, nm=m+d; if(nm<1){nm=12;ny--;} if(nm>12){nm=1;ny++;} onChange(ny,nm); };
+  const nowY = new Date().getFullYear();
+  const years = []; for(let yr=2022; yr<=nowY+1; yr++) years.push(yr);
   return <div className="month-pick">
-    <button onClick={()=>mv(-1)}>‹</button>
-    <span className="lbl">{monthLabel(y,m)}</span>
-    <button onClick={()=>mv(1)}>›</button>
+    <button onClick={()=>mv(-1)} aria-label="Previous month">‹</button>
+    <select className="mp-sel" value={m} onChange={e=>onChange(y, parseInt(e.target.value))}>
+      {MONTHS.map((mn,i)=><option key={i} value={i+1}>{mn}</option>)}
+    </select>
+    <select className="mp-sel mp-year" value={y} onChange={e=>onChange(parseInt(e.target.value), m)}>
+      {years.map(yr=><option key={yr} value={yr}>{yr}</option>)}
+    </select>
+    <button onClick={()=>mv(1)} aria-label="Next month">›</button>
   </div>;
 }
 function Spinner(){ return <div className="faint" style={{padding:'30px 0',textAlign:'center'}}>Loading...</div>; }
@@ -625,7 +673,7 @@ function YoYDelta({cur, prev}){
 }
 
 // ================= DASHBOARD =================
-function Dashboard({corps, canEditIds}){
+function Dashboard({corps, canEditIds, presetCorp}){
   const editable = corps.filter(c=>canEditIds.has(c.id));
   const [corpId, setCorpId] = useState(editable[0] && editable[0].id);
   const now = new Date();
@@ -634,6 +682,8 @@ function Dashboard({corps, canEditIds}){
   const [view, setView] = useState('daily');   // daily | month | year | compare | alltime
   const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(true);
+  // when navigated from a Home store card, focus that store's daily detail
+  useEffect(()=>{ if(presetCorp && presetCorp.id){ setCorpId(presetCorp.id); setView('daily'); } },[presetCorp]);
 
   // shared data holders
   const [pl, setPl] = useState(null);
@@ -740,9 +790,13 @@ function Dashboard({corps, canEditIds}){
 }
 
 function YearPick({y,onChange}){
+  const nowY = new Date().getFullYear();
+  const years = []; for(let yr=2022; yr<=nowY+1; yr++) years.push(yr);
   return <div style={{display:'flex',alignItems:'center',gap:8}}>
     <button className="btn btn-sm" onClick={()=>onChange(y-1)}>‹</button>
-    <span className="mono" style={{minWidth:48,textAlign:'center'}}>{y}</span>
+    <select className="mp-sel mp-year" value={y} onChange={e=>onChange(parseInt(e.target.value))}>
+      {years.map(yr=><option key={yr} value={yr}>{yr}</option>)}
+    </select>
     <button className="btn btn-sm" onClick={()=>onChange(y+1)}>›</button>
   </div>;
 }
@@ -1197,7 +1251,7 @@ function Entry({corps, canEditIds, profile, presetCorp}){
   const [dayRev, setDayRev] = useState({});
   const [dayExp, setDayExp] = useState([]);
   const [pending, setPending] = useState([]);
-  const [form, setForm] = useState({category_id:'', amount:'', payee:'', memo:''});
+  const [form, setForm] = useState({category_id:'', amount:'', payee:'', memo:'', method:'card'});
   const [mode, setMode] = useState('income');
   const [toast, showToast] = useToast();
   const [busy, setBusy] = useState(false);
@@ -1234,10 +1288,11 @@ function Entry({corps, canEditIds, profile, presetCorp}){
     const { error } = await sb.from('expenses').insert({
       corporation_id:corpId, category_id:form.category_id, date,
       amount:parseFloat(form.amount), payee:form.payee||null, memo:form.memo.trim(),
+      method:form.method||'card',
       source:'manual', entered_by:profile.id });
     setBusy(false);
     if(error) showToast('Save failed: '+error.message);
-    else { setForm({category_id:'',amount:'',payee:'',memo:''}); showToast('Expense saved'); reload(); }
+    else { setForm({category_id:'',amount:'',payee:'',memo:'',method:form.method}); showToast('Expense saved'); reload(); }
   };
   const delExp = async id => {
     if(!confirm('Delete this expense?')) return;
@@ -1342,6 +1397,13 @@ function Entry({corps, canEditIds, profile, presetCorp}){
             <input placeholder="Vendor / person" value={form.payee} onChange={e=>setForm({...form,payee:e.target.value})}/>
           </div>
         </div>
+        <label className="hint">Paid with</label>
+        <div className="method-seg">
+          {[['card','Card'],['cash','Cash'],['transfer','Transfer']].map(([v,l])=>
+            <button key={v} type="button" className={'method-opt'+(form.method===v?' on':'')}
+              onClick={()=>setForm({...form,method:v})}>{l}</button>)}
+        </div>
+        {form.method==='cash' && <div className="hint" style={{color:'var(--gold-strong)',marginTop:-4}}>Cash expenses reduce what should be in the daily envelope.</div>}
         <button className="btn btn-gold" disabled={busy} onClick={addExp} style={{marginTop:12}}>Save Expense</button>
         <hr className="divider"/>
         <h3>Expenses on This Date {dayExp.length>0 && <span className="faint" style={{fontWeight:400}}>{fmt$(dayExp.reduce((a,e)=>a+Number(e.amount),0))}</span>}</h3>
@@ -1378,6 +1440,7 @@ function CashPage({corps, canEditIds, profile, isOwner}){
   const [pk, setPk] = useState({pickup_date:todayStr(), period_start:'', period_end:'', counted_amount:'', note:''});
   const [toast, showToast] = useToast();
   const [cashChId, setCashChId] = useState(null);
+  const [cashExp, setCashExp] = useState({});
 
   const reload = useCallback(async()=>{
     if(!corpId) return;
@@ -1385,12 +1448,15 @@ function CashPage({corps, canEditIds, profile, isOwner}){
     if(!ch.data){ setCashChId(null); setDays({}); return; }
     setCashChId(ch.data.id);
     const start=`${y}-${pad(m)}-01`, end=`${y}-${pad(m)}-${pad(lastDay(y,m))}`;
-    const [rv, pks] = await Promise.all([
+    const [rv, pks, cex] = await Promise.all([
       sb.from('daily_revenue').select('*').eq('corporation_id',corpId).eq('channel_id',ch.data.id).gte('date',start).lte('date',end),
       sb.from('cash_pickups').select('*').eq('corporation_id',corpId).order('pickup_date',{ascending:false}).limit(10),
+      sb.from('expenses').select('date,amount,memo,method,status').eq('corporation_id',corpId).eq('method','cash').eq('status','confirmed').gte('date',start).lte('date',end),
     ]);
     const map={}; (rv.data||[]).forEach(r=>map[r.date]=r);
-    setDays(map); setPickups(pks.data||[]);
+    // cash expenses grouped by day
+    const cexMap={}; (cex.data||[]).forEach(e=>{ (cexMap[e.date]=cexMap[e.date]||{total:0,items:[]}); cexMap[e.date].total+=Number(e.amount); cexMap[e.date].items.push(e); });
+    setDays(map); setPickups(pks.data||[]); setCashExp(cexMap);
   },[corpId,y,m]);
   useEffect(()=>{ reload(); },[reload]);
 
@@ -1439,11 +1505,22 @@ function CashPage({corps, canEditIds, profile, isOwner}){
             if(d===null) return <div key={'e'+i} className="day empty"></div>;
             const date=`${y}-${pad(m)}-${pad(d)}`;
             const r = days[date];
-            return <div key={date} className={'day'+(r&&r.verified?' verified':'')}>
+            const ce = cashExp[date];
+            const sales = r ? Number(r.amount) : 0;
+            const expd = ce ? ce.total : 0;
+            const envelope = sales - expd;   // what should physically be in the envelope
+            return <div key={date} className={'day'+(r&&r.verified?' verified':'')+(ce?' has-cashexp':'')}>
               <div className="d">{d}</div>
-              {r && Number(r.amount)!==0 && <div className="amt">{fmt$(Number(r.amount),0)}</div>}
+              {r && sales!==0 && <div className="amt">{fmt$(sales,0)}</div>}
+              {ce && <div className="cashexp" title={ce.items.map(x=>x.memo).filter(Boolean).join(', ')}>-{fmt$(expd,0)}</div>}
+              {ce && sales!==0 && <div className="envelope">={fmt$(envelope,0)}</div>}
             </div>;
           })}
+        </div>
+        <div className="cal-legend">
+          <span><span className="lg-dot gold"></span>Verified (picked up)</span>
+          <span><span className="lg-dot red"></span>Cash expense day</span>
+          <span className="faint">Envelope = cash sales − cash spent</span>
         </div>
       </div>
       <div>
@@ -2531,7 +2608,7 @@ function Settings({corps, canEditIds, profile, isOwner, session}){
 }
 
 // ================= HOME (TODAY) =================
-function Home({corps, canEditIds, profile, isOwner, goEntry, goClose, goApprovals}){
+function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose, goApprovals}){
   const editable = corps.filter(c=>canEditIds.has(c.id));
   const ids = editable.map(c=>c.id);
   const [data, setData] = useState(null);
@@ -2579,7 +2656,7 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goClose, goApproval
 
   return <div>
     <div className="greet">Good {now.getHours()<12?'morning':now.getHours()<18?'afternoon':'evening'}, {firstName}.</div>
-    <div className="greet-sub">{MONTHS[now.getMonth()]} {now.getDate()} · Tap a store to enter today's numbers.</div>
+    <div className="greet-sub">{MONTHS[now.getMonth()]} {now.getDate()} · Tap a store to see its sales detail.</div>
 
     {totalPending>0 && <div style={{marginBottom:20}}>
       <div className="quest">
@@ -2595,7 +2672,7 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goClose, goApproval
         const p = data[c.id] || {sales:0,revRows:0,synced:false,exp:0,pending:0,daysDone:new Set(),closed:false};
         const done = p.revRows>0;
         const pct = Math.min(100, Math.round(p.daysDone.size/dayOfMonth*100));
-        return <div key={c.id} className={'home-card'+(done?' done':'')} onClick={()=>goEntry(c.id)}>
+        return <div key={c.id} className={'home-card'+(done?' done':'')} onClick={()=>goInsights(c.id)}>
           {done && <div className="hc-check">✓</div>}
           <div className="hc-code">{c.code}</div>
           <div className="hc-name">{c.name}</div>
@@ -2607,6 +2684,7 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goClose, goApproval
           </div>
           <div className="progress"><div className="fill" style={{width:pct+'%'}}></div></div>
           <div className="progress-lbl">{p.daysDone.size} of {dayOfMonth} days entered this month</div>
+          <button className="hc-enter" onClick={e=>{e.stopPropagation(); goEntry(c.id);}}>+ Enter today's numbers</button>
         </div>;
       })}
     </div>
@@ -2614,6 +2692,60 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goClose, goApproval
 }
 
 // ================= APP SHELL =================
+function AccountMenu({profile, pendingCount, onNotifications}){
+  const [open,setOpen]=useState(false);
+  const [notif,setNotif]=useState('idle'); // idle|on|off|denied|unsupported
+  const ref=React.useRef(null);
+  useEffect(()=>{
+    if(!('Notification' in window)){ setNotif('unsupported'); return; }
+    if(Notification.permission==='denied'){ setNotif('denied'); return; }
+    setNotif(Notification.permission==='granted'?'on':'off');
+  },[]);
+  useEffect(()=>{
+    const h=e=>{ if(ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    if(open) document.addEventListener('mousedown',h);
+    return ()=>document.removeEventListener('mousedown',h);
+  },[open]);
+  const enableNotif=async()=>{
+    try{
+      const perm=await Notification.requestPermission();
+      if(perm!=='granted'){ setNotif(perm==='denied'?'denied':'off'); return; }
+      const reg=await navigator.serviceWorker.ready;
+      const sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:urlB64ToUint8(window.__VAPID_PUBLIC__)});
+      const raw=sub.toJSON();
+      await sb.from('push_subscriptions').upsert({
+        user_id:profile.id, endpoint:raw.endpoint,
+        p256dh:raw.keys.p256dh, auth:raw.keys.auth, role:profile.role },{onConflict:'endpoint'});
+      setNotif('on');
+    }catch(e){ setNotif('off'); }
+  };
+  const name=profile.full_name||profile.email;
+  const initial=(name||'?').trim()[0].toUpperCase();
+  return <div className="acct" ref={ref}>
+    <button className="acct-btn" onClick={()=>setOpen(o=>!o)} aria-label="Account menu">
+      <span className="acct-av">{initial}</span>
+      <span className="acct-name">{name}</span>
+      <span className="acct-dots">⋮</span>
+      {pendingCount>0 && <span className="acct-badge">{pendingCount>9?'9+':pendingCount}</span>}
+    </button>
+    {open && <div className="acct-menu">
+      <div className="acct-head">
+        <div className="acct-head-name">{name}</div>
+        <div className="acct-head-role">{profile.role}</div>
+      </div>
+      <button className="acct-item" onClick={()=>{ onNotifications(); setOpen(false); }}>
+        <span>Notifications</span>
+        {pendingCount>0 && <span className="acct-item-badge">{pendingCount}</span>}
+      </button>
+      {notif==='off' && <button className="acct-item" onClick={enableNotif}><span>Enable push alerts</span></button>}
+      {notif==='on' && <div className="acct-item static"><span>Push alerts on</span><span className="acct-ok">●</span></div>}
+      {notif==='denied' && <div className="acct-item static muted"><span>Push blocked in browser</span></div>}
+      <div className="acct-sep"></div>
+      <button className="acct-item danger" onClick={()=>sb.auth.signOut()}><span>Sign Out</span></button>
+    </div>}
+  </div>;
+}
+
 function Login({onDone}){
   const [email,setEmail] = useState('');
   const [pw,setPw] = useState('');
@@ -2664,10 +2796,12 @@ function App(){
   const [perms,setPerms] = useState([]);
   const [tab,setTab] = useState(localStorage.getItem('ft_tab')||'home');
   const [entryCorp,setEntryCorp] = useState(null);
+  const [insightsCorp,setInsightsCorp] = useState(null);
   const [closePreset,setClosePreset] = useState(null);
   const [moreOpen,setMoreOpen] = useState(false);
   const [pendingCount,setPendingCount] = useState(0);
   const goEntry = (corpId)=>{ setEntryCorp(corpId); setTab('entry'); };
+  const goInsights = (corpId)=>{ setInsightsCorp({id:corpId, t:Date.now()}); setTab('insights'); };
   const goClose = (corpId,y,m)=>{ setClosePreset({corpId,y,m}); setTab('close'); };
   const goApprovals = ()=>setTab('approvals');
   const [fatal,setFatal] = useState(null);
@@ -2737,10 +2871,10 @@ function App(){
   const effTab = nav.some(n=>n.id===tab) ? tab : nav[0].id;
 
   const page = {
-    home:      <Home corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} goEntry={goEntry} goClose={goClose} goApprovals={goApprovals}/>,
+    home:      <Home corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} goEntry={goEntry} goInsights={goInsights} goClose={goClose} goApprovals={goApprovals}/>,
     approvals: <Approvals corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner}/>,
     entry:     <Entry corps={storeCorps} canEditIds={canEditIds} profile={profile} presetCorp={entryCorp}/>,
-    insights:  <Dashboard corps={storeCorps} canEditIds={canEditIds}/>,
+    insights:  <Dashboard corps={storeCorps} canEditIds={canEditIds} presetCorp={insightsCorp}/>,
     cash:      <CashPage corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner}/>,
     close:     <ClosePage corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} preset={closePreset}/>,
     investor:  <InvestorPortal corps={isOwner?storeCorps:viewCorps}/>,
@@ -2762,18 +2896,15 @@ function App(){
         {n.id==='approvals' && pendingCount>0 && <span className="nav-badge">{pendingCount}</span>}
       </button>)}
       <div className="foot">
-        <div className="who">{profile.full_name||profile.email}</div>
-        <div className="role">{profile.role}</div>
-        <button className="btn btn-sm btn-ghost" style={{marginTop:8,padding:'4px 0',color:'var(--text3)'}}
-          onClick={()=>sb.auth.signOut()}>Sign Out</button>
+        <AccountMenu profile={profile} pendingCount={pendingCount} onNotifications={()=>setTab(nav.some(n=>n.id==='alerts')?'alerts':'settings')}/>
       </div>
     </div>
     <div className="main">{page}</div>
     <nav className="tabbar">
       {coreNav.map(n=><button key={n.id} className={effTab===n.id?'on':''} onClick={()=>setTab(n.id)}>
         <span className="ic">{n.ic}{n.id==='approvals' && pendingCount>0 && <span className="tab-dot">{pendingCount>9?'9+':pendingCount}</span>}</span>{n.label}</button>)}
-      {moreNav.length>0 && <button className={moreNav.some(n=>n.id===effTab)?'on':''} onClick={()=>setMoreOpen(true)}>
-        <span className="ic">⋯</span>More</button>}
+      {moreNav.length>0 && <button className={'more-btn '+(moreNav.some(n=>n.id===effTab)?'on':'')} onClick={()=>setMoreOpen(true)} aria-label="More">
+        <span className="ic">⋮</span><span style={{visibility:'hidden'}}>More</span></button>}
     </nav>
     {moreOpen && <div className="sheet-backdrop" onClick={()=>setMoreOpen(false)}>
       <div className="sheet" onClick={e=>e.stopPropagation()}>
