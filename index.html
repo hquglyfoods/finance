@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="format-detection" content="telephone=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="robots" content="noindex, nofollow">
 <title>Finance Tool · Ugly Donuts & Corn Dogs</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -333,12 +336,16 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   .kpis{grid-template-columns:1fr 1fr;gap:8px}
   .kpi{padding:12px 13px}
   .kpi .k-val{font-size:18px}
-  /* 3-card rows (Daily, Year): keep 3 across but compact so they don't wrap 2+1 */
-  .kpis.kpis-3{grid-template-columns:repeat(3,1fr);gap:6px}
-  .kpis.kpis-3 .kpi{padding:10px 8px}
-  .kpis.kpis-3 .k-lbl{font-size:9.5px;letter-spacing:.02em}
-  .kpis.kpis-3 .k-val{font-size:15px}
-  .kpis.kpis-3 .k-sub{font-size:10px}
+  /* 3-card rows (Daily, Year, etc.): 3 across, compact, and guaranteed to fit the
+     screen. Values use compact currency ($1.95M) so they never overflow. */
+  .kpis.kpis-3{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+  .kpis.kpis-3 .kpi{padding:11px 10px;min-width:0}
+  .kpis.kpis-3 .k-lbl{font-size:9px;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .kpis.kpis-3 .k-val{font-size:16px;white-space:nowrap}
+  .kpis.kpis-3 .k-sub{font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* iOS zooms any input under 16px on focus; force 16px on mobile so the keyboard
+     never triggers a zoom (viewport maximum-scale also blocks it) */
+  input, select, textarea, .env-table .env-input{font-size:16px}
   /* investor statement stacks on mobile */
   .stmt-summary{grid-template-columns:1fr}
   .stmt-cols{grid-template-columns:1fr;gap:18px;padding:18px 18px 4px}
@@ -398,11 +405,14 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .step-tag{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--gold-dim);color:var(--gold);font-family:var(--font-m);font-size:11px;margin-right:9px}
 .greet{font-family:var(--font-d);font-size:25px;font-weight:700;letter-spacing:-0.02em;margin-bottom:2px}
 .greet-sub{color:var(--text2);font-size:13.5px;margin-bottom:24px}
+/* late-cascade mobile overrides (must come after base rules to win source order) */
+@media(max-width:820px){
+  .home-grid{grid-template-columns:1fr 1fr !important;gap:10px}
+  .greet{font-size:22px}
+}
 </style>
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#FFFFFF">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Ugly Finance">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -445,6 +455,14 @@ const fmt$ = (v, dec=2) => {
   const neg = v < -0.004;
   const s = Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:dec, maximumFractionDigits:dec});
   return (neg?'-$':'$') + s;
+};
+// compact currency for tight KPI cards: $1.95M, $226.3K, $980
+const fmt$k = (v) => {
+  if (v === null || v === undefined || isNaN(v)) return '-';
+  const neg = v < 0; const a = Math.abs(v); const sign = neg?'-$':'$';
+  if (a >= 1000000) return sign + (a/1000000).toFixed(2) + 'M';
+  if (a >= 10000)   return sign + (a/1000).toFixed(1) + 'K';
+  return sign + Math.round(a).toLocaleString('en-US');
 };
 const fmtPct = v => (v===null||isNaN(v)) ? '-' : (v*100).toFixed(1)+'%';
 const monthLabel = (y,m) => `${y}. ${pad(m)}`;
@@ -962,11 +980,11 @@ function MonthView({pl, yoy, trend, y, m}){
   if(!pl) return <Spinner/>;
   return <>
     <div className="kpis">
-      <div className="kpi accent-gold"><div className="k-lbl">Total Sales</div><div className="k-val">{fmt$(pl.totalSales)}</div>
+      <div className="kpi accent-gold"><div className="k-lbl">Total Sales</div><div className="k-val">{fmt$k(pl.totalSales)}</div>
         <div className="k-sub"><YoYDelta cur={pl.totalSales} prev={yoy&&yoy.totalSales}/></div></div>
-      <div className="kpi"><div className="k-lbl">Total Expenses</div><div className="k-val">{fmt$(pl.totalExpenses)}</div>
+      <div className="kpi"><div className="k-lbl">Total Expenses</div><div className="k-val">{fmt$k(pl.totalExpenses)}</div>
         <div className="k-sub"><YoYDelta cur={pl.totalExpenses} prev={yoy&&yoy.totalExpenses}/></div></div>
-      <div className={'kpi '+(pl.net>=0?'accent-green':'accent-red')}><div className="k-lbl">Net Profit</div><div className={'k-val '+(pl.net>=0?'pos':'neg')}>{fmt$(pl.net)}</div>
+      <div className={'kpi '+(pl.net>=0?'accent-green':'accent-red')}><div className="k-lbl">Net Profit</div><div className={'k-val '+(pl.net>=0?'pos':'neg')}>{fmt$k(pl.net)}</div>
         <div className="k-sub">Margin {fmtPct(pl.margin)} · <YoYDelta cur={pl.net} prev={yoy&&yoy.net}/></div></div>
       <div className="kpi"><div className="k-lbl">Payroll %</div><div className="k-val">{fmtPct(pl.payrollPct)}
         <TrendArrow cur={pl.payrollPct} prev={trend.length>1?trend[trend.length-2].payrollPct:null} higherIsBad={true}/></div>
@@ -1132,9 +1150,9 @@ function YearView({months, y}){
     .map(x=>({label:pad(x.m),sales:x.pl.totalSales,net:x.pl.net,payrollPct:x.pl.payrollPct,suppliesPct:x.pl.suppliesPct}));
   return <>
     <div className="kpis kpis-3">
-      <div className="kpi"><div className="k-lbl">{y} Sales</div><div className="k-val">{fmt$(tot.s)}</div></div>
-      <div className="kpi"><div className="k-lbl">{y} Expenses</div><div className="k-val">{fmt$(tot.e)}</div></div>
-      <div className="kpi"><div className="k-lbl">{y} Net Profit</div><div className={'k-val '+(tot.n>=0?'pos':'neg')}>{fmt$(tot.n)}</div>
+      <div className="kpi"><div className="k-lbl">{y} Sales</div><div className="k-val">{fmt$k(tot.s)}</div></div>
+      <div className="kpi"><div className="k-lbl">{y} Expenses</div><div className="k-val">{fmt$k(tot.e)}</div></div>
+      <div className="kpi"><div className="k-lbl">{y} Net Profit</div><div className={'k-val '+(tot.n>=0?'pos':'neg')}>{fmt$k(tot.n)}</div>
         <div className="k-sub">Margin {fmtPct(tot.s?tot.n/tot.s:null)}</div></div>
     </div>
     <div className="card"><h3>{y} by Month</h3><TrendChart points={trendPts}/></div>
@@ -1167,12 +1185,12 @@ function CompareView({cur, prev, prev2, y}){
   const prev2By={}; (prev2||[]).forEach(x=>prev2By[x.m]=x.pl);
   const has2=(prev2||[]).some(x=>x.pl.totalSales!==0||x.pl.totalExpenses!==0);
   return <>
-    <div className="kpis">
-      <div className="kpi"><div className="k-lbl">{y} Sales</div><div className="k-val">{fmt$(tc.s,0)}</div>
+    <div className="kpis kpis-3">
+      <div className="kpi"><div className="k-lbl">{y} Sales</div><div className="k-val">{fmt$k(tc.s)}</div>
         <div className="k-sub"><YoYDelta cur={tc.s} prev={tp.s}/> vs {y-1}</div></div>
-      <div className="kpi"><div className="k-lbl">{y} Expenses</div><div className="k-val">{fmt$(tc.e,0)}</div>
+      <div className="kpi"><div className="k-lbl">{y} Expenses</div><div className="k-val">{fmt$k(tc.e)}</div>
         <div className="k-sub"><YoYDelta cur={tc.e} prev={tp.e}/> vs {y-1}</div></div>
-      <div className="kpi"><div className="k-lbl">{y} Net</div><div className={'k-val '+(tc.n>=0?'pos':'neg')}>{fmt$(tc.n,0)}</div>
+      <div className="kpi"><div className="k-lbl">{y} Net</div><div className={'k-val '+(tc.n>=0?'pos':'neg')}>{fmt$k(tc.n)}</div>
         <div className="k-sub"><YoYDelta cur={tc.n} prev={tp.n}/> vs {y-1}</div></div>
     </div>
     <div className="card">
@@ -1265,14 +1283,14 @@ function AllTimeView({data}){
 
   return <>
     <div className="kpis">
-      <div className="kpi"><div className="k-lbl">Lifetime Sales</div><div className="k-val">{fmt$(life.s,0)}</div>
+      <div className="kpi"><div className="k-lbl">Lifetime Sales</div><div className="k-val">{fmt$k(life.s)}</div>
         <div className="k-sub">{data.firstYear}–{data.lastYear}</div></div>
-      <div className="kpi"><div className="k-lbl">Lifetime Net</div><div className={'k-val '+(life.n>=0?'pos':'neg')}>{fmt$(life.n,0)}</div>
+      <div className="kpi"><div className="k-lbl">Lifetime Net</div><div className={'k-val '+(life.n>=0?'pos':'neg')}>{fmt$k(life.n)}</div>
         <div className="k-sub">Margin {fmtPct(life.s?life.n/life.s:null)}</div></div>
       <div className="kpi"><div className="k-lbl">Best Sales Year</div><div className="k-val">{bestSalesYear?bestSalesYear.y:'-'}</div>
-        <div className="k-sub">{bestSalesYear?fmt$(bestSalesYear.totals.s,0):''}</div></div>
+        <div className="k-sub">{bestSalesYear?fmt$k(bestSalesYear.totals.s):''}</div></div>
       <div className="kpi"><div className="k-lbl">Best Profit Year</div><div className="k-val">{bestYear?bestYear.y:'-'}</div>
-        <div className="k-sub">{bestYear?fmt$(bestYear.totals.n,0):''}</div></div>
+        <div className="k-sub">{bestYear?fmt$k(bestYear.totals.n):''}</div></div>
     </div>
 
     {insights.length>0 && <div className="card">
@@ -1835,7 +1853,6 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
         <div className="sub">Fixed costs like rent, loans, and owner weekly pay, set per corporation. Entries are generated automatically every day.</div></div>
       <div style={{display:'flex',gap:14,alignItems:'center',flexWrap:'wrap'}}>
         <CorpTabs corps={editable} sel={corpId} onSel={setCorpId}/>
-        <button className="btn" onClick={generate}>Generate This Month</button>
       </div>
     </div>
     {isOwner && <div className="card">
