@@ -1,10 +1,6 @@
-# Ugly Finance Tool - compact home + entry
+# Ugly Finance Tool - calendar updates live while counting
 
-- Home store cards: tighter vertical spacing (smaller padding, name, amount, status,
-  progress) so they take less room while still showing everything.
-- Daily Entry: more compact overall.
-  - The separate date button above Income/Expense is removed.
-  - The date now lives inside the Revenue and Add Expense headers as a tappable
-    chip ("Jul 6, 2026") - tap it to change the date for what you're entering.
-  - Income / Expense toggle buttons are smaller.
-  - Revenue rows and card padding tightened so more fits on one screen.
+Fix: when you type a number in "Count Envelopes", the calendar day now turns
+green/red immediately as you type, instead of only after the value saved and the
+page reloaded. The calendar reads the live value you're entering and falls back to
+the saved value when you're not editing.

@@ -236,9 +236,9 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .env-table .env-input{width:100%;padding:6px 8px;font-family:var(--font-m);text-align:right;font-size:13px}
 .env-table th{font-size:11px}
 .env-table td{padding:6px 8px}
-.rev-entry td{padding:5px 4px;vertical-align:middle}
-.rev-entry td:first-child{font-size:13.5px;font-weight:500}
-.rev-entry input{padding:7px 10px}
+.rev-entry td{padding:4px 4px;vertical-align:middle}
+.rev-entry td:first-child{font-size:13px;font-weight:500}
+.rev-entry input{padding:6px 9px;font-size:14px !important;text-align:right}
 .env-check{color:var(--green);font-weight:700}
 .env-x{color:var(--red);font-weight:700}
 .env-table tr.env-ok td{background:var(--green-dim,rgba(46,125,79,0.08))}
@@ -392,6 +392,8 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   /* iOS zooms any input under 16px on focus; force 16px on mobile so the keyboard
      never triggers a zoom (viewport maximum-scale also blocks it) */
   input, select, textarea, .env-table .env-input{font-size:16px}
+  .rev-entry input{font-size:14px}
+  .pickup-sub{display:none}
   /* investor statement stacks on mobile */
   .stmt-summary{grid-template-columns:1fr}
   .stmt-cols{grid-template-columns:1fr;gap:18px;padding:18px 18px 4px}
@@ -405,7 +407,7 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   .home-card{padding:12px 12px;border-radius:11px}
   .home-card .hc-code{font-size:9.5px;letter-spacing:.12em}
   .home-card .hc-name{font-size:13.5px;margin:2px 0 6px;line-height:1.15;min-height:2.3em;-webkit-line-clamp:2}
-  .home-card .hc-amt{font-size:19px;margin-bottom:6px}
+  .home-card .hc-amt{font-family:var(--font-d);font-weight:800;font-size:20px;margin-bottom:6px}
   .home-card .hc-amt .cur{font-size:11px}
   .home-card .hc-status{flex-direction:column;gap:3px;font-size:11px;margin-bottom:7px}
   .home-card .progress{margin-bottom:5px}
@@ -434,15 +436,14 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   min-height:2.5em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .home-card .progress-lbl{margin-bottom:0}
 .home-card .hc-actions{margin-top:auto;display:flex;gap:6px;padding-top:4px}
-.home-card .hc-btn{flex:1;padding:8px 4px;border-radius:8px;border:1px solid var(--border);background:var(--panel);font-weight:700;font-size:12px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,0.04);transition:background .15s, box-shadow .15s}
-.home-card .hc-btn.income{color:var(--green);border-color:rgba(46,125,79,.35)}
-.home-card .hc-btn.income:hover{background:var(--green-dim)}
-.home-card .hc-btn.expense{color:var(--red);border-color:rgba(196,100,76,.35)}
-.home-card .hc-btn.expense:hover{background:var(--red-dim)}
+.home-card .hc-btn{flex:1;padding:9px 4px;border-radius:8px;border:none;font-weight:700;font-size:13px;cursor:pointer;color:#FFFFFF;box-shadow:0 1px 3px rgba(0,0,0,0.12);transition:filter .15s, box-shadow .15s}
+.home-card .hc-btn:hover{filter:brightness(1.06);box-shadow:0 2px 6px rgba(0,0,0,0.18)}
+.home-card .hc-btn.income{background:var(--green)}
+.home-card .hc-btn.expense{background:var(--red)}
 .home-card .hc-enter{margin-top:auto;width:100%;padding:10px;border-radius:8px;border:1px solid var(--gold-soft);background:var(--panel);color:var(--gold-strong);font-weight:600;font-size:13px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,0.04);transition:background .15s, box-shadow .15s}
 .home-card .hc-enter:hover{background:var(--gold-dim);box-shadow:0 2px 6px rgba(0,0,0,0.08)}
-.home-card .hc-amt{font-family:var(--font-m);font-size:24px;margin-bottom:12px}
-.home-card .hc-amt .cur{font-size:14px;color:var(--text3)}
+.home-card .hc-amt{font-family:var(--font-d);font-weight:800;font-size:25px;letter-spacing:-0.02em;margin-bottom:12px}
+.home-card .hc-amt .cur{font-family:var(--font-d);font-weight:600;font-size:13px;color:var(--text3);letter-spacing:0}
 .home-card .hc-status{display:flex;gap:14px;font-size:12.5px;color:var(--text2);margin-bottom:14px}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--border);margin-right:6px;vertical-align:0}
 .dot.ok{background:var(--green)} .dot.warn{background:var(--gold)}
@@ -1836,7 +1837,12 @@ function CashPage({corps, canEditIds, profile, isOwner}){
             const sales = r ? Number(r.amount) : 0;
             const expd = ce ? ce.total : 0;
             const envelope = sales - expd;   // what should physically be in the envelope
-            const counted = r && r.counted_amount!=null ? Number(r.counted_amount) : null;
+            // prefer the live edit in state so the calendar updates as you type in
+            // "Count Envelopes"; fall back to the saved value on the row.
+            const liveCnt = counts[date];
+            const liveNum = (liveCnt!==''&&liveCnt!=null) ? parseFloat(liveCnt) : null;
+            const counted = (liveNum!=null && !isNaN(liveNum)) ? liveNum
+              : (r && r.counted_amount!=null ? Number(r.counted_amount) : null);
             // we always expect a little MORE than sales-minus-spent (coin change is
             // kept as bills), so counted >= expected is good; short is the problem.
             const countOk = counted!=null && counted >= envelope - 0.01;
@@ -3111,14 +3117,10 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose
           <div className="hc-code">{c.code}</div>
           <div className="hc-name">{c.name}</div>
           <div className="hc-amt"><span className="cur">$</span>{p.sales.toLocaleString('en-US',{maximumFractionDigits:0})}<span className="cur"> today</span></div>
-          <div className="hc-status">
-            <span><span className={'dot'+(done?' ok':'')}></span>Revenue</span>
-            <span><span className={'dot'+(p.exp>0?' ok':'')}></span>{p.exp} expense{p.exp===1?'':'s'}</span>
-            {p.pending>0 && <span><span className="dot warn"></span>{p.pending} pending</span>}
-          </div>
+          {p.pending>0 && <div className="hc-status"><span><span className="dot warn"></span>{p.pending} pending</span></div>}
           <div className="hc-actions">
-            <button className="hc-btn income" onClick={e=>{e.stopPropagation(); goEntry(c.id,'income');}}>+ Income</button>
-            <button className="hc-btn expense" onClick={e=>{e.stopPropagation(); goEntry(c.id,'expense');}}>− Expense</button>
+            <button className="hc-btn income" onClick={e=>{e.stopPropagation(); goEntry(c.id,'income');}}>Income</button>
+            <button className="hc-btn expense" onClick={e=>{e.stopPropagation(); goEntry(c.id,'expense');}}>Expense</button>
           </div>
         </div>;
       })}
