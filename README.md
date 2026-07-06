@@ -1,8 +1,7 @@
 # Ugly Finance Tool
 
-Insights now has an All-Time view: lifetime sales/net, best sales & profit years,
-"The Long View" auto-insights (multi-year growth, win streaks, margin trend), a
-full-history monthly chart, and a year-by-year table with YoY growth.
-
-Mobile usability: fixed horizontal-scroll/overflow on all screens; wide tables now
-scroll inside their card; the Insights view-tabs scroll horizontally when needed.
+Light theme applied across the whole app: white background, soft card shadows, and
+meaningful color coding (green = good/growth, red = bad/large cost, gold = brand/
+total). KPI cards use subtle accent tints; "What Changed" findings have colored
+backgrounds; the top three expense lines in "Where the Money Went" use red bars.
+Charts updated for the light background.

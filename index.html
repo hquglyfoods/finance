@@ -10,12 +10,17 @@
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#0C0B09; --panel:#14120F; --panel2:#1B1814; --border:#2A251E; --border-soft:#211D17;
-  --text:#EDE7DC; --text2:#A89F8F; --text3:#6E675B;
-  --gold:#C9A227; --gold-soft:#8A7119; --gold-dim:rgba(201,162,39,.12);
-  --green:#7FB069; --green-dim:rgba(127,176,105,.14);
-  --red:#C4644C; --red-dim:rgba(196,100,76,.12);
-  --blue:#7A9CC6;
+  /* LIGHT THEME - white background, meaningful color coding */
+  --bg:#FFFFFF; --panel:#FFFFFF; --panel2:#F6F5F2; --panel3:#FAFAF8;
+  --border:#E7E4DD; --border-soft:#F0EEE9;
+  --text:#1A1712; --text2:#5C554A; --text3:#948B7C;
+  --gold:#B08A1E; --gold-strong:#8A6D14; --gold-soft:#D4B454; --gold-dim:#FBF6E7;
+  --green:#2E7D4F; --green-soft:#4BA972; --green-dim:#E8F3EC;
+  --red:#C0392B; --red-soft:#D9614F; --red-dim:#FBEBE9;
+  --blue:#3A6EA5; --blue-dim:#EAF1F8;
+  --danger:#C0392B;
+  --shadow:0 1px 3px rgba(26,23,18,.06), 0 1px 2px rgba(26,23,18,.04);
+  --shadow-lg:0 4px 16px rgba(26,23,18,.08);
   --font-d:'Playfair Display',serif; --font-b:'Inter',sans-serif; --font-m:'IBM Plex Mono',monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0}
@@ -31,8 +36,8 @@ a{color:var(--gold);text-decoration:none}
 .btn{border:1px solid var(--border);background:var(--panel2);color:var(--text);border-radius:6px;padding:9px 16px;font-weight:500;font-size:13.5px;transition:border-color .15s, background .15s}
 .btn:hover{border-color:var(--gold-soft)}
 .btn:disabled{opacity:.45;cursor:default}
-.btn-gold{background:var(--gold);border-color:var(--gold);color:#141109;font-weight:600}
-.btn-gold:hover{background:#D8B341;border-color:#D8B341}
+.btn-gold{background:var(--gold);border-color:var(--gold);color:#FFFFFF;font-weight:600}
+.btn-gold:hover{background:var(--gold-strong);border-color:var(--gold-strong)}
 .btn-ghost{background:transparent}
 .btn-sm{padding:5px 10px;font-size:12.5px;border-radius:5px}
 .btn-danger{color:var(--red);border-color:rgba(196,100,76,.4)}
@@ -45,7 +50,7 @@ a{color:var(--gold);text-decoration:none}
 
 /* ---------- login ---------- */
 .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
-  background:radial-gradient(ellipse 900px 500px at 50% -10%, rgba(201,162,39,.06), transparent)}
+  background:radial-gradient(ellipse 900px 500px at 50% -10%, var(--gold-dim), transparent)}
 .login-box{width:100%;max-width:400px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:44px 38px}
 .login-box h1{font-family:var(--font-d);font-size:30px;font-weight:500;margin:14px 0 4px}
 .login-box .sub{color:var(--text2);font-size:13.5px;margin-bottom:30px}
@@ -55,13 +60,24 @@ a{color:var(--gold);text-decoration:none}
 
 /* ---------- shell ---------- */
 .shell{display:flex;min-height:100vh}
-.side{width:218px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--border-soft);padding:26px 14px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.side{width:218px;flex-shrink:0;background:var(--panel3);border-right:1px solid var(--border);padding:26px 14px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
 .side .brand{font-family:var(--font-d);font-size:19px;padding:0 10px 4px}
 .side .brand em{color:var(--gold);font-style:italic}
 .side .brand-sub{font-family:var(--font-m);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);padding:0 10px;margin-bottom:26px}
 .nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:7px;color:var(--text2);font-weight:500;font-size:13.5px;border:none;background:none;width:100%;text-align:left;margin-bottom:2px}
 .nav-item:hover{color:var(--text);background:var(--panel2)}
 .nav-item.on{color:var(--gold);background:var(--gold-dim)}
+.nav-item .nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px}
+.tab-dot{position:absolute;top:-4px;right:-8px;background:var(--red);color:#fff;font-size:9px;font-weight:700;min-width:15px;height:15px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;padding:0 3px;line-height:1}
+.sheet-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:flex-end;animation:fadein .15s}
+.sheet{background:var(--panel);width:100%;border-radius:18px 18px 0 0;padding:8px 14px calc(20px + env(safe-area-inset-bottom));border-top:1px solid var(--border);animation:slideup .2s}
+.sheet-handle{width:38px;height:4px;background:var(--border);border-radius:2px;margin:8px auto 14px}
+.sheet-item{display:flex;align-items:center;gap:14px;width:100%;padding:15px 12px;border:none;background:none;color:var(--text);font-size:15px;font-weight:500;text-align:left;border-radius:10px}
+.sheet-item .ic{font-size:19px;width:24px;text-align:center;color:var(--text2)}
+.sheet-item.on{color:var(--gold);background:var(--gold-dim)}
+.sheet-item.on .ic{color:var(--gold)}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+@keyframes slideup{from{transform:translateY(100%)}to{transform:translateY(0)}}
 .side .foot{margin-top:auto;padding:12px 10px;border-top:1px solid var(--border-soft);font-size:12.5px}
 .side .foot .who{color:var(--text);font-weight:500}
 .side .foot .role{font-family:var(--font-m);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)}
@@ -74,21 +90,40 @@ a{color:var(--gold);text-decoration:none}
 /* corp tabs + month picker */
 .corp-tabs{display:flex;gap:6px;flex-wrap:wrap}
 .corp-tab{padding:7px 14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text2);font-weight:500;font-size:13px}
-.corp-tab.on{border-color:var(--gold-soft);color:var(--gold);background:var(--gold-dim)}
-.viewbar{display:flex;gap:4px;margin-bottom:18px;background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:4px;width:fit-content}
-.viewtab{padding:7px 18px;border-radius:6px;border:none;background:transparent;color:var(--text2);font-weight:500;font-size:13px;cursor:pointer}
-.viewtab.on{background:var(--gold-dim);color:var(--gold)}
+.corp-tab.on{border-color:var(--gold-soft);color:var(--gold-strong);background:var(--gold-dim)}
+.viewbar{display:flex;gap:4px;margin-bottom:22px;background:var(--panel2);border-radius:10px;padding:4px;width:fit-content}
+.viewtab{padding:8px 18px;border-radius:7px;border:none;background:transparent;color:var(--text2);font-weight:600;font-size:13px;cursor:pointer}
+.viewtab.on{background:var(--panel);color:var(--gold-strong);box-shadow:var(--shadow)}
 .subtabs{display:flex;gap:18px;margin:0 0 16px 2px;border-bottom:1px solid var(--border)}
 .subtab{padding:9px 2px;border:none;background:transparent;color:var(--text2);font-weight:500;font-size:14px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
 .subtab.on{color:var(--gold);border-bottom-color:var(--gold)}
-.findings{display:flex;flex-direction:column;gap:9px}
-.finding{display:flex;align-items:flex-start;gap:10px;font-size:14px;line-height:1.45}
+.findings{display:flex;flex-direction:column;gap:11px}
+.finding{display:flex;align-items:flex-start;gap:11px;font-size:14px;line-height:1.45;padding:11px 14px;border-radius:10px}
 .finding .fdot{flex:0 0 8px;width:8px;height:8px;border-radius:50%;margin-top:6px}
-.finding.good .fdot{background:#4a9e6f}
-.finding.bad .fdot{background:#c25b52}
+.finding.good{background:var(--green-dim);color:var(--text)}
+.finding.good .fdot{background:var(--green)}
+.finding.bad{background:var(--red-dim);color:var(--text)}
+.finding.bad .fdot{background:var(--red)}
+.finding.info{background:var(--gold-dim);color:var(--text)}
 .finding.info .fdot{background:var(--gold)}
-.finding.good{color:var(--text)}
-.finding.bad{color:var(--text)}
+.spendlist{display:flex;flex-direction:column;gap:14px}
+.spendrow{}
+.spendhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:5px}
+.spendname{font-weight:500;font-size:14px}
+.spendamt{font-size:14px}
+.spendbar{height:8px;background:var(--panel2);border-radius:4px;overflow:hidden}
+.spendbar-fill{height:100%;background:linear-gradient(90deg,var(--gold-soft),var(--gold));border-radius:4px}
+.spendbar-fill.big{background:linear-gradient(90deg,var(--red-soft),var(--red))}
+.kpi.accent-green{background:linear-gradient(160deg,var(--green-dim),var(--panel));border-color:#CDE6D6}
+.kpi.accent-red{background:linear-gradient(160deg,var(--red-dim),var(--panel));border-color:#F3D3CE}
+.kpi.accent-gold{background:linear-gradient(160deg,var(--gold-dim),var(--panel));border-color:#EBDCA8}
+.spendmeta{font-size:11.5px;color:var(--text3);margin-top:4px}
+.spendtotal{display:flex;justify-content:space-between;align-items:baseline;margin-top:16px;padding-top:14px;border-top:1px solid var(--border);font-weight:600;font-size:15px}
+.ie-toggle{display:flex;gap:10px;margin-bottom:20px}
+.ie-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:16px;border-radius:12px;border:1.5px solid var(--border);background:var(--panel);color:var(--text2);font-size:16px;font-weight:600}
+.ie-btn .ie-ic{font-size:20px;font-weight:700;line-height:1}
+.ie-btn.income.on{border-color:var(--green);background:var(--green-dim);color:var(--green)}
+.ie-btn.expense.on{border-color:var(--red);background:var(--red-dim);color:var(--red)}
 .month-pick{display:flex;align-items:center;gap:8px}
 .month-pick .lbl{font-family:var(--font-m);font-size:14px;min-width:86px;text-align:center}
 .month-pick button{width:30px;height:30px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text2)}
@@ -96,12 +131,12 @@ a{color:var(--gold);text-decoration:none}
 
 /* cards */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:22px}
-.kpi{background:var(--panel);border:1px solid var(--border-soft);border-radius:10px;padding:16px 18px}
+.kpi{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
 .kpi .k-lbl{font-size:11.5px;color:var(--text3);font-weight:500;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px}
 .kpi .k-val{font-family:var(--font-m);font-size:21px;font-weight:500}
 .kpi .k-sub{font-size:12px;color:var(--text2);margin-top:3px}
 
-.card{background:var(--panel);border:1px solid var(--border-soft);border-radius:10px;padding:20px 22px;margin-bottom:18px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px 22px;margin-bottom:18px;box-shadow:var(--shadow)}
 .card h3{font-size:14px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
 @media(max-width:1000px){.grid2{grid-template-columns:1fr}}
@@ -185,12 +220,12 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   .side .foot button{margin-top:0 !important}
   /* bottom tab bar */
   .tabbar{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;background:var(--panel);
-    border-top:1px solid var(--border);padding:6px 4px 8px;justify-content:space-around}
-  .tabbar button{flex:1;background:none;border:none;color:var(--text3);font-size:10px;font-weight:600;
-    display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 2px;letter-spacing:.02em}
-  .tabbar button .ic{font-size:17px;line-height:1}
+    border-top:1px solid var(--border);padding:8px 4px calc(8px + env(safe-area-inset-bottom));justify-content:space-around}
+  .tabbar button{flex:1;background:none;border:none;color:var(--text3);font-size:10.5px;font-weight:600;
+    display:flex;flex-direction:column;align-items:center;gap:4px;padding:2px;letter-spacing:.01em}
+  .tabbar button .ic{font-size:20px;line-height:1;position:relative}
   .tabbar button.on{color:var(--gold)}
-  .main{padding:18px 14px 84px}
+  .main{padding:18px 14px calc(96px + env(safe-area-inset-bottom))}
   .page-head{margin-bottom:18px}
   .page-head h2{font-size:23px}
   /* headers: stack controls full width */
@@ -220,7 +255,7 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .home-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;margin-bottom:22px}
 .home-card{background:var(--panel);border:1px solid var(--border-soft);border-radius:12px;padding:20px;cursor:pointer;transition:border-color .15s, transform .1s;position:relative}
 .home-card:hover{border-color:var(--gold-soft);transform:translateY(-1px)}
-.home-card.done{border-color:var(--gold-soft);background:linear-gradient(180deg, rgba(201,162,39,.07), var(--panel))}
+.home-card.done{border-color:var(--gold-soft);background:linear-gradient(180deg, var(--gold-dim), var(--panel))}
 .home-card .hc-code{font-family:var(--font-m);font-size:11px;letter-spacing:.14em;color:var(--gold)}
 .home-card .hc-name{font-family:var(--font-d);font-size:18px;margin:4px 0 12px}
 .home-card .hc-amt{font-family:var(--font-m);font-size:24px;margin-bottom:12px}
@@ -245,7 +280,7 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .greet-sub{color:var(--text2);font-size:13.5px;margin-bottom:24px}
 </style>
 <link rel="manifest" href="/manifest.webmanifest">
-<meta name="theme-color" content="#0C0B09">
+<meta name="theme-color" content="#FFFFFF">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -479,7 +514,8 @@ function buildSummary(pl){
     net_margin: pl.margin !== null ? +(pl.margin).toFixed(4) : null,
     revenue: pl.channelRows.filter(c=>c.amount!==0).map(c=>({name:c.name, amount:+c.amount.toFixed(2)})),
     expenses,
-    distribution: pl.dist.map(d=>({holder:d.holder, pct:d.pct, amount:+d.amount.toFixed(2)})),
+    // NOTE: profit distribution / shareholder names are intentionally NOT included.
+    // Published reports must never contain investor or ownership information.
   };
 }
 
@@ -503,28 +539,38 @@ function Spinner(){ return <div className="faint" style={{padding:'30px 0',textA
 function TrendChart({points}){
   if(!points.length) return null;
   const W = Math.max(560, points.length*52), H = 190, padL = 8, padB = 26, padT = 14;
-  const maxV = Math.max(1, ...points.map(p=>p.sales));
-  const minN = Math.min(0, ...points.map(p=>p.net));
-  const span = maxV - minN;
-  const yOf = v => padT + (H-padB-padT) * (1 - (v - minN)/span);
+  const plotH = H - padB - padT;
+  // Sales bars: scaled to the max sales value (bars always proportional to sales).
+  const maxSales = Math.max(1, ...points.map(p=>p.sales));
+  const barY = v => padT + plotH * (1 - v/maxSales);        // top of a sales bar
+  const baseY = padT + plotH;                                // sales baseline (0)
+  // Net line: its own scale so it isn't crushed by the sales magnitude.
+  const nets = points.map(p=>p.net);
+  const maxNet = Math.max(0, ...nets), minNet = Math.min(0, ...nets);
+  const netSpan = (maxNet - minNet) || 1;
+  const netY = v => padT + plotH * (1 - (v - minNet)/netSpan);
   const bw = 26, gap = (W - padL*2)/points.length;
   return <div className="chart-wrap">
     <svg width={W} height={H}>
-      <line x1={padL} x2={W-padL} y1={yOf(0)} y2={yOf(0)} stroke="#2A251E" strokeWidth="1"/>
+      {/* sales baseline */}
+      <line x1={padL} x2={W-padL} y1={baseY} y2={baseY} stroke="#E7E4DD" strokeWidth="1"/>
+      {/* net-zero reference line (dashed) if nets go negative */}
+      {minNet<0 && <line x1={padL} x2={W-padL} y1={netY(0)} y2={netY(0)} stroke="#D8D3C9" strokeWidth="1" strokeDasharray="3 3"/>}
       {points.map((p,i)=>{
         const x = padL + gap*i + gap/2;
+        const h = baseY - barY(p.sales);
         return <g key={i}>
-          <rect x={x-bw/2} y={Math.min(yOf(0),yOf(p.sales))} width={bw} height={Math.abs(yOf(p.sales)-yOf(0))} fill="rgba(201,162,39,.35)" rx="3"/>
-          <text x={x} y={H-8} fontSize="10" fill="#6E675B" textAnchor="middle" fontFamily="IBM Plex Mono">{p.label}</text>
+          <rect x={x-bw/2} y={barY(p.sales)} width={bw} height={Math.max(0,h)} fill="#D4B454" rx="3"/>
+          <text x={x} y={H-8} fontSize="10" fill="#948B7C" textAnchor="middle" fontFamily="IBM Plex Mono">{p.label}</text>
         </g>;
       })}
-      <polyline fill="none" stroke="#7FB069" strokeWidth="2"
-        points={points.map((p,i)=>`${padL+gap*i+gap/2},${yOf(p.net)}`).join(' ')}/>
-      {points.map((p,i)=><circle key={i} cx={padL+gap*i+gap/2} cy={yOf(p.net)} r="3" fill={p.net>=0?'#7FB069':'#C4644C'}/>)}
+      <polyline fill="none" stroke="#2E7D4F" strokeWidth="2"
+        points={points.map((p,i)=>`${padL+gap*i+gap/2},${netY(p.net)}`).join(' ')}/>
+      {points.map((p,i)=><circle key={i} cx={padL+gap*i+gap/2} cy={netY(p.net)} r="3" fill={p.net>=0?'#2E7D4F':'#C0392B'}/>)}
     </svg>
     <div className="legend">
-      <span><span className="sw" style={{background:'rgba(201,162,39,.5)'}}></span>Sales</span>
-      <span><span className="sw" style={{background:'#7FB069'}}></span>Net profit</span>
+      <span><span className="sw" style={{background:'#D4B454'}}></span>Sales</span>
+      <span><span className="sw" style={{background:'#2E7D4F'}}></span>Net profit</span>
     </div>
   </div>;
 }
@@ -544,15 +590,15 @@ function RatioChart({points}){
   };
   return <div className="chart-wrap">
     <svg width={W} height={H}>
-      {[0.1,0.2,0.3].map(g=><line key={g} x1={padL} x2={W-padL} y1={yOf(g)} y2={yOf(g)} stroke="#211D17" strokeWidth="1"/>)}
-      {[0.1,0.2,0.3].map(g=><text key={'t'+g} x={padL+2} y={yOf(g)-4} fontSize="9" fill="#6E675B" fontFamily="IBM Plex Mono">{g*100}%</text>)}
-      {line('payrollPct','#C9A227')}
-      {line('suppliesPct','#7A9CC6')}
-      {pts.map((p,i)=><text key={i} x={padL+gap*i+gap/2} y={H-8} fontSize="10" fill="#6E675B" textAnchor="middle" fontFamily="IBM Plex Mono">{p.label}</text>)}
+      {[0.1,0.2,0.3].map(g=><line key={g} x1={padL} x2={W-padL} y1={yOf(g)} y2={yOf(g)} stroke="#F0EEE9" strokeWidth="1"/>)}
+      {[0.1,0.2,0.3].map(g=><text key={'t'+g} x={padL+2} y={yOf(g)-4} fontSize="9" fill="#948B7C" fontFamily="IBM Plex Mono">{g*100}%</text>)}
+      {line('payrollPct','#B08A1E')}
+      {line('suppliesPct','#3A6EA5')}
+      {pts.map((p,i)=><text key={i} x={padL+gap*i+gap/2} y={H-8} fontSize="10" fill="#948B7C" textAnchor="middle" fontFamily="IBM Plex Mono">{p.label}</text>)}
     </svg>
     <div className="legend">
-      <span><span className="sw" style={{background:'#C9A227'}}></span>Payroll %</span>
-      <span><span className="sw" style={{background:'#7A9CC6'}}></span>Supplies %</span>
+      <span><span className="sw" style={{background:'#B08A1E'}}></span>Payroll %</span>
+      <span><span className="sw" style={{background:'#3A6EA5'}}></span>Supplies %</span>
     </div>
   </div>;
 }
@@ -753,11 +799,11 @@ function MonthView({pl, yoy, trend, y, m}){
   if(!pl) return <Spinner/>;
   return <>
     <div className="kpis">
-      <div className="kpi"><div className="k-lbl">Total Sales</div><div className="k-val">{fmt$(pl.totalSales)}</div>
+      <div className="kpi accent-gold"><div className="k-lbl">Total Sales</div><div className="k-val">{fmt$(pl.totalSales)}</div>
         <div className="k-sub"><YoYDelta cur={pl.totalSales} prev={yoy&&yoy.totalSales}/></div></div>
       <div className="kpi"><div className="k-lbl">Total Expenses</div><div className="k-val">{fmt$(pl.totalExpenses)}</div>
         <div className="k-sub"><YoYDelta cur={pl.totalExpenses} prev={yoy&&yoy.totalExpenses}/></div></div>
-      <div className="kpi"><div className="k-lbl">Net Profit</div><div className={'k-val '+(pl.net>=0?'pos':'neg')}>{fmt$(pl.net)}</div>
+      <div className={'kpi '+(pl.net>=0?'accent-green':'accent-red')}><div className="k-lbl">Net Profit</div><div className={'k-val '+(pl.net>=0?'pos':'neg')}>{fmt$(pl.net)}</div>
         <div className="k-sub">Margin {fmtPct(pl.margin)} · <YoYDelta cur={pl.net} prev={yoy&&yoy.net}/></div></div>
       <div className="kpi"><div className="k-lbl">Payroll %</div><div className="k-val">{fmtPct(pl.payrollPct)}
         <TrendArrow cur={pl.payrollPct} prev={trend.length>1?trend[trend.length-2].payrollPct:null} higherIsBad={true}/></div>
@@ -781,6 +827,37 @@ function MonthView({pl, yoy, trend, y, m}){
               <span className="fdot"></span><span>{f.text}</span></div>)}
           </div>
         </div>; })()}
+      {(()=>{
+        // Where the money went: every expense line (categories + auto rules),
+        // sorted biggest first, with a share-of-total bar. This is the core view
+        // for spotting where spending is concentrated.
+        const items=[
+          ...pl.categoryRows.filter(c=>c.amount!==0).map(c=>({name:c.name,amount:c.amount,auto:false})),
+          ...pl.ruleRows.filter(r=>r.amount!==0).map(r=>({name:r.name,amount:r.amount,auto:true})),
+        ].sort((a,b)=>b.amount-a.amount);
+        const maxAmt=Math.max(1,...items.map(i=>i.amount));
+        return items.length>0 && <div className="card">
+          <h3>Where the Money Went · {MONTHS[m-1]} {y}</h3>
+          <div className="hint" style={{marginTop:0,marginBottom:14}}>Every expense line, largest first. The bar shows each category's share of total expenses.</div>
+          <div className="spendlist">
+            {items.map((it,i)=>{
+              const pctExp=pl.totalExpenses?it.amount/pl.totalExpenses:0;
+              const pctSales=pl.totalSales?it.amount/pl.totalSales:0;
+              return <div className="spendrow" key={i}>
+                <div className="spendhead">
+                  <span className="spendname">{it.name}{it.auto && <span className="badge gold" style={{marginLeft:6}}>Auto</span>}</span>
+                  <span className="spendamt mono">{fmt$(it.amount)}</span>
+                </div>
+                <div className="spendbar"><div className={'spendbar-fill'+(i<3?' big':'')} style={{width:(it.amount/maxAmt*100)+'%'}}></div></div>
+                <div className="spendmeta">{fmtPct(pctExp)} of expenses · {fmtPct(pctSales)} of sales</div>
+              </div>;
+            })}
+          </div>
+          <div className="spendtotal">
+            <span>Total Expenses</span><span className="mono">{fmt$(pl.totalExpenses)}</span>
+          </div>
+        </div>;
+      })()}
       <div className="card"><h3>12-Month Trend</h3><TrendChart points={trend}/></div>
       <div className="grid2">
         <div className="card"><h3>Cost Ratios · 12 Months</h3><RatioChart points={trend}/>
@@ -938,9 +1015,9 @@ function CompareView({cur, prev, prev2, y}){
     <div className="card">
       <h3>Sales by Month · {y-2}–{y}</h3>
       <MultiYearChart series={[
-        has2 && {label:String(y-2), months:prev2, color:'#6b6455'},
-        {label:String(y-1), months:prev, color:'#a08a4a'},
-        {label:String(y), months:cur, color:'#d9b441'},
+        has2 && {label:String(y-2), months:prev2, color:'#B4AA98'},
+        {label:String(y-1), months:prev, color:'#C9A94E'},
+        {label:String(y), months:cur, color:'#B08A1E'},
       ].filter(Boolean)}/>
     </div>
     <div className="card">
@@ -1115,6 +1192,7 @@ function Entry({corps, canEditIds, profile, presetCorp}){
   const [dayExp, setDayExp] = useState([]);
   const [pending, setPending] = useState([]);
   const [form, setForm] = useState({category_id:'', amount:'', payee:'', memo:''});
+  const [mode, setMode] = useState('income');
   const [toast, showToast] = useToast();
   const [busy, setBusy] = useState(false);
 
@@ -1182,6 +1260,15 @@ function Entry({corps, canEditIds, profile, presetCorp}){
       </div>
     </div>
 
+    <div className="ie-toggle">
+      <button className={'ie-btn income'+(mode==='income'?' on':'')} onClick={()=>setMode('income')}>
+        <span className="ie-ic">＋</span> Income
+      </button>
+      <button className={'ie-btn expense'+(mode==='expense'?' on':'')} onClick={()=>setMode('expense')}>
+        <span className="ie-ic">－</span> Expense
+      </button>
+    </div>
+
     {pending.length>0 && <div className="card">
       <h3>Slack Pending Approval <span className="badge red">{pending.length}</span></h3>
       {pending.map(p=><div className="pend" key={p.id}>
@@ -1198,9 +1285,9 @@ function Entry({corps, canEditIds, profile, presetCorp}){
       </div>)}
     </div>}
 
-    <div className="grid2">
+    {mode==='income' &&
       <div className="card">
-        <h3><span className="step-tag">1</span>Revenue <span className="faint" style={{fontWeight:400}}>{date}</span></h3>
+        <h3>Revenue <span className="faint" style={{fontWeight:400}}>{date}</span></h3>
         <table className="t"><tbody>
           {(meta?meta.channels.filter(c=>c.active):[]).map(c=>{
             const row = dayRev[c.id];
@@ -1224,11 +1311,12 @@ function Entry({corps, canEditIds, profile, presetCorp}){
           <span className="bt-v">{fmt$((meta?meta.channels:[]).reduce((a,c)=>{
             const r=dayRev[c.id]; if(!r||!c.counts_in_total) return a;
             return a+Number(r.amount)*Number(c.total_multiplier);},0))}</span></div>
-        <div className="hint">Amounts save when you click outside the field.</div>
-      </div>
+        <div className="hint">Amounts save when you click outside the field. Includes Other Income for grants or catering.</div>
+      </div>}
 
+    {mode==='expense' &&
       <div className="card">
-        <h3><span className="step-tag">2</span>Add Expense</h3>
+        <h3>Add Expense <span className="faint" style={{fontWeight:400}}>{date}</span></h3>
         <label className="hint" style={{marginTop:0}}>Category</label>
         <select value={form.category_id} onChange={e=>setForm({...form,category_id:e.target.value})} style={{marginBottom:10}}>
           <option value="">Select a category</option>
@@ -1267,8 +1355,7 @@ function Entry({corps, canEditIds, profile, presetCorp}){
               <td style={{width:36,textAlign:'right'}}><button className="btn btn-sm btn-ghost btn-danger" onClick={()=>delExp(e.id)}>✕</button></td>
             </tr>)}
           </tbody></table>}
-      </div>
-    </div>
+      </div>}
     {toast && <div className="toast">{toast}</div>}
   </div>;
 }
@@ -1478,8 +1565,8 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
         if(r.start_date && date<r.start_date) continue;
         if(r.end_date && date>r.end_date) continue;
         const dow=new Date(y,m-1,d).getDay();
-        const due = r.frequency==='weekly' ? dow===r.day_of_week
-          : d===Math.min(r.day_of_month, lastDay(y,m));
+        const targetDom = r.day_of_month===99 ? lastDay(y,m) : Math.min(r.day_of_month, lastDay(y,m));
+        const due = r.frequency==='weekly' ? dow===r.day_of_week : d===targetDom;
         if(due && !have.has(r.id+'|'+date))
           inserts.push({corporation_id:corpId, category_id:r.category_id, date,
             amount:Number(r.amount), payee:r.payee||null, memo:r.name,
@@ -1549,6 +1636,7 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
             </select>
           : <select className="w-sm" value={f.day_of_month} onChange={e=>setF({...f,day_of_month:e.target.value})}>
               {Array.from({length:31},(_,i)=><option key={i+1} value={i+1}>Day {i+1}</option>)}
+              <option value="99">Last day of month</option>
             </select>}
         <input placeholder="Payee (optional)" value={f.payee} onChange={e=>setF({...f,payee:e.target.value})}/>
         <button className="btn btn-gold" style={{flex:'0 0 auto'}} onClick={add}>Add</button>
@@ -1562,7 +1650,7 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
         <tbody>{rows.map(r=><tr key={r.id} style={{opacity:r.active?1:.45}}>
           <td>{r.name}{r.payee && <span className="faint"> · {r.payee}</span>}</td>
           <td>{catName(r.category_id)}</td>
-          <td>{r.frequency==='weekly' ? 'Weekly · '+DOW[r.day_of_week] : 'Monthly · Day '+r.day_of_month}</td>
+          <td>{r.frequency==='weekly' ? 'Weekly · '+DOW[r.day_of_week] : 'Monthly · '+(r.day_of_month===99?'Last day':'Day '+r.day_of_month)}</td>
           <td className="num">{fmt$(Number(r.amount))}</td>
           <td style={{textAlign:'right'}}>{isOwner && <button className="btn btn-sm" onClick={()=>toggle(r)}>{r.active?'Pause':'Resume'}</button>}</td>
         </tr>)}</tbody>
@@ -2331,6 +2419,87 @@ function RatesManager({corps, canEditIds}){
   </div>;
 }
 
+// ================= OWNERS / PROFIT DISTRIBUTION (owner-only) =================
+function OwnersManager({corps, canEditIds}){
+  const editable = corps.filter(c=>canEditIds.has(c.id) && c.corp_type!=='franchisee');
+  const [corpId, setCorpId] = useState(editable[0] && editable[0].id);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [nf, setNf] = useState({holder:'', pct:''});
+  const [toast, showToast] = useToast();
+
+  const reload = useCallback(async()=>{
+    if(!corpId) return; setLoading(true);
+    const { data } = await sb.from('ownership').select('*').eq('corporation_id',corpId).order('display_order');
+    setRows(data||[]); setLoading(false);
+  },[corpId]);
+  useEffect(()=>{ reload(); },[reload]);
+
+  const total = rows.reduce((a,r)=>a+Number(r.pct||0),0);
+
+  const add = async()=>{
+    const holder=nf.holder.trim(); const pct=parseFloat(nf.pct);
+    if(!holder){ showToast('Enter a holder name'); return; }
+    if(isNaN(pct)){ showToast('Enter a percentage'); return; }
+    const maxOrd=Math.max(0,...rows.map(r=>r.display_order||0));
+    const { error } = await sb.from('ownership').insert({ corporation_id:corpId, holder, pct, display_order:maxOrd+1 });
+    if(error){ showToast('Add failed: '+error.message); return; }
+    setNf({holder:'',pct:''}); showToast('Added'); reload();
+  };
+  const updatePct = async(r,val)=>{
+    const pct=parseFloat(val); if(isNaN(pct)) return;
+    const { error } = await sb.from('ownership').update({pct}).eq('id',r.id);
+    if(error){ showToast('Update failed: '+error.message); return; } reload();
+  };
+  const rename = async(r)=>{
+    const holder=(prompt('Holder name', r.holder)||'').trim();
+    if(!holder||holder===r.holder) return;
+    await sb.from('ownership').update({holder}).eq('id',r.id); reload();
+  };
+  const remove = async(r)=>{
+    if(!confirm(`Remove ${r.holder}?`)) return;
+    await sb.from('ownership').delete().eq('id',r.id); reload();
+  };
+
+  if(!editable.length) return <div className="card">No corporations available.</div>;
+
+  return <div>
+    <div className="page-head" style={{marginBottom:14}}>
+      <div><div className="sub">Profit distribution per store. Holders and percentages can change over time (a store's investors may differ or be replaced). This is owner-only and never appears in published reports.</div></div>
+      <CorpTabs corps={editable} sel={corpId} onSel={setCorpId}/>
+    </div>
+    <div className="card">
+      <h3>Shareholders / Profit Split</h3>
+      {loading ? <Spinner/> : <>
+        <table className="t"><thead><tr><th>Holder</th><th className="num">Share %</th><th></th></tr></thead>
+          <tbody>
+            {rows.map(r=><tr key={r.id}>
+              <td>{r.holder}</td>
+              <td className="num" style={{width:120}}>
+                <input type="number" step="0.01" defaultValue={Number(r.pct)} key={r.id+r.pct}
+                  onBlur={e=>updatePct(r,e.target.value)} style={{textAlign:'right',width:90}}/>
+              </td>
+              <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+                <button className="btn btn-sm" onClick={()=>rename(r)}>Rename</button>
+                <button className="btn btn-sm btn-danger" style={{marginLeft:6}} onClick={()=>remove(r)}>Remove</button>
+              </td></tr>)}
+            <tr className="total"><td>Total</td>
+              <td className={'num '+(Math.abs(total-100)<0.01?'pos':'neg')}>{total.toFixed(2)}%</td><td></td></tr>
+          </tbody>
+        </table>
+        {Math.abs(total-100)>=0.01 && <div className="hint" style={{color:'var(--danger)'}}>Shares add up to {total.toFixed(2)}%, not 100%.</div>}
+        <hr className="divider"/>
+        <div className="form-row">
+          <input placeholder="Holder name (e.g. AD TREE, LALIC, HQ)" value={nf.holder} onChange={e=>setNf({...nf,holder:e.target.value})}/>
+          <input type="number" step="0.01" placeholder="Share %" className="w-sm" value={nf.pct} onChange={e=>setNf({...nf,pct:e.target.value})}/>
+          <button className="btn" style={{flex:'0 0 auto'}} onClick={add}>Add Holder</button>
+        </div>
+      </>}
+    </div>
+    {toast && <div className="toast">{toast}</div>}
+  </div>;
+}
+
 // ================= SETTINGS =================
 function Settings({corps, canEditIds, profile, isOwner, session}){
   const [sub, setSub] = useState('recurring');
@@ -2340,6 +2509,7 @@ function Settings({corps, canEditIds, profile, isOwner, session}){
       <div className="corp-tabs">
         <button className={'corp-tab'+(sub==='recurring'?' on':'')} onClick={()=>setSub('recurring')}>Recurring & Categories</button>
         <button className={'corp-tab'+(sub==='rates'?' on':'')} onClick={()=>setSub('rates')}>Rates</button>
+        <button className={'corp-tab'+(sub==='owners'?' on':'')} onClick={()=>setSub('owners')}>Investors</button>
         <button className={'corp-tab'+(sub==='accounts'?' on':'')} onClick={()=>setSub('accounts')}>Accounts</button>
         <button className={'corp-tab'+(sub==='device'?' on':'')} onClick={()=>setSub('device')}>App & Alerts</button>
         <button className={'corp-tab'+(sub==='diag'?' on':'')} onClick={()=>setSub('diag')}>Diagnostics</button>
@@ -2347,6 +2517,7 @@ function Settings({corps, canEditIds, profile, isOwner, session}){
     </div>
     {sub==='recurring' && <Recurring corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} embedded={true}/>}
     {sub==='rates' && <RatesManager corps={corps} canEditIds={canEditIds}/>}
+    {sub==='owners' && <OwnersManager corps={corps} canEditIds={canEditIds}/>}
     {sub==='accounts' && <Admin corps={corps} session={session} embedded={true}/>}
     {sub==='device' && <PwaCard profile={profile}/>}
     {sub==='diag' && <ToastDiag session={session}/>}
@@ -2488,6 +2659,8 @@ function App(){
   const [tab,setTab] = useState(localStorage.getItem('ft_tab')||'home');
   const [entryCorp,setEntryCorp] = useState(null);
   const [closePreset,setClosePreset] = useState(null);
+  const [moreOpen,setMoreOpen] = useState(false);
+  const [pendingCount,setPendingCount] = useState(0);
   const goEntry = (corpId)=>{ setEntryCorp(corpId); setTab('entry'); };
   const goClose = (corpId,y,m)=>{ setClosePreset({corpId,y,m}); setTab('close'); };
   const goApprovals = ()=>setTab('approvals');
@@ -2517,10 +2690,9 @@ function App(){
 
   useEffect(()=>{ localStorage.setItem('ft_tab',tab); },[tab]);
 
-  // app icon badge: pending approvals (owner/assistant) or published reports (investor)
+  // app icon badge + in-app nav badge: pending approvals (owner/assistant)
   useEffect(()=>{ if(!profile) return; let dead=false;
-    (async()=>{
-      if(!('setAppBadge' in navigator)) return;
+    const check = async()=>{
       try{
         let n = 0;
         if(profile.role==='investor'){
@@ -2531,10 +2703,15 @@ function App(){
           n = count||0;
         }
         if(dead) return;
-        if(n>0) navigator.setAppBadge(n).catch(()=>{}); else navigator.clearAppBadge().catch(()=>{});
+        if(profile.role!=='investor') setPendingCount(n);
+        if('setAppBadge' in navigator){
+          if(n>0) navigator.setAppBadge(n).catch(()=>{}); else navigator.clearAppBadge().catch(()=>{});
+        }
       }catch(e){}
-    })();
-    return ()=>{dead=true};
+    };
+    check();
+    const iv = setInterval(check, 60000); // refresh every minute
+    return ()=>{dead=true; clearInterval(iv);};
   },[profile, tab]);
 
   if(session===undefined) return null;
@@ -2565,11 +2742,19 @@ function App(){
     alerts:    <div><div className="page-head"><div><div className="eyebrow">App & Alerts</div><h2>App & Alerts</h2></div></div><PwaCard profile={profile}/></div>,
   }[effTab];
 
+  // core tabs shown in the mobile bottom bar; the rest go under "More"
+  const CORE = ['home','entry','approvals','insights','cash'];
+  const coreNav = nav.filter(n=>CORE.includes(n.id));
+  const moreNav = nav.filter(n=>!CORE.includes(n.id));
+
   return <div className="shell">
     <div className="side">
       <div className="brand">Ugly <em>Finance</em></div>
       <div className="brand-sub">Finance Tool</div>
-      {nav.map(n=><button key={n.id} className={'nav-item'+(effTab===n.id?' on':'')} onClick={()=>setTab(n.id)}>{n.full||n.label}</button>)}
+      {nav.map(n=><button key={n.id} className={'nav-item'+(effTab===n.id?' on':'')} onClick={()=>setTab(n.id)}>
+        {n.full||n.label}
+        {n.id==='approvals' && pendingCount>0 && <span className="nav-badge">{pendingCount}</span>}
+      </button>)}
       <div className="foot">
         <div className="who">{profile.full_name||profile.email}</div>
         <div className="role">{profile.role}</div>
@@ -2579,9 +2764,21 @@ function App(){
     </div>
     <div className="main">{page}</div>
     <nav className="tabbar">
-      {nav.map(n=><button key={n.id} className={effTab===n.id?'on':''} onClick={()=>setTab(n.id)}>
-        <span className="ic">{n.ic}</span>{n.label}</button>)}
+      {coreNav.map(n=><button key={n.id} className={effTab===n.id?'on':''} onClick={()=>setTab(n.id)}>
+        <span className="ic">{n.ic}{n.id==='approvals' && pendingCount>0 && <span className="tab-dot">{pendingCount>9?'9+':pendingCount}</span>}</span>{n.label}</button>)}
+      {moreNav.length>0 && <button className={moreNav.some(n=>n.id===effTab)?'on':''} onClick={()=>setMoreOpen(true)}>
+        <span className="ic">⋯</span>More</button>}
     </nav>
+    {moreOpen && <div className="sheet-backdrop" onClick={()=>setMoreOpen(false)}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-handle"></div>
+        {moreNav.map(n=><button key={n.id} className={'sheet-item'+(effTab===n.id?' on':'')}
+          onClick={()=>{setTab(n.id); setMoreOpen(false);}}>
+          <span className="ic">{n.ic}</span>{n.full||n.label}</button>)}
+        <button className="sheet-item" onClick={()=>{sb.auth.signOut(); setMoreOpen(false);}}>
+          <span className="ic">⏻</span>Sign Out</button>
+      </div>
+    </div>}
   </div>;
 }
 

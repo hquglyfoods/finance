@@ -160,6 +160,8 @@ exports.handler = async (event) => {
     source: 'slack', status: 'pending',
     slack_ts: ev.ts, slack_user: ev.user || null,
   });
+  // A Supabase database webhook on expenses INSERT (status=pending) fires
+  // push-notify to owner/assistant. No direct call needed here.
 
   return { statusCode: 200, body: 'ok' };
 };

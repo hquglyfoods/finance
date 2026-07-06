@@ -42,9 +42,11 @@ exports.handler = async () => {
       const date = dstr(d);
       if (r.start_date && date < r.start_date) continue;
       if (r.end_date && date > r.end_date) continue;
+      const ld = lastDay(d.getFullYear(), d.getMonth() + 1);
+      const targetDom = r.day_of_month === 99 ? ld : Math.min(r.day_of_month, ld);
       const due = r.frequency === 'weekly'
         ? d.getDay() === r.day_of_week
-        : d.getDate() === Math.min(r.day_of_month, lastDay(d.getFullYear(), d.getMonth() + 1));
+        : d.getDate() === targetDom;
       if (due && !have.has(r.id + '|' + date)) {
         inserts.push({
           corporation_id: r.corporation_id,
