@@ -65,12 +65,19 @@ async function parseWithClaude(text, images, categories, learnings) {
     `for example the store's purchase receipt AND a POS "cash out / paid out" slip recording that the cash left the register. ` +
     `These represent ONE expense. Do NOT add them twice. Use the single purchase total.\n\n` +
     `Also ignore lines that are just a cashier signature or name (e.g. "Closing Cashier ~Mariana", "(Victor)").\n\n` +
+    `NOT EVERY MESSAGE IS AN EXPENSE. Some messages are cash-handling or bookkeeping reports, NOT money spent. ` +
+    `In particular, a "Coin Box Report" / "Coin exchange" / cash drawer or register count (listing counts of ` +
+    `Singles, Fives, Quarters, Dimes, Nickels, Pennies, Dollar bills, etc. with a TOTAL) is just reporting cash on ` +
+    `hand, not a purchase. Sales reports, deposit reports, tip declarations, and attendance notes are also not expenses. ` +
+    `For any message like these, set "not_an_expense" to true and amount to 0. Only treat a message as an expense when ` +
+    `it clearly records money the store SPENT (a purchase, bill, or cash paid out with a receipt or vendor).\n\n` +
     `Available expense categories: ${catList}.\n\n` +
     (examples ? `Here is how this store's expenses were categorized by staff in the past. Follow these patterns when they apply:\n${examples}\n\n` : '') +
     (text ? `Message text:\n"""${text}"""\n\n` : `The message has no text, only image(s).\n\n`) +
     `Respond with ONLY a JSON object, no markdown, no prose:\n` +
-    `{"amount": <number, total of the single purchase>, "category": "<one of the categories above, best guess>", ` +
+    `{"not_an_expense": <true|false>, "amount": <number, total of the single purchase>, "category": "<one of the categories above, best guess>", ` +
     `"summary": "<short description of what was bought, under 120 chars>", "confident": <true|false>}\n` +
+    `If the message is not an expense (e.g. a coin box / cash count report), set not_an_expense to true and amount to 0. ` +
     `If you cannot determine an amount, set amount to 0 and confident to false.`
   });
   for (const img of images) content.push({ type: 'image', source: { type: 'base64', media_type: img.media_type, data: img.data } });
@@ -140,7 +147,14 @@ exports.handler = async (event) => {
   try { parsed = await parseWithClaude(text, images, cats || [], learnings || []); }
   catch (e) { return { statusCode: 200, body: 'parse failed: ' + e.message }; }
 
+  // Non-expense messages (coin box / cash count reports, sales/deposit reports,
+  // attendance notes) must NOT be booked as expenses.
+  if (parsed.not_an_expense === true || (Number(parsed.amount || 0) === 0 && parsed.confident === false && !images.length)) {
+    return { statusCode: 200, body: 'not an expense, skipped' };
+  }
+
   const amount = Number(parsed.amount || 0);
+  if (amount <= 0) return { statusCode: 200, body: 'no positive amount, skipped' };
   const cat = (cats || []).find(c => c.name === parsed.category)
     || (cats || []).find(c => c.code === 'others')
     || (cats || [])[0];
