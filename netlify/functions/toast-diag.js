@@ -57,6 +57,17 @@ exports.handler = async (event) => {
   try {
     const token = await login();
 
+    // Resolve dining option GUID -> name from Toast config
+    const diningNames = {};
+    try {
+      const dres = await fetch(`${HOST}/config/v2/diningOptions`,
+        { headers: { Authorization: 'Bearer ' + token, 'Toast-Restaurant-External-ID': guid } });
+      if (dres.ok) {
+        const list = await dres.json();
+        (list || []).forEach(d => { if (d.guid) diningNames[d.guid] = d.name || d.behavior || d.guid; });
+      }
+    } catch (e) {}
+
     // Pull ALL pages, tracking how many pages we walked
     let orders = [], page = 1, pages = 0;
     while (page < 100) {
@@ -91,7 +102,10 @@ exports.handler = async (event) => {
       if (o.businessDate != null && Number(o.businessDate) !== reqBiz) mismatchDate++;
       // dining option name: Toast tags delivery here (e.g. 'Grubhub - Delivery')
       let doName = 'null';
-      if (o.diningOption) doName = o.diningOption.name || o.diningOption.behavior || o.diningOption.guid || 'unknown';
+      if (o.diningOption) {
+        const g = o.diningOption.guid;
+        doName = o.diningOption.name || (g && diningNames[g]) || o.diningOption.behavior || g || 'unknown';
+      }
       for (const chk of o.checks || []) {
         for (const p of chk.payments || []) {
           if (p.paymentStatus === 'VOIDED') continue;
@@ -139,6 +153,7 @@ exports.handler = async (event) => {
       byBusinessDate: byBizDate,
       ordersWithWrongBusinessDate: mismatchDate,
       byDiningOptionName: (()=>{ const o={}; for(const k in byDiningName) o[k]=+byDiningName[k].toFixed(2); return o; })(),
+      diningOptionsResolved: Object.keys(diningNames).length,
     }) };
   } catch (e) {
     return { statusCode: 200, headers, body: JSON.stringify({ error: e.message }) };
