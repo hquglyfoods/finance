@@ -50,6 +50,7 @@ exports.handler = async (event) => {
 
     // Aggregate payment types and delivery sources without exposing customer data
     const byType = {}, bySource = {}, byDining = {};
+    const rawSamples = [];
     let grossPayments = 0, tips = 0, refunds = 0, voidedPay = 0;
     const sampleOther = [];
 
@@ -57,8 +58,23 @@ exports.handler = async (event) => {
       if (o.voided) continue;
       const src = o.source || 'null';
       bySource[src] = (bySource[src] || 0) + 1;
+      // capture delivery-looking orders in full
+      if (typeof capture !== 'undefined') {}
       const dining = (o.diningOption && o.diningOption.name) || 'null';
       byDining[dining] = (byDining[dining] || 0) + 1;
+      // grab full raw for any order whose source isn't Kiosk (likely delivery/online)
+      if ((o.source && o.source !== 'Kiosk') && rawSamples.length < 6) {
+        rawSamples.push({
+          source: o.source,
+          diningOption: o.diningOption || null,
+          checks: (o.checks || []).map(ch => ({
+            payments: (ch.payments || []).map(p => ({
+              type: p.type, amount: p.amount, tip: p.tipAmount,
+              otherPayment: p.otherPayment || null, cardType: p.cardType || null,
+            })),
+          })),
+        });
+      }
       for (const chk of o.checks || []) {
         if (chk.voided || chk.deleted) continue;
         for (const p of chk.payments || []) {
@@ -73,11 +89,14 @@ exports.handler = async (event) => {
           grossPayments += Number(p.amount || 0);
           tips += Number(p.tipAmount || 0);
           if (refund === 'FULL' || refund === 'PARTIAL') refunds += Number(p.refundAmount || p.amount || 0);
-          if (t === 'OTHER' && sampleOther.length < 8) {
+          if (t === 'OTHER' && sampleOther.length < 12) {
             sampleOther.push({
-              otherType: p.otherPayment && p.otherPayment.name,
               amount: p.amount, tip: p.tipAmount,
-              source: src, dining,
+              paymentKeys: Object.keys(p),
+              otherPayment: p.otherPayment || null,
+              cardType: p.cardType || null,
+              orderSource: src,
+              orderSourceRaw: o.source,
             });
           }
         }
@@ -95,6 +114,7 @@ exports.handler = async (event) => {
       byOrderSource: bySource,
       byDiningOption: byDining,
       sampleOtherPayments: sampleOther,
+      rawNonKioskOrders: rawSamples,
     }, null, 2) };
   } catch (e) {
     return { statusCode: 200, body: JSON.stringify({ error: e.message }) };
