@@ -631,7 +631,7 @@ function Dashboard({corps, canEditIds}){
   const now = new Date();
   const [y, setY] = useState(now.getFullYear());
   const [m, setM] = useState(now.getMonth()+1);
-  const [view, setView] = useState('month');   // month | daily | year | compare
+  const [view, setView] = useState('daily');   // daily | month | year | compare | alltime
   const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -714,7 +714,7 @@ function Dashboard({corps, canEditIds}){
 
   if(!editable.length) return <div className="card">No corporations available for your account.</div>;
 
-  const VIEWS=[['month','Month'],['daily','Daily'],['year','Year'],['compare','3-Year'],['alltime','All-Time']];
+  const VIEWS=[['daily','Daily'],['month','Month'],['year','Year'],['compare','3-Year'],['alltime','All-Time']];
   const showPicker = view!=='alltime';
   return <div>
     <div className="page-head">
