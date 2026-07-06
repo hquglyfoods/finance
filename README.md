@@ -1,12 +1,10 @@
-# Ugly Finance Tool - card alignment + buttons look like buttons
+# Ugly Finance Tool - compact home + entry
 
-- Home store cards: the name is now a fixed 2-line height (smaller font, clamped to
-  2 lines), so a 1-line name like "Ugly HQ" reserves the same space as a 3-line name
-  like "Ugly AD (American Dream)". Everything below (revenue/expenses, progress,
-  Enter button) lines up at the same height across all cards. Verified: all names
-  40px tall, Enter buttons aligned per row.
-- Buttons now read as buttons everywhere: clearer panel background, rounded corners,
-  a subtle shadow, cursor pointer, and hover lift. Applies to .btn, the Home "Enter"
-  button, and the tabs.
-- Cash "Record Envelope Pickup" card: the header now has a gold-tinted background and
-  a round chevron so it clearly looks tappable, not like plain text.
+- Home store cards: tighter vertical spacing (smaller padding, name, amount, status,
+  progress) so they take less room while still showing everything.
+- Daily Entry: more compact overall.
+  - The separate date button above Income/Expense is removed.
+  - The date now lives inside the Revenue and Add Expense headers as a tappable
+    chip ("Jul 6, 2026") - tap it to change the date for what you're entering.
+  - Income / Expense toggle buttons are smaller.
+  - Revenue rows and card padding tightened so more fits on one screen.
