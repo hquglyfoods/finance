@@ -330,8 +330,12 @@ function computePL(meta, raw){
   });
   const catById = {}, catSum = {};
   meta.categories.forEach(c => { catById[c.id] = c; catSum[c.code] = 0; });
+  // "board" months: recorded straight from Excel. If any board-sourced expense
+  // exists, this month is historical -> use recorded values only, no auto-rules.
+  const hasBoard = raw.expenses.some(e => e.source === 'board' && e.status === 'confirmed');
   raw.expenses.forEach(e => {
     if (e.status !== 'confirmed') return;
+    if (hasBoard && e.source !== 'board') return; // ignore non-board rows in a board month
     const c = catById[e.category_id]; if(!c) return;
     catSum[c.code] = (catSum[c.code]||0) + Number(e.amount);
   });
@@ -339,7 +343,8 @@ function computePL(meta, raw){
   Object.entries(chSum).forEach(([k,v]) => vars['ch_'+k] = v);
   Object.entries(catSum).forEach(([k,v]) => vars['cat_'+k] = v);
   raw.inputs.forEach(i => vars['inp_'+i.key] = Number(i.value));
-  const ruleRows = meta.rules.map(r => {
+  // auto-rules only for non-board (current/future) months
+  const ruleRows = hasBoard ? [] : meta.rules.map(r => {
     const val = evalExpr(r.expr, vars);
     vars[r.code] = val;
     return { code:r.code, name:r.name, amount:val };
@@ -352,7 +357,7 @@ function computePL(meta, raw){
     holder:o.holder, pct:Number(o.pct),
     amount: (o.zero_floor && net < 0) ? 0 : net * Number(o.pct)/100
   }));
-  return { totalSales, totalExpenses, net,
+  return { totalSales, totalExpenses, net, hasBoard,
     margin: totalSales ? net/totalSales : null,
     chSum, catSum, ruleRows, dist,
     channelRows: meta.channels.filter(c => (chSum[c.code]||0) !== 0 || c.active)
@@ -786,10 +791,10 @@ function CashPage({corps, canEditIds, profile, isOwner}){
   useEffect(()=>{ reload(); },[reload]);
 
   const savePickup = async()=>{
-    if(!pk.period_start || !pk.period_end || !pk.counted_amount){ showToast('Enter the period and counted amount'); return; }
+    if(!pk.period_start || !pk.period_end){ showToast('Enter the pickup period'); return; }
     const { data, error } = await sb.from('cash_pickups').insert({
       corporation_id:corpId, pickup_date:pk.pickup_date, period_start:pk.period_start,
-      period_end:pk.period_end, counted_amount:parseFloat(pk.counted_amount), note:pk.note||null,
+      period_end:pk.period_end, counted_amount: pk.counted_amount ? parseFloat(pk.counted_amount) : null, note:pk.note||null,
       created_by:profile.id }).select().single();
     if(error){ showToast('Save failed: '+error.message); return; }
     const { error: e2 } = await sb.from('daily_revenue').update({
@@ -797,7 +802,7 @@ function CashPage({corps, canEditIds, profile, isOwner}){
       .eq('corporation_id',corpId).eq('channel_id',cashChId)
       .gte('date',pk.period_start).lte('date',pk.period_end);
     if(e2){ showToast('Verification failed: '+e2.message); return; }
-    showToast('Pickup saved, period verified');
+    showToast('Pickup recorded, period verified');
     setPk({pickup_date:todayStr(), period_start:'', period_end:'', counted_amount:'', note:''});
     reload();
   };
@@ -840,11 +845,12 @@ function CashPage({corps, canEditIds, profile, isOwner}){
       <div>
         {isOwner && <div className="card">
           <h3>Record Envelope Pickup</h3>
+          <div className="hint" style={{marginTop:0,marginBottom:12}}>Recording a pickup marks that period's cash days as collected (gold on the calendar). Counted amount is optional, since envelopes are picked up sealed.</div>
           <div className="form-row">
             <div><label className="hint" style={{marginTop:0}}>Pickup date</label>
               <input type="date" value={pk.pickup_date} onChange={e=>setPk({...pk,pickup_date:e.target.value})}/></div>
-            <div><label className="hint" style={{marginTop:0}}>Counted amount</label>
-              <input type="number" step="0.01" placeholder="0.00" value={pk.counted_amount}
+            <div><label className="hint" style={{marginTop:0}}>Counted amount (optional)</label>
+              <input type="number" step="0.01" placeholder="Leave blank if unopened" value={pk.counted_amount}
                 onChange={e=>setPk({...pk,counted_amount:e.target.value})}/></div>
           </div>
           <div className="form-row">
@@ -1627,19 +1633,13 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goClose, goApproval
     <div className="greet">Good {now.getHours()<12?'morning':now.getHours()<18?'afternoon':'evening'}, {firstName}.</div>
     <div className="greet-sub">{MONTHS[now.getMonth()]} {now.getDate()} · Tap a store to enter today's numbers.</div>
 
-    {(totalPending>0 || unclosed.length>0) && <div style={{marginBottom:20}}>
-      {totalPending>0 && <div className="quest">
+    {totalPending>0 && <div style={{marginBottom:20}}>
+      <div className="quest">
         <div className="q-ico">!</div>
         <div className="grow"><div className="q-t">{totalPending} item{totalPending>1?'s':''} waiting for approval</div>
           <div className="q-s">Review and confirm in the Approval Center</div></div>
         <button className="btn btn-sm btn-gold" onClick={goApprovals}>Review</button>
-      </div>}
-      {unclosed.map(c=><div className="quest" key={c.id}>
-        <div className="q-ico">◆</div>
-        <div className="grow"><div className="q-t">{MONTHS[prev.m-1]} not published yet · {c.code}</div>
-          <div className="q-s">Close the month and publish it to investors</div></div>
-        <button className="btn btn-sm btn-gold" onClick={()=>goClose(c.id, prev.y, prev.m)}>Close now</button>
-      </div>)}
+      </div>
     </div>}
 
     <div className="home-grid">
