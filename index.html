@@ -706,8 +706,13 @@ function Entry({corps, canEditIds, profile, presetCorp}){
           {(meta?meta.channels.filter(c=>c.active):[]).map(c=>{
             const row = dayRev[c.id];
             const auto = row && row.source!=='manual' && row.source!=='import';
+            const badgeLabel = row ? (
+              row.source==='toast_live' ? 'Toast · live' :
+              row.source==='toast' ? 'Toast' :
+              row.source==='inventory' ? 'Inventory' :
+              row.source==='quickbooks' ? 'QuickBooks' : row.source) : '';
             return <tr key={c.id}>
-              <td>{c.name} {auto && <span className="badge green">{row.source}</span>}
+              <td>{c.name} {auto && <span className={'badge '+(row.source==='toast_live'?'gold':'green')}>{badgeLabel}</span>}
                 {row && row.verified && <span className="badge gold">Verified</span>}</td>
               <td className="num" style={{width:150}}>
                 <input type="number" step="0.01" defaultValue={row?Number(row.amount):''} placeholder="0.00"

@@ -16,3 +16,7 @@
 # Daily 9:00 UTC: generate due recurring expenses
 [functions."recurring-cron"]
   schedule = "0 9 * * *"
+
+# Daily 12:30 UTC (~8:30am ET): post the daily sales report to #financial
+[functions."daily-sales-report"]
+  schedule = "30 12 * * *"
