@@ -361,14 +361,18 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   .acct-dots{display:none}
   .acct-menu{bottom:auto;top:calc(100% + 8px);left:auto;right:0;min-width:220px}
   .bell-panel{bottom:auto;top:calc(100% + 8px);left:auto;right:0;width:min(290px,calc(100vw - 32px))}
-  /* bottom tab bar */
+  /* bottom tab bar (~10% larger, ⋮ takes minimal room) */
   .tabbar{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;background:var(--panel);
-    border-top:1px solid var(--border);padding:10px 4px calc(16px + env(safe-area-inset-bottom));justify-content:space-around}
-  .tabbar button{flex:1;background:none;border:none;color:var(--text3);font-size:10px;font-weight:600;
-    display:flex;flex-direction:column;align-items:center;gap:4px;padding:2px;letter-spacing:.01em}
-  .tabbar button .ic{font-size:25px;line-height:1;position:relative}
-  .tabbar button.more-btn .ic{font-size:27px;letter-spacing:2px}
+    border-top:1px solid var(--border);padding:11px 2px calc(17px + env(safe-area-inset-bottom));justify-content:space-around;align-items:flex-start}
+  .tabbar button{flex:1;background:none;border:none;color:var(--text3);font-size:11px;font-weight:600;
+    display:flex;flex-direction:column;align-items:center;gap:5px;padding:2px;letter-spacing:.01em}
+  .tabbar button .ic{font-size:28px;line-height:1;position:relative}
   .tabbar button.on{color:var(--gold)}
+  /* the ⋮ button is thin, so give it minimal width and let the others breathe */
+  .tabbar button.more-btn{flex:0 0 30px;justify-content:center;align-self:center;padding-bottom:15px}
+  .tabbar button.more-btn .ic{font-size:24px;letter-spacing:2px;color:var(--text3)}
+  .tabbar button.more-btn.on .ic{color:var(--gold)}
+  .tabbar button.more-btn > span:last-child{display:none}
   .main{padding:18px 14px calc(108px + env(safe-area-inset-bottom))}
   .page-head{margin-bottom:18px}
   .page-head h2{font-size:23px}

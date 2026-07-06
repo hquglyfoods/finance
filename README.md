@@ -1,14 +1,10 @@
-# Ugly Finance Tool - Install App from the More (⋮) menu
+# Ugly Finance Tool - bottom bar tuning
 
-- The More (⋮) menu now has "⬇ Install App" for everyone (including the owner).
-- It opens an "Install App & Notifications" screen:
-  - Android/desktop Chrome: a one-tap "Install app" button (uses the native prompt).
-  - iPhone/iPad: clear numbered steps - tap Share, Add to Home Screen, Add, then open
-    the app from the home screen.
-  - Notifications: a "Turn on notifications" button (Android/desktop, and iOS once the
-    app is installed and opened from the home screen - iOS 16.4+). Shows the correct
-    guidance when iOS still needs the install step, or when notifications are blocked.
-- Turning notifications on subscribes this device (web push) so approvals / cash / new
-  reports can alert you.
+- The ⋮ (More) button no longer takes an equal fifth of the bar. It is now a thin
+  ~30px control, so the five main tabs (Home, Entry, Approve, Insights, Cash) each
+  get more room and read more clearly.
+- The bottom bar and its icons are ~10% larger (icons 25px -> 28px, labels 10px ->
+  11px, a bit more height and spacing) for easier tapping.
+- The ⋮ dots are centered vertically to line up with the other icons.
 
 No SQL this round.
