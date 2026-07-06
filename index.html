@@ -221,6 +221,29 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .greet{font-family:var(--font-d);font-size:26px;margin-bottom:2px}
 .greet-sub{color:var(--text2);font-size:13.5px;margin-bottom:24px}
 </style>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#0C0B09">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ugly Finance">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<script>
+window.__VAPID_PUBLIC__ = "BDrfs4O7uc24B0CNFpqQf-4R2VYn2mW8e0qf2PiG5hinj6CQ5NqmfZrZ6VAI-J7OZOwFR16OTM5PTcCLu3EUL_A";
+// capture install prompt
+window._pwaPrompt = null;
+window.addEventListener('beforeinstallprompt', function(e){
+  e.preventDefault(); window._pwaPrompt = e;
+  window.dispatchEvent(new CustomEvent('pwa-ready'));
+});
+window.addEventListener('appinstalled', function(){ window._pwaPrompt = null; });
+// register service worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('/sw.js').catch(function(){});
+  });
+}
+</script>
 </head>
 <body>
 <div id="root"></div>
@@ -1427,6 +1450,114 @@ function Approvals({corps, canEditIds, profile, isOwner}){
   </div>;
 }
 
+// ================= PWA: INSTALL + NOTIFICATIONS =================
+function urlB64ToUint8(base64) {
+  const pad = '='.repeat((4 - base64.length % 4) % 4);
+  const b64 = (base64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(b64); const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+function isStandalone(){
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+function isIOS(){
+  return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+}
+
+function PwaCard({profile}){
+  const [installable, setInstallable] = useState(!!window._pwaPrompt);
+  const [standalone] = useState(isStandalone());
+  const [notifState, setNotifState] = useState('checking'); // checking/unsupported/ios-needs-install/denied/on/off
+  const [busy, setBusy] = useState(false);
+  const [toast, showToast] = useToast();
+
+  useEffect(()=>{
+    const onReady = ()=>setInstallable(true);
+    window.addEventListener('pwa-ready', onReady);
+    return ()=>window.removeEventListener('pwa-ready', onReady);
+  },[]);
+
+  useEffect(()=>{ (async()=>{
+    if(!('serviceWorker' in navigator) || !('PushManager' in window)){
+      if(isIOS() && !standalone) setNotifState('ios-needs-install');
+      else setNotifState('unsupported');
+      return;
+    }
+    if(isIOS() && !standalone){ setNotifState('ios-needs-install'); return; }
+    if(Notification.permission === 'denied'){ setNotifState('denied'); return; }
+    try{
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      setNotifState(sub ? 'on' : 'off');
+    }catch(e){ setNotifState('off'); }
+  })(); },[standalone]);
+
+  const install = async ()=>{
+    const p = window._pwaPrompt; if(!p) return;
+    p.prompt(); await p.userChoice; window._pwaPrompt = null; setInstallable(false);
+  };
+
+  const enableNotif = async ()=>{
+    setBusy(true);
+    try{
+      const perm = await Notification.requestPermission();
+      if(perm !== 'granted'){ setNotifState(perm === 'denied' ? 'denied' : 'off'); setBusy(false); return; }
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlB64ToUint8(window.__VAPID_PUBLIC__),
+      });
+      const json = sub.toJSON();
+      const { error } = await sb.from('push_subscriptions').upsert({
+        endpoint: json.endpoint, profile_id: profile.id, role: profile.role, subscription: json,
+      }, { onConflict: 'endpoint' });
+      if(error){ showToast('Could not save: '+error.message); setBusy(false); return; }
+      setNotifState('on'); showToast('Notifications enabled');
+    }catch(e){ showToast('Failed: '+e.message); }
+    setBusy(false);
+  };
+
+  const disableNotif = async ()=>{
+    setBusy(true);
+    try{
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if(sub){ const ep = sub.endpoint; await sub.unsubscribe();
+        await sb.from('push_subscriptions').delete().eq('endpoint', ep); }
+      setNotifState('off'); showToast('Notifications disabled');
+    }catch(e){ showToast('Failed: '+e.message); }
+    setBusy(false);
+  };
+
+  return <div className="grid2">
+    <div className="card">
+      <h3>Install as an app</h3>
+      {standalone
+        ? <div className="pos" style={{fontSize:14}}>✓ Running as an installed app</div>
+        : installable
+          ? <><div className="muted" style={{marginBottom:12,fontSize:13.5}}>Install Ugly Finance on this device for a full-screen app with its own icon.</div>
+              <button className="btn btn-gold" onClick={install}>Install</button></>
+          : isIOS()
+            ? <div className="muted" style={{fontSize:13.5}}>On iPhone/iPad: tap Share (⬆︎) in Safari, then <b>Add to Home Screen</b>.</div>
+            : <div className="muted" style={{fontSize:13.5}}>Open this site in Chrome (Android or desktop) to see an install option.</div>}
+    </div>
+    <div className="card">
+      <h3>Notifications</h3>
+      {notifState==='checking' && <div className="faint">Checking...</div>}
+      {notifState==='unsupported' && <div className="muted" style={{fontSize:13.5}}>This browser does not support push notifications.</div>}
+      {notifState==='ios-needs-install' && <div className="muted" style={{fontSize:13.5}}>Install the app first (see left), then enable notifications from the installed app. Requires iOS 16.4 or later.</div>}
+      {notifState==='denied' && <div className="muted" style={{fontSize:13.5}}>Notifications are blocked. Enable them in your device settings for this app, then reload.</div>}
+      {notifState==='off' && <><div className="muted" style={{marginBottom:12,fontSize:13.5}}>
+        {profile.role==='investor' ? 'Get notified when a new monthly report is published.' : 'Get notified when an expense needs approval.'}</div>
+        <button className="btn btn-gold" disabled={busy} onClick={enableNotif}>Enable notifications</button></>}
+      {notifState==='on' && <><div className="pos" style={{marginBottom:12,fontSize:14}}>✓ Notifications on</div>
+        <button className="btn" disabled={busy} onClick={disableNotif}>Turn off</button></>}
+    </div>
+    {toast && <div className="toast">{toast}</div>}
+  </div>;
+}
+
 // ================= SETTINGS =================
 function Settings({corps, canEditIds, profile, isOwner, session}){
   const [sub, setSub] = useState('recurring');
@@ -1436,11 +1567,12 @@ function Settings({corps, canEditIds, profile, isOwner, session}){
       <div className="corp-tabs">
         <button className={'corp-tab'+(sub==='recurring'?' on':'')} onClick={()=>setSub('recurring')}>Recurring & Categories</button>
         <button className={'corp-tab'+(sub==='accounts'?' on':'')} onClick={()=>setSub('accounts')}>Accounts</button>
+        <button className={'corp-tab'+(sub==='device'?' on':'')} onClick={()=>setSub('device')}>App & Alerts</button>
       </div>
     </div>
-    {sub==='recurring'
-      ? <Recurring corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} embedded={true}/>
-      : <Admin corps={corps} session={session} embedded={true}/>}
+    {sub==='recurring' && <Recurring corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} embedded={true}/>}
+    {sub==='accounts' && <Admin corps={corps} session={session} embedded={true}/>}
+    {sub==='device' && <PwaCard profile={profile}/>}
   </div>;
 }
 
@@ -1482,7 +1614,7 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goClose, goApproval
       setData(per);
     })();
     return ()=>{dead=true};
-  },[corps.length]);
+  },[ids.join(',')]);
 
   if(!editable.length) return <div className="card">No corporations available for your account.</div>;
   if(!data) return <Spinner/>;
@@ -1512,7 +1644,7 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goClose, goApproval
 
     <div className="home-grid">
       {editable.map(c=>{
-        const p = data[c.id];
+        const p = data[c.id] || {sales:0,revRows:0,synced:false,exp:0,pending:0,daysDone:new Set(),closed:false};
         const done = p.revRows>0;
         const pct = Math.min(100, Math.round(p.daysDone.size/dayOfMonth*100));
         return <div key={c.id} className={'home-card'+(done?' done':'')} onClick={()=>goEntry(c.id)}>
@@ -1574,6 +1706,7 @@ const NAV = [
   {id:'close',     label:'Close',   full:'Close & Publish', ic:'◆', roles:['owner']},
   {id:'investor',  label:'Reports', full:'Reports',         ic:'▦', roles:['owner','investor']},
   {id:'settings',  label:'Settings',full:'Settings',        ic:'⚙', roles:['owner']},
+  {id:'alerts',    label:'App',     full:'App & Alerts',    ic:'⚙', roles:['assistant','investor']},
 ];
 
 function App(){
@@ -1613,6 +1746,26 @@ function App(){
 
   useEffect(()=>{ localStorage.setItem('ft_tab',tab); },[tab]);
 
+  // app icon badge: pending approvals (owner/assistant) or published reports (investor)
+  useEffect(()=>{ if(!profile) return; let dead=false;
+    (async()=>{
+      if(!('setAppBadge' in navigator)) return;
+      try{
+        let n = 0;
+        if(profile.role==='investor'){
+          const { count } = await sb.from('monthly_close').select('id',{count:'exact',head:true}).eq('status','published');
+          n = count||0;
+        } else {
+          const { count } = await sb.from('expenses').select('id',{count:'exact',head:true}).eq('status','pending');
+          n = count||0;
+        }
+        if(dead) return;
+        if(n>0) navigator.setAppBadge(n).catch(()=>{}); else navigator.clearAppBadge().catch(()=>{});
+      }catch(e){}
+    })();
+    return ()=>{dead=true};
+  },[profile, tab]);
+
   if(session===undefined) return null;
   if(!session) return <Login onDone={()=>{}}/>;
   if(fatal) return <div className="login-wrap"><div className="login-box">
@@ -1636,6 +1789,7 @@ function App(){
     close:     <ClosePage corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} preset={closePreset}/>,
     investor:  <InvestorPortal corps={isOwner?corps:viewCorps}/>,
     settings:  <Settings corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} session={session}/>,
+    alerts:    <div><div className="page-head"><div><div className="eyebrow">App & Alerts</div><h2>App & Alerts</h2></div></div><PwaCard profile={profile}/></div>,
   }[effTab];
 
   return <div className="shell">

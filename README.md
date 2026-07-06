@@ -1,29 +1,35 @@
 # Ugly Finance Tool
 
-Internal financial management and investor reporting app for Ugly Donuts & Corn Dogs HQ.
+Internal financial management, investor reporting, and PWA for Ugly Donuts & Corn Dogs HQ.
 
 ## Structure
 ```
-index.html                        # Single-page app (React via Babel CDN)
-netlify.toml                      # Netlify config + scheduled functions
-package.json                      # Function dependency (@supabase/supabase-js)
+index.html                 # Single-page app (React via Babel CDN), PWA-enabled
+manifest.webmanifest       # PWA manifest
+sw.js                      # Service worker (no cache; push + notification handlers)
+icons/                     # App icons (192, 512 maskable, apple-touch, badge)
+netlify.toml               # Netlify config + scheduled functions
+package.json               # Dependency for the supabase-based functions
 netlify/functions/
-  create-account.js               # Owner-only account creation
-  recurring-cron.js               # Daily: generates due recurring expenses
-  toast-sync.js                   # Hourly: store sales + tips from Toast (AD/BW/FH)
-  inventory-sync.js               # Hourly: HQ invoices + Ummas orders from Inventory app
-  slack-expense.js                # expense-* Slack channels -> AI-parsed pending expenses
+  create-account.js        # Owner-only account creation
+  recurring-cron.js        # Daily: recurring expenses
+  toast-sync.js            # Hourly: Toast sales + tips
+  inventory-sync.js        # Hourly: HQ invoices + Ummas from Inventory app
+  slack-expense.js         # Slack expense channels -> AI-parsed pending
+  push-notify.js           # Web push sender (triggered by Supabase DB webhooks)
+  lib/push.js              # Zero-dependency web push (VAPID + RFC 8291)
 ```
 
-## UI
-Desktop: left sidebar. Mobile: top brand bar + bottom tab bar with icons.
-Forms, KPI cards, approvals, tables, and the cash calendar all adapt to phone
-width. Toasts float above the tab bar and never block taps. Long names wrap
-inside table cells without horizontal overflow.
+## Push notifications
+- New pending expense  -> owner + assistant devices
+- New published report -> investor devices (for their corps)
+- App badge: pending count (owner/assistant) or published report count (investor)
 
 ## Netlify environment variables
 Core: SUPABASE_URL, SUPABASE_SERVICE_KEY, ALLOWED_ORIGIN, SITE_URL
-Toast: TOAST_CLIENT_ID, TOAST_CLIENT_SECRET, TOAST_RESTAURANTS="AD:guid,BW:guid,FH:guid"
-Inventory (read-only): INV_SUPABASE_URL, INV_SUPABASE_READ_KEY  [optional INV_CUSTOMER_MAP, INV_UMMA_MAP]
-Slack: SLACK_SIGNING_SECRET, SLACK_BOT_TOKEN, ANTHROPIC_API_KEY,
-       SLACK_CHANNEL_MAP="C06EWSFHS86=AD,C06ENV96HDM=BW,C06FS9MH0F2=FH"
+Toast: TOAST_CLIENT_ID, TOAST_CLIENT_SECRET, TOAST_RESTAURANTS
+Inventory: INV_SUPABASE_URL, INV_SUPABASE_READ_KEY
+Slack: SLACK_SIGNING_SECRET, SLACK_BOT_TOKEN, ANTHROPIC_API_KEY, SLACK_CHANNEL_MAP
+Push: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY (PEM), WEBHOOK_SECRET, VAPID_SUBJECT (optional)
+
+VAPID_PUBLIC_KEY = BDrfs4O7uc24B0CNFpqQf-4R2VYn2mW8e0qf2PiG5hinj6CQ5NqmfZrZ6VAI-J7OZOwFR16OTM5PTcCLu3EUL_A
