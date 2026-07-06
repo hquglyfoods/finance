@@ -78,8 +78,24 @@ a{color:var(--gold);text-decoration:none}
 .sheet-item.on .ic{color:var(--gold)}
 @keyframes fadein{from{opacity:0}to{opacity:1}}
 @keyframes slideup{from{transform:translateY(100%)}to{transform:translateY(0)}}
-.side .foot{margin-top:auto;padding:12px 10px;border-top:1px solid var(--border-soft);font-size:12.5px}
-.acct{position:relative;width:100%}
+.side .foot{margin-top:auto;padding:12px 10px;border-top:1px solid var(--border-soft);font-size:12.5px;display:flex;align-items:center;gap:8px}
+.bell{position:relative;flex:0 0 auto}
+.bell-btn{position:relative;background:none;border:none;cursor:pointer;padding:6px;border-radius:8px;display:flex;align-items:center;justify-content:center}
+.bell-btn:hover{background:var(--panel2)}
+.bell-ic{font-size:18px;line-height:1;filter:grayscale(.3)}
+.bell-badge{position:absolute;top:0;right:0;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:var(--red);color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.bell-panel{position:absolute;bottom:calc(100% + 8px);left:0;background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-lg);width:290px;max-height:60vh;overflow-y:auto;z-index:250}
+.bell-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border-soft);font-weight:700;font-size:13.5px;position:sticky;top:0;background:var(--panel)}
+.bell-clear{background:none;border:none;color:var(--gold-strong);font-size:12px;font-weight:600;cursor:pointer}
+.bell-empty{padding:24px 14px;text-align:center;color:var(--text3);font-size:13px}
+.bell-item{display:block;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--border-soft);padding:11px 14px;cursor:pointer}
+.bell-item:hover{background:var(--panel2)}
+.bell-item.unread{background:var(--gold-dim)}
+.bell-item.unread:hover{background:var(--gold-dim)}
+.bell-item-t{font-size:13px;font-weight:600;color:var(--text)}
+.bell-item-b{font-size:12px;color:var(--text2);margin-top:2px}
+.bell-item-time{font-size:11px;color:var(--text3);margin-top:3px}
+.acct{position:relative;flex:1;min-width:0}
 .acct-btn{display:flex;align-items:center;gap:9px;width:100%;background:none;border:none;padding:6px 4px;cursor:pointer;text-align:left;position:relative}
 .acct-av{flex:0 0 30px;width:30px;height:30px;border-radius:50%;background:var(--gold-dim);color:var(--gold-strong);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;font-family:var(--font-b)}
 .acct-name{flex:1;font-size:13px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -108,6 +124,10 @@ a{color:var(--gold);text-decoration:none}
 
 /* corp tabs + month picker */
 .corp-tabs{display:flex;gap:6px;flex-wrap:wrap}
+.settings-tabs{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:20px;padding-bottom:4px;scrollbar-width:none}
+.settings-tabs::-webkit-scrollbar{display:none}
+.settings-tab{flex:0 0 auto;white-space:nowrap;padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text2);font-weight:600;font-size:13px;cursor:pointer}
+.settings-tab.on{background:var(--gold-dim);border-color:var(--gold-soft);color:var(--gold-strong)}
 .corp-tab{padding:7px 14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text2);font-weight:500;font-size:13px}
 .corp-tab.on{border-color:var(--gold-soft);color:var(--gold-strong);background:var(--gold-dim)}
 .viewbar{display:flex;gap:4px;margin-bottom:22px;background:var(--panel2);border-radius:10px;padding:4px;width:fit-content}
@@ -156,6 +176,7 @@ a{color:var(--gold);text-decoration:none}
 
 /* cards */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:22px}
+.kpis.kpis-3{grid-template-columns:repeat(3,1fr)}
 .kpi{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
 .kpi .k-lbl{font-size:11.5px;color:var(--text3);font-weight:500;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px}
 .kpi .k-val{font-family:var(--font-m);font-size:21px;font-weight:500}
@@ -197,6 +218,16 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .cal-legend .lg-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}
 .cal-legend .lg-dot.gold{background:var(--gold)}
 .cal-legend .lg-dot.red{background:var(--red)}
+.pickup-card{padding:0;overflow:hidden}
+.pickup-head{display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:none;padding:16px 20px;cursor:pointer;text-align:left}
+.pickup-head:hover{background:var(--panel2)}
+.pickup-title{font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text)}
+.pickup-sub{font-size:12.5px;color:var(--text3);margin-top:2px}
+.pickup-chev{color:var(--gold-strong);font-size:14px}
+.pickup-body{padding:0 20px 20px;border-top:1px solid var(--border-soft)}
+.env-table .env-input{width:100%;padding:6px 8px;font-family:var(--font-m);text-align:right;font-size:13px}
+.env-table th{font-size:11px}
+.env-table td{padding:6px 8px}
 
 /* forms */
 .form-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
@@ -224,6 +255,30 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .inv-report .rh{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px}
 .inv-report .rh .m{font-family:var(--font-d);font-size:19px;font-weight:700;letter-spacing:-0.01em}
 .notes-block{background:var(--panel2);border-left:2px solid var(--gold);border-radius:0 6px 6px 0;padding:12px 14px;color:var(--text2);font-size:13.5px;white-space:pre-wrap;margin:12px 0}
+/* professional monthly statement */
+.stmt{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:0;margin-bottom:20px;box-shadow:var(--shadow);overflow:hidden}
+.stmt-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;padding:22px 26px 18px;border-bottom:2px solid var(--gold)}
+.stmt-corp{font-family:var(--font-d);font-size:22px;font-weight:700;letter-spacing:-0.02em;color:var(--text)}
+.stmt-period{font-size:13px;color:var(--text3);letter-spacing:.04em;text-transform:uppercase;margin-top:4px}
+.stmt-badge{font-size:11px;color:var(--text3);font-family:var(--font-m);white-space:nowrap;padding-top:4px}
+.stmt-summary{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--border-soft)}
+.stmt-sum-item{background:var(--panel);padding:18px 26px}
+.stmt-sum-item.accent{background:var(--gold-dim)}
+.ss-lbl{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.ss-val{font-family:var(--font-m);font-size:22px;font-weight:500;color:var(--text)}
+.ss-margin{font-size:12px;color:var(--gold-strong);margin-top:3px;font-weight:600}
+.stmt-notes{margin:18px 26px 0;background:var(--panel2);border-left:3px solid var(--gold);border-radius:0 8px 8px 0;padding:14px 16px;font-size:13.5px;color:var(--text2);white-space:pre-wrap}
+.stmt-notes-lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--gold-strong);font-weight:700;margin-bottom:5px}
+.stmt-cols{display:grid;grid-template-columns:1fr 1fr;gap:26px;padding:22px 26px 8px}
+.stmt-block-h{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--text2);font-weight:700;padding-bottom:8px;border-bottom:1px solid var(--border);margin-bottom:4px}
+.stmt-table{width:100%;border-collapse:collapse}
+.stmt-table td{padding:8px 0;font-size:13.5px;color:var(--text);border-bottom:1px solid var(--border-soft)}
+.stmt-table td.num{font-family:var(--font-m);text-align:right;white-space:nowrap}
+.stmt-table .stmt-tot td{font-weight:700;border-bottom:none;border-top:2px solid var(--border);padding-top:10px}
+.stmt-auto{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);background:var(--panel2);border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:1px}
+.stmt-net{display:flex;justify-content:space-between;align-items:center;margin:14px 26px 0;padding:16px 20px;background:var(--panel2);border-radius:10px;font-family:var(--font-d);font-weight:700;font-size:16px}
+.stmt-net .pos{font-family:var(--font-m)} .stmt-net .neg{font-family:var(--font-m)}
+.stmt-files{display:flex;gap:8px;flex-wrap:wrap;padding:16px 26px 22px}
 
 /* chart */
 .chart-wrap{overflow-x:auto}
@@ -247,7 +302,7 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   .side .brand{display:block;font-size:17px;padding:0}
   .side .brand-sub{display:none}
   .side .nav-item{display:none}
-  .side .foot{display:flex;align-items:center;gap:10px;margin:0 0 0 auto;padding:0;border:none}
+  .side .foot{display:flex;align-items:center;gap:6px;margin:0 0 0 auto;padding:0;border:none}
   .side .foot .role{display:none}
   .side .foot .who{font-size:12.5px}
   .side .foot button{margin-top:0 !important}
@@ -256,6 +311,7 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   .acct-name{display:none}
   .acct-dots{display:none}
   .acct-menu{bottom:auto;top:calc(100% + 8px);left:auto;right:0;min-width:220px}
+  .bell-panel{bottom:auto;top:calc(100% + 8px);left:auto;right:0;width:min(290px,calc(100vw - 32px))}
   /* bottom tab bar */
   .tabbar{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;background:var(--panel);
     border-top:1px solid var(--border);padding:10px 4px calc(16px + env(safe-area-inset-bottom));justify-content:space-around}
@@ -277,7 +333,30 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   .kpis{grid-template-columns:1fr 1fr;gap:8px}
   .kpi{padding:12px 13px}
   .kpi .k-val{font-size:18px}
+  /* 3-card rows (Daily, Year): keep 3 across but compact so they don't wrap 2+1 */
+  .kpis.kpis-3{grid-template-columns:repeat(3,1fr);gap:6px}
+  .kpis.kpis-3 .kpi{padding:10px 8px}
+  .kpis.kpis-3 .k-lbl{font-size:9.5px;letter-spacing:.02em}
+  .kpis.kpis-3 .k-val{font-size:15px}
+  .kpis.kpis-3 .k-sub{font-size:10px}
+  /* investor statement stacks on mobile */
+  .stmt-summary{grid-template-columns:1fr}
+  .stmt-cols{grid-template-columns:1fr;gap:18px;padding:18px 18px 4px}
+  .stmt-head{padding:18px 18px 14px}
+  .stmt-corp{font-size:19px}
+  .stmt-sum-item{padding:14px 18px}
+  .stmt-notes,.stmt-net,.stmt-files{margin-left:18px;margin-right:18px}
   .greet{font-size:22px}
+  /* home cards: 2 per row, compact */
+  .home-grid{grid-template-columns:1fr 1fr;gap:10px}
+  .home-card{padding:14px 13px;border-radius:12px}
+  .home-card .hc-code{font-size:10px;letter-spacing:.12em}
+  .home-card .hc-name{font-size:14px;margin:3px 0 8px;line-height:1.25}
+  .home-card .hc-amt{font-size:20px;margin-bottom:8px}
+  .home-card .hc-amt .cur{font-size:12px}
+  .home-card .hc-status{flex-direction:column;gap:4px;font-size:11.5px;margin-bottom:10px}
+  .home-card .hc-enter{margin-top:10px;padding:8px;font-size:12px}
+  .hc-check{top:12px;right:12px;font-size:14px}
   /* forms stack */
   .form-row>*{flex:1 1 100%;min-width:0}
   .form-row .w-sm{flex:1 1 100%}
@@ -422,14 +501,30 @@ async function loadMonthRaw(corpId, y, m){
 // Load a whole year and compute each month's P&L. Returns array of 12 {m, pl}.
 // Load the ENTIRE history for a corp and compute each month's P&L, grouped by year.
 // Returns { years:[{y, months:[{m,pl}], totals:{s,e,n}}], firstYear, lastYear }.
+// Supabase caps a query at 1000 rows. With per-day data a year can exceed that,
+// so page through in 1000-row chunks and concatenate.
+async function fetchAllRows(build){
+  const PAGE=1000; let from=0, all=[];
+  for(;;){
+    const { data, error } = await build().range(from, from+PAGE-1);
+    if(error) throw error;
+    const rows = data||[];
+    all = all.concat(rows);
+    if(rows.length < PAGE) break;
+    from += PAGE;
+    if(from > 200000) break; // safety
+  }
+  return all;
+}
+
 async function loadAllTimePL(corpId, meta){
-  const [rv, ex, inp, rt] = await Promise.all([
-    sb.from('daily_revenue').select('date,amount,channel_id,source').eq('corporation_id',corpId),
-    sb.from('expenses').select('date,amount,category_id,status,source').eq('corporation_id',corpId),
+  const [rev, exp, inp, rt] = await Promise.all([
+    fetchAllRows(()=>sb.from('daily_revenue').select('date,amount,channel_id,source').eq('corporation_id',corpId).order('date')),
+    fetchAllRows(()=>sb.from('expenses').select('date,amount,category_id,status,source').eq('corporation_id',corpId).order('date')),
     sb.from('monthly_inputs').select('*').eq('corporation_id',corpId),
     sb.from('rate_schedule').select('rate_type,rate,effective_from').eq('corporation_id',corpId),
   ]);
-  const rev=rv.data||[], exp=ex.data||[], inps=inp.data||[], rates=rt.data||[];
+  const inps=inp.data||[], rates=rt.data||[];
   // find year span from data
   const allDates=[...rev.map(r=>r.date), ...exp.map(e=>e.date)].filter(Boolean);
   if(!allDates.length) return { years:[], firstYear:null, lastYear:null };
@@ -453,17 +548,17 @@ async function loadAllTimePL(corpId, meta){
 
 async function loadYearPL(corpId, meta, y){
   const start=`${y}-01-01`, end=`${y}-12-31`;
-  const [rv, ex, inp, rt] = await Promise.all([
-    sb.from('daily_revenue').select('date,amount,channel_id,source').eq('corporation_id',corpId).gte('date',start).lte('date',end),
-    sb.from('expenses').select('date,amount,category_id,status,source').eq('corporation_id',corpId).gte('date',start).lte('date',end),
+  const [rvData, exData, inp, rt] = await Promise.all([
+    fetchAllRows(()=>sb.from('daily_revenue').select('date,amount,channel_id,source').eq('corporation_id',corpId).gte('date',start).lte('date',end).order('date')),
+    fetchAllRows(()=>sb.from('expenses').select('date,amount,category_id,status,source').eq('corporation_id',corpId).gte('date',start).lte('date',end).order('date')),
     sb.from('monthly_inputs').select('*').eq('corporation_id',corpId).eq('year',y),
     sb.from('rate_schedule').select('rate_type,rate,effective_from').eq('corporation_id',corpId),
   ]);
   const months=[];
   for(let m=1;m<=12;m++){
     const pref=`${y}-${pad(m)}`;
-    const raw={ revenue:(rv.data||[]).filter(r=>r.date.startsWith(pref)),
-      expenses:(ex.data||[]).filter(r=>r.date.startsWith(pref)),
+    const raw={ revenue:rvData.filter(r=>r.date.startsWith(pref)),
+      expenses:exData.filter(r=>r.date.startsWith(pref)),
       inputs:(inp.data||[]).filter(r=>r.month===m), rates:(rt.data||[]), monthKey:pref };
     months.push({ m, pl: computePL(meta, raw) });
   }
@@ -474,13 +569,15 @@ async function loadYearPL(corpId, meta, y){
 function computePL(meta, raw){
   const chByCode = {}, chSum = {};
   meta.channels.forEach(c => { chByCode[c.id] = c; chSum[c.code] = 0; });
-  // A month is "board" (historical) if it has any board-sourced row. In board
-  // months, revenue and expenses both come only from the board snapshot, so live
-  // Toast/daily rows for that month are ignored to avoid mixing/double-counting.
-  const hasBoardRev = raw.revenue.some(r => r.source === 'board');
+  // Board precedence is PER-DATE: on any date that has a board-sourced row, only
+  // board rows count (live Toast rows for that date are ignored). Dates with no
+  // board row use their live rows normally. This makes fully-historical months
+  // board-only, while a partial month (e.g. board days 1-5, live days 6+) mixes
+  // correctly with no double-counting.
+  const boardRevDates = new Set(raw.revenue.filter(r => r.source === 'board').map(r => r.date));
   let totalSales = 0;
   raw.revenue.forEach(r => {
-    if (hasBoardRev && r.source !== 'board') return; // board month: board revenue only
+    if (r.source !== 'board' && boardRevDates.has(r.date)) return;
     const c = chByCode[r.channel_id]; if(!c) return;
     chSum[c.code] = (chSum[c.code]||0) + Number(r.amount);
     if (c.counts_in_total) totalSales += Number(r.amount) * Number(c.total_multiplier);
@@ -489,10 +586,16 @@ function computePL(meta, raw){
   meta.categories.forEach(c => { catById[c.id] = c; catSum[c.code] = 0; });
   // "board" months: recorded straight from Excel. If any board-sourced expense
   // exists, this month is historical -> use recorded values only, no auto-rules.
-  const hasBoard = raw.expenses.some(e => e.source === 'board' && e.status === 'confirmed');
-  raw.expenses.forEach(e => {
-    if (e.status !== 'confirmed') return;
-    if (hasBoard && e.source !== 'board') return; // ignore non-board rows in a board month
+  // Board precedence per-date (mirrors revenue). On dates with a board expense,
+  // only board expenses count; other dates use their live/manual rows. Auto-rules
+  // are disabled only for FULLY-historical months (every confirmed expense is
+  // board) so historical P&L stays exactly as recorded; a transition month that
+  // mixes board days and live days keeps auto-rules (royalty/marketing) active.
+  const confExp = raw.expenses.filter(e => e.status === 'confirmed');
+  const boardExpDates = new Set(confExp.filter(e => e.source === 'board').map(e => e.date));
+  const hasBoard = confExp.length > 0 && confExp.every(e => e.source === 'board');
+  confExp.forEach(e => {
+    if (e.source !== 'board' && boardExpDates.has(e.date)) return; // board wins on that date
     const c = catById[e.category_id]; if(!c) return;
     catSum[c.code] = (catSum[c.code]||0) + Number(e.amount);
   });
@@ -708,15 +811,15 @@ function Dashboard({corps, canEditIds, presetCorp}){
         // 12-month trend ending this month
         const endD=`${y}-${pad(m)}-${pad(lastDay(y,m))}`; let sy=y,sm=m-11; while(sm<1){sm+=12;sy--;}
         const startD=`${sy}-${pad(sm)}-01`;
-        const [rv,ex,rt]=await Promise.all([
-          sb.from('daily_revenue').select('date,amount,channel_id,source').eq('corporation_id',corpId).gte('date',startD).lte('date',endD),
-          sb.from('expenses').select('date,amount,category_id,status,source').eq('corporation_id',corpId).gte('date',startD).lte('date',endD),
+        const [rvT,exT,rt]=await Promise.all([
+          fetchAllRows(()=>sb.from('daily_revenue').select('date,amount,channel_id,source').eq('corporation_id',corpId).gte('date',startD).lte('date',endD).order('date')),
+          fetchAllRows(()=>sb.from('expenses').select('date,amount,category_id,status,source').eq('corporation_id',corpId).gte('date',startD).lte('date',endD).order('date')),
           sb.from('rate_schedule').select('rate_type,rate,effective_from').eq('corporation_id',corpId),
         ]);
         if(dead) return;
         const pts=[]; let cy=sy,cm=sm;
         for(let i=0;i<12;i++){ const pref=`${cy}-${pad(cm)}`;
-          const raw2={revenue:(rv.data||[]).filter(r=>r.date.startsWith(pref)),expenses:(ex.data||[]).filter(r=>r.date.startsWith(pref)),inputs:[],rates:(rt.data||[]),monthKey:pref};
+          const raw2={revenue:rvT.filter(r=>r.date.startsWith(pref)),expenses:exT.filter(r=>r.date.startsWith(pref)),inputs:[],rates:(rt.data||[]),monthKey:pref};
           const p=computePL(mt,raw2);
           if(p.totalSales!==0||p.totalExpenses!==0) pts.push({label:pad(cm),sales:p.totalSales,net:p.net,payrollPct:p.payrollPct,suppliesPct:p.suppliesPct});
           cm++; if(cm>12){cm=1;cy++;} }
@@ -731,11 +834,11 @@ function Dashboard({corps, canEditIds, presetCorp}){
         const buildDays=(rawX, yy)=>{
           const nD=lastDay(yy,m); const days={};
           for(let d=1;d<=nD;d++) days[d]={rev:0,exp:0,items:[]};
-          const hasBoardRev=rawX.revenue.some(r=>r.source==='board');
-          rawX.revenue.forEach(r=>{ if(hasBoardRev&&r.source!=='board')return; const ch=chBy[r.channel_id]; if(!ch||!ch.counts_in_total)return;
+          const boardRevDates=new Set(rawX.revenue.filter(r=>r.source==='board').map(r=>r.date));
+          rawX.revenue.forEach(r=>{ if(r.source!=='board'&&boardRevDates.has(r.date))return; const ch=chBy[r.channel_id]; if(!ch||!ch.counts_in_total)return;
             const d=parseInt(r.date.slice(8)); if(days[d]) days[d].rev+=Number(r.amount)*Number(ch.total_multiplier||1); });
-          const hasBoard=rawX.expenses.some(e=>e.source==='board');
-          rawX.expenses.forEach(e=>{ if(e.status!=='confirmed')return; if(hasBoard&&e.source!=='board')return;
+          const boardExpDates=new Set(rawX.expenses.filter(e=>e.source==='board'&&e.status==='confirmed').map(e=>e.date));
+          rawX.expenses.forEach(e=>{ if(e.status!=='confirmed')return; if(e.source!=='board'&&boardExpDates.has(e.date))return;
             const d=parseInt(e.date.slice(8)); if(days[d]){ days[d].exp+=Number(e.amount);
               days[d].items.push({cat:(catBy[e.category_id]||{}).name||'?', amount:Number(e.amount), payee:e.payee, memo:e.memo, source:e.source, by:e.entered_by, slack_user:e.slack_user}); } });
           return days;
@@ -975,7 +1078,7 @@ function DailyView({rows, pl, y, m}){
   const tot=rows.reduce((a,r)=>({rev:a.rev+r.rev,exp:a.exp+r.exp,lyRev:a.lyRev+r.lyRev,lyExp:a.lyExp+r.lyExp}),{rev:0,exp:0,lyRev:0,lyExp:0});
   const net=tot.rev-tot.exp, lyNet=tot.lyRev-tot.lyExp;
   return <>
-    <div className="kpis">
+    <div className="kpis kpis-3">
       <div className="kpi"><div className="k-lbl">Sales</div><div className="k-val">{fmt$(tot.rev)}</div>
         <div className="k-sub"><YoYDelta cur={tot.rev} prev={tot.lyRev}/> vs {y-1}</div></div>
       <div className="kpi"><div className="k-lbl">Expenses</div><div className="k-val">{fmt$(tot.exp)}</div>
@@ -1028,7 +1131,7 @@ function YearView({months, y}){
   const trendPts=months.filter(x=>x.pl.totalSales!==0||x.pl.totalExpenses!==0)
     .map(x=>({label:pad(x.m),sales:x.pl.totalSales,net:x.pl.net,payrollPct:x.pl.payrollPct,suppliesPct:x.pl.suppliesPct}));
   return <>
-    <div className="kpis">
+    <div className="kpis kpis-3">
       <div className="kpi"><div className="k-lbl">{y} Sales</div><div className="k-val">{fmt$(tot.s)}</div></div>
       <div className="kpi"><div className="k-lbl">{y} Expenses</div><div className="k-val">{fmt$(tot.e)}</div></div>
       <div className="kpi"><div className="k-lbl">{y} Net Profit</div><div className={'k-val '+(tot.n>=0?'pos':'neg')}>{fmt$(tot.n)}</div>
@@ -1441,6 +1544,8 @@ function CashPage({corps, canEditIds, profile, isOwner}){
   const [toast, showToast] = useToast();
   const [cashChId, setCashChId] = useState(null);
   const [cashExp, setCashExp] = useState({});
+  const [pickupOpen, setPickupOpen] = useState(false);
+  const [counts, setCounts] = useState({});   // date -> actual counted amount string
 
   const reload = useCallback(async()=>{
     if(!corpId) return;
@@ -1462,9 +1567,16 @@ function CashPage({corps, canEditIds, profile, isOwner}){
 
   const savePickup = async()=>{
     if(!pk.period_start || !pk.period_end){ showToast('Enter the pickup period'); return; }
+    // sum of per-envelope counted amounts (if any were entered), else the single field
+    const envDates = Object.keys(counts).filter(d=>d>=pk.period_start && d<=pk.period_end && counts[d]!=='' && counts[d]!=null);
+    const envSum = envDates.reduce((a,d)=>a+parseFloat(counts[d]||0),0);
+    const countedTotal = envDates.length ? envSum : (pk.counted_amount ? parseFloat(pk.counted_amount) : null);
+    const noteBits = [];
+    if(pk.note) noteBits.push(pk.note);
+    if(envDates.length) noteBits.push('Counted per envelope: '+envDates.sort().map(d=>`${d.slice(8)}=$${parseFloat(counts[d]).toFixed(0)}`).join(', '));
     const { data, error } = await sb.from('cash_pickups').insert({
       corporation_id:corpId, pickup_date:pk.pickup_date, period_start:pk.period_start,
-      period_end:pk.period_end, counted_amount: pk.counted_amount ? parseFloat(pk.counted_amount) : null, note:pk.note||null,
+      period_end:pk.period_end, counted_amount: countedTotal, note:noteBits.join(' | ')||null,
       created_by:profile.id }).select().single();
     if(error){ showToast('Save failed: '+error.message); return; }
     const { error: e2 } = await sb.from('daily_revenue').update({
@@ -1474,8 +1586,25 @@ function CashPage({corps, canEditIds, profile, isOwner}){
     if(e2){ showToast('Verification failed: '+e2.message); return; }
     showToast('Pickup recorded, period verified');
     setPk({pickup_date:todayStr(), period_start:'', period_end:'', counted_amount:'', note:''});
+    setCounts({}); setPickupOpen(false);
     reload();
   };
+
+  // per-day envelopes within the chosen pickup period: expected = cash sales - cash spent
+  const envelopeDays = (()=>{
+    if(!pk.period_start || !pk.period_end) return [];
+    const out=[];
+    Object.keys(days).sort().forEach(date=>{
+      if(date<pk.period_start || date>pk.period_end) return;
+      const sales=Number(days[date].amount)||0;
+      const spent=cashExp[date]?cashExp[date].total:0;
+      if(sales===0 && spent===0) return;
+      out.push({date, sales, spent, expected:sales-spent});
+    });
+    return out;
+  })();
+  const envExpectedTotal = envelopeDays.reduce((a,e)=>a+e.expected,0);
+  const envCountedTotal = envelopeDays.reduce((a,e)=>a+(counts[e.date]!==''&&counts[e.date]!=null?parseFloat(counts[e.date]||0):0),0);
 
   const first = new Date(y, m-1, 1).getDay();
   const nDays = lastDay(y,m);
@@ -1496,6 +1625,52 @@ function CashPage({corps, canEditIds, profile, isOwner}){
         <MonthPick y={y} m={m} onChange={(a,b)=>{setY(a);setM(b);}}/>
       </div>
     </div>
+    {isOwner && <div className="card pickup-card">
+      <button className="pickup-head" onClick={()=>setPickupOpen(o=>!o)}>
+        <div>
+          <div className="pickup-title">Record Envelope Pickup</div>
+          <div className="pickup-sub">Log a pickup and count each day's envelope. Marks the period verified (gold).</div>
+        </div>
+        <span className="pickup-chev">{pickupOpen?'▲':'▾'}</span>
+      </button>
+      {pickupOpen && <div className="pickup-body">
+        <div className="form-row">
+          <div><label className="hint" style={{marginTop:0}}>Pickup date</label>
+            <input type="date" value={pk.pickup_date} onChange={e=>setPk({...pk,pickup_date:e.target.value})}/></div>
+          <div><label className="hint" style={{marginTop:0}}>Period start</label>
+            <input type="date" value={pk.period_start} onChange={e=>setPk({...pk,period_start:e.target.value})}/></div>
+          <div><label className="hint" style={{marginTop:0}}>Period end</label>
+            <input type="date" value={pk.period_end} onChange={e=>setPk({...pk,period_end:e.target.value})}/></div>
+        </div>
+        {envelopeDays.length>0 && <div style={{marginTop:6}}>
+          <div className="hint" style={{marginBottom:8}}>Open each envelope and enter the actual cash counted. Expected = cash sales that day minus any cash spent from the drawer.</div>
+          <table className="t env-table"><thead><tr>
+            <th>Day</th><th className="num">Sales</th><th className="num">Spent</th><th className="num">Expected</th><th className="num">Counted</th><th className="num">Diff</th>
+          </tr></thead><tbody>
+            {envelopeDays.map(e=>{ const cnt=counts[e.date]; const has=cnt!==''&&cnt!=null; const diff=has?parseFloat(cnt||0)-e.expected:null;
+              return <tr key={e.date}>
+                <td className="mono">{e.date.slice(8)} {DOW[new Date(e.date+'T00:00').getDay()]}</td>
+                <td className="num mono">{fmt$(e.sales,0)}</td>
+                <td className="num mono" style={{color:e.spent?'var(--red)':'var(--text3)'}}>{e.spent?'-'+fmt$(e.spent,0):'-'}</td>
+                <td className="num mono"><b>{fmt$(e.expected,0)}</b></td>
+                <td className="num" style={{width:92}}>
+                  <input type="number" step="0.01" className="env-input" placeholder={fmt$(e.expected,0)}
+                    value={cnt||''} onChange={ev=>setCounts({...counts,[e.date]:ev.target.value})}/></td>
+                <td className={'num mono '+(diff===null?'':Math.abs(diff)<0.01?'pos':'neg')}>{diff===null?'-':fmt$(diff,0)}</td>
+              </tr>; })}
+            <tr className="total"><td>Total</td>
+              <td className="num"></td><td className="num"></td>
+              <td className="num">{fmt$(envExpectedTotal,0)}</td>
+              <td className="num">{fmt$(envCountedTotal,0)}</td>
+              <td className={'num '+(Math.abs(envCountedTotal-envExpectedTotal)<0.01?'pos':'neg')}>{fmt$(envCountedTotal-envExpectedTotal,0)}</td></tr>
+          </tbody></table>
+        </div>}
+        {pk.period_start && pk.period_end && envelopeDays.length===0 &&
+          <div className="hint">No cash days in this period.</div>}
+        <input placeholder="Memo (optional)" value={pk.note} onChange={e=>setPk({...pk,note:e.target.value})} style={{margin:'10px 0'}}/>
+        <button className="btn btn-gold" onClick={savePickup}>Save Pickup + Verify Period</button>
+      </div>}
+    </div>}
     <div className="grid2">
       <div className="card">
         <h3>Cash Calendar</h3>
@@ -1524,30 +1699,6 @@ function CashPage({corps, canEditIds, profile, isOwner}){
         </div>
       </div>
       <div>
-        {isOwner && <div className="card">
-          <h3>Record Envelope Pickup</h3>
-          <div className="hint" style={{marginTop:0,marginBottom:12}}>Recording a pickup marks that period's cash days as collected (gold on the calendar). Counted amount is optional, since envelopes are picked up sealed.</div>
-          <div className="form-row">
-            <div><label className="hint" style={{marginTop:0}}>Pickup date</label>
-              <input type="date" value={pk.pickup_date} onChange={e=>setPk({...pk,pickup_date:e.target.value})}/></div>
-            <div><label className="hint" style={{marginTop:0}}>Counted amount (optional)</label>
-              <input type="number" step="0.01" placeholder="Leave blank if unopened" value={pk.counted_amount}
-                onChange={e=>setPk({...pk,counted_amount:e.target.value})}/></div>
-          </div>
-          <div className="form-row">
-            <div><label className="hint" style={{marginTop:0}}>Period start</label>
-              <input type="date" value={pk.period_start} onChange={e=>setPk({...pk,period_start:e.target.value})}/></div>
-            <div><label className="hint" style={{marginTop:0}}>Period end</label>
-              <input type="date" value={pk.period_end} onChange={e=>setPk({...pk,period_end:e.target.value})}/></div>
-          </div>
-          <input placeholder="Memo (optional)" value={pk.note} onChange={e=>setPk({...pk,note:e.target.value})} style={{marginBottom:12}}/>
-          {pk.period_start && pk.period_end && <div className="hint" style={{marginBottom:12}}>
-            Recorded cash in period: <b className="mono">{fmt$(recordedFor(pk.period_start,pk.period_end))}</b>
-            {pk.counted_amount && <> · Difference: <b className={'mono '+(Math.abs(recordedFor(pk.period_start,pk.period_end)-parseFloat(pk.counted_amount))<0.01?'pos':'neg')}>
-              {fmt$(parseFloat(pk.counted_amount)-recordedFor(pk.period_start,pk.period_end))}</b></>}
-          </div>}
-          <button className="btn btn-gold" onClick={savePickup}>Save Pickup + Verify Period</button>
-        </div>}
         <div className="card">
           <h3>Recent Pickups</h3>
           {pickups.length===0 ? <div className="faint">No records</div> :
@@ -1555,7 +1706,7 @@ function CashPage({corps, canEditIds, profile, isOwner}){
             {pickups.map(p=><tr key={p.id}>
               <td className="mono">{p.pickup_date}</td>
               <td className="mono" style={{fontSize:12}}>{p.period_start} ~ {p.period_end}</td>
-              <td className="num">{fmt$(Number(p.counted_amount))}</td></tr>)}
+              <td className="num">{p.counted_amount!=null?fmt$(Number(p.counted_amount)):'-'}</td></tr>)}
           </tbody></table>}
         </div>
       </div>
@@ -1571,6 +1722,7 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
   const [meta, setMeta] = useState(null);
   const [rows, setRows] = useState([]);
   const [f, setF] = useState({name:'', category_id:'', amount:'', frequency:'weekly', day_of_week:'5', day_of_month:'1', payee:''});
+  const [sched, setSched] = useState(null);
   const [newCat, setNewCat] = useState('');
   const [toast, showToast] = useToast();
 
@@ -1595,6 +1747,17 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
   };
   const toggle = async r=>{
     await sb.from('recurring_expenses').update({active:!r.active}).eq('id',r.id); reload();
+  };
+  const saveSched = async()=>{
+    if(!sched.amount || !sched.from){ showToast('Enter the new amount and effective date'); return; }
+    const { error } = await sb.from('recurring_expenses').update({
+      next_amount: parseFloat(sched.amount), next_amount_from: sched.from }).eq('id',sched.id);
+    if(error){ showToast('Save failed: '+error.message); return; }
+    setSched(null); showToast('Scheduled change saved'); reload();
+  };
+  const clearSched = async(id)=>{
+    await sb.from('recurring_expenses').update({next_amount:null, next_amount_from:null}).eq('id',id);
+    setSched(null); showToast('Scheduled change removed'); reload();
   };
 
   const addCategory = async()=>{
@@ -1650,10 +1813,12 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
         const dow=new Date(y,m-1,d).getDay();
         const targetDom = r.day_of_month===99 ? lastDay(y,m) : Math.min(r.day_of_month, lastDay(y,m));
         const due = r.frequency==='weekly' ? dow===r.day_of_week : d===targetDom;
-        if(due && !have.has(r.id+'|'+date))
+        if(due && !have.has(r.id+'|'+date)){
+          const amt = (r.next_amount!=null && r.next_amount_from && date>=r.next_amount_from) ? Number(r.next_amount) : Number(r.amount);
           inserts.push({corporation_id:corpId, category_id:r.category_id, date,
-            amount:Number(r.amount), payee:r.payee||null, memo:r.name,
+            amount:amt, payee:r.payee||null, memo:r.name,
             source:'recurring', recurring_id:r.id, entered_by:profile.id});
+        }
       }
     });
     if(!inserts.length){ showToast('Nothing to generate (already up to date)'); return; }
@@ -1734,10 +1899,30 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
           <td>{r.name}{r.payee && <span className="faint"> · {r.payee}</span>}</td>
           <td>{catName(r.category_id)}</td>
           <td>{r.frequency==='weekly' ? 'Weekly · '+DOW[r.day_of_week] : 'Monthly · '+(r.day_of_month===99?'Last day':'Day '+r.day_of_month)}</td>
-          <td className="num">{fmt$(Number(r.amount))}</td>
-          <td style={{textAlign:'right'}}>{isOwner && <button className="btn btn-sm" onClick={()=>toggle(r)}>{r.active?'Pause':'Resume'}</button>}</td>
+          <td className="num">{fmt$(Number(r.amount))}
+            {r.next_amount!=null && r.next_amount_from && <div className="faint" style={{fontSize:11}}>→ {fmt$(Number(r.next_amount))} from {r.next_amount_from}</div>}
+          </td>
+          <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+            {isOwner && <button className="btn btn-sm" onClick={()=>setSched(sched&&sched.id===r.id?null:{id:r.id, amount:r.next_amount??'', from:r.next_amount_from||''})}>Change</button>}
+            {isOwner && <button className="btn btn-sm" onClick={()=>toggle(r)} style={{marginLeft:6}}>{r.active?'Pause':'Resume'}</button>}
+          </td>
         </tr>)}</tbody>
       </table>}
+      {sched && <div className="card" style={{marginTop:14,background:'var(--panel2)'}}>
+        <h3>Schedule an amount change</h3>
+        <div className="hint" style={{marginTop:0,marginBottom:10}}>The current amount stays until the effective date. From that date, recurring runs use the new amount. (e.g. a lease raise.)</div>
+        <div className="form-row">
+          <div><label className="hint" style={{marginTop:0}}>New amount</label>
+            <input type="number" step="0.01" placeholder="0.00" value={sched.amount} onChange={e=>setSched({...sched,amount:e.target.value})}/></div>
+          <div><label className="hint" style={{marginTop:0}}>Effective from</label>
+            <input type="date" value={sched.from} onChange={e=>setSched({...sched,from:e.target.value})}/></div>
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <button className="btn btn-gold btn-sm" onClick={saveSched}>Save change</button>
+          <button className="btn btn-sm" onClick={()=>clearSched(sched.id)}>Remove scheduled change</button>
+          <button className="btn btn-sm" onClick={()=>setSched(null)}>Cancel</button>
+        </div>
+      </div>}
     </div>
     {toast && <div className="toast">{toast}</div>}
   </div>;
@@ -1939,31 +2124,47 @@ function InvestorPortal({corps}){
       <div className="card faint">No reports published yet.</div> :
       reports.map(r=>{
         const s = r.summary||{};
-        return <div className="inv-report" key={r.id}>
-          <div className="rh">
-            <div className="m h-display">{MONTHS[r.month-1]} {r.year}</div>
-            <div className="faint mono" style={{fontSize:11}}>Published {r.published_at && new Date(r.published_at).toLocaleDateString()}</div>
+        const corp = corps.find(c=>c.id===corpId);
+        const rev = (s.revenue||[]).filter(x=>x.amount!==0);
+        const exp = (s.expenses||[]).filter(x=>x.amount!==0);
+        const margin = (s.net_margin!==null && s.net_margin!==undefined) ? s.net_margin : (s.total_sales? s.net_profit/s.total_sales : null);
+        return <div className="stmt" key={r.id}>
+          <div className="stmt-head">
+            <div>
+              <div className="stmt-corp">{corp?corp.name:''}</div>
+              <div className="stmt-period">{MONTHS[r.month-1]} {r.year} · Monthly Statement</div>
+            </div>
+            <div className="stmt-badge">Published {r.published_at && new Date(r.published_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>
           </div>
-          <div className="kpis" style={{marginBottom:12}}>
-            <div className="kpi"><div className="k-lbl">Sales</div><div className="k-val">{fmt$(s.total_sales)}</div></div>
-            <div className="kpi"><div className="k-lbl">Expenses</div><div className="k-val">{fmt$(s.total_expenses)}</div></div>
-            <div className="kpi"><div className="k-lbl">Net Profit</div>
-              <div className={'k-val '+((s.net_profit||0)>=0?'pos':'neg')}>{fmt$(s.net_profit)}</div>
-              {s.net_margin!==null && s.net_margin!==undefined && <div className="k-sub">Margin {fmtPct(s.net_margin)}</div>}</div>
+          <div className="stmt-summary">
+            <div className="stmt-sum-item"><div className="ss-lbl">Total Revenue</div><div className="ss-val">{fmt$(s.total_sales)}</div></div>
+            <div className="stmt-sum-item"><div className="ss-lbl">Total Expenses</div><div className="ss-val">{fmt$(s.total_expenses)}</div></div>
+            <div className="stmt-sum-item accent"><div className="ss-lbl">Net Profit</div>
+              <div className={'ss-val '+((s.net_profit||0)>=0?'pos':'neg')}>{fmt$(s.net_profit)}</div>
+              {margin!==null && <div className="ss-margin">{fmtPct(margin)} margin</div>}</div>
           </div>
-          {r.notes && <div className="notes-block">{r.notes}</div>}
-          {(s.revenue||[]).length>0 && <details>
-            <summary style={{cursor:'pointer',color:'var(--text2)',fontSize:13,marginBottom:8}}>Details</summary>
-            <div className="grid2" style={{marginTop:10}}>
-              <table className="t"><thead><tr><th>Revenue</th><th className="num"></th></tr></thead><tbody>
-                {(s.revenue||[]).map((x,i)=><tr key={i}><td>{x.name}</td><td className="num">{fmt$(x.amount)}</td></tr>)}
-              </tbody></table>
-              <table className="t"><thead><tr><th>Expenses</th><th className="num"></th></tr></thead><tbody>
-                {(s.expenses||[]).map((x,i)=><tr key={i}><td>{x.name}</td><td className="num">{fmt$(x.amount)}</td></tr>)}
+          {r.notes && <div className="stmt-notes"><div className="stmt-notes-lbl">Note from HQ</div>{r.notes}</div>}
+          <div className="stmt-cols">
+            <div className="stmt-block">
+              <div className="stmt-block-h">Revenue</div>
+              <table className="stmt-table"><tbody>
+                {rev.map((x,i)=><tr key={i}><td>{x.name}</td><td className="num">{fmt$(x.amount)}</td></tr>)}
+                <tr className="stmt-tot"><td>Total Revenue</td><td className="num">{fmt$(s.total_sales)}</td></tr>
               </tbody></table>
             </div>
-          </details>}
-          {r.files.length>0 && <div style={{marginTop:12,display:'flex',gap:8,flexWrap:'wrap'}}>
+            <div className="stmt-block">
+              <div className="stmt-block-h">Expenses</div>
+              <table className="stmt-table"><tbody>
+                {exp.map((x,i)=><tr key={i}><td>{x.name}{x.auto && <span className="stmt-auto">auto</span>}</td><td className="num">{fmt$(x.amount)}</td></tr>)}
+                <tr className="stmt-tot"><td>Total Expenses</td><td className="num">{fmt$(s.total_expenses)}</td></tr>
+              </tbody></table>
+            </div>
+          </div>
+          <div className="stmt-net">
+            <span>Net Profit for {MONTHS[r.month-1]} {r.year}</span>
+            <span className={(s.net_profit||0)>=0?'pos':'neg'}>{fmt$(s.net_profit)}</span>
+          </div>
+          {r.files.length>0 && <div className="stmt-files">
             {r.files.map(f=><button key={f.id} className="btn btn-sm" onClick={()=>download(f)}>📄 {f.name}</button>)}
           </div>}
         </div>;
@@ -2586,17 +2787,14 @@ function OwnersManager({corps, canEditIds}){
 // ================= SETTINGS =================
 function Settings({corps, canEditIds, profile, isOwner, session}){
   const [sub, setSub] = useState('recurring');
+  const TABS = [['recurring','Recurring'],['rates','Rates'],['owners','Investors'],['accounts','Accounts'],['device','App & Alerts'],['diag','Diagnostics']];
   return <div>
     <div className="page-head">
       <div><div className="eyebrow">Settings</div><h2>Settings</h2></div>
-      <div className="corp-tabs">
-        <button className={'corp-tab'+(sub==='recurring'?' on':'')} onClick={()=>setSub('recurring')}>Recurring & Categories</button>
-        <button className={'corp-tab'+(sub==='rates'?' on':'')} onClick={()=>setSub('rates')}>Rates</button>
-        <button className={'corp-tab'+(sub==='owners'?' on':'')} onClick={()=>setSub('owners')}>Investors</button>
-        <button className={'corp-tab'+(sub==='accounts'?' on':'')} onClick={()=>setSub('accounts')}>Accounts</button>
-        <button className={'corp-tab'+(sub==='device'?' on':'')} onClick={()=>setSub('device')}>App & Alerts</button>
-        <button className={'corp-tab'+(sub==='diag'?' on':'')} onClick={()=>setSub('diag')}>Diagnostics</button>
-      </div>
+    </div>
+    <div className="settings-tabs">
+      {TABS.map(([id,label])=>
+        <button key={id} className={'settings-tab'+(sub===id?' on':'')} onClick={()=>setSub(id)}>{label}</button>)}
     </div>
     {sub==='recurring' && <Recurring corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} embedded={true}/>}
     {sub==='rates' && <RatesManager corps={corps} canEditIds={canEditIds}/>}
@@ -2624,7 +2822,7 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose
         sb.from('daily_revenue').select('corporation_id,channel_id,amount,source').in('corporation_id',ids).eq('date',date),
         sb.from('expenses').select('corporation_id').in('corporation_id',ids).eq('date',date).eq('status','confirmed'),
         sb.from('expenses').select('corporation_id').in('corporation_id',ids).eq('status','pending'),
-        sb.from('daily_revenue').select('corporation_id,date,amount').in('corporation_id',ids).gte('date',monthStart).lte('date',date).gt('amount',0),
+        fetchAllRows(()=>sb.from('daily_revenue').select('corporation_id,date,amount').in('corporation_id',ids).gte('date',monthStart).lte('date',date).gt('amount',0).order('date')),
         isOwner ? sb.from('monthly_close').select('corporation_id,status').in('corporation_id',ids).eq('year',prev.y).eq('month',prev.m) : Promise.resolve({data:[]}),
       ]);
       if(dead) return;
@@ -2640,7 +2838,7 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose
       });
       (expToday.data||[]).forEach(r=>{ if(per[r.corporation_id]) per[r.corporation_id].exp++; });
       (pend.data||[]).forEach(r=>{ if(per[r.corporation_id]) per[r.corporation_id].pending++; });
-      (revMonth.data||[]).forEach(r=>{ if(per[r.corporation_id]) per[r.corporation_id].daysDone.add(r.date); });
+      (revMonth||[]).forEach(r=>{ if(per[r.corporation_id]) per[r.corporation_id].daysDone.add(r.date); });
       (closes.data||[]).forEach(r=>{ if(per[r.corporation_id]) per[r.corporation_id].closed = r.status==='published'; });
       setData(per);
     })();
@@ -2692,6 +2890,57 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose
 }
 
 // ================= APP SHELL =================
+function NotificationBell({profile, onNavigate}){
+  const [open,setOpen]=useState(false);
+  const [items,setItems]=useState([]);
+  const [reads,setReads]=useState(new Set());
+  const ref=React.useRef(null);
+  const load=useCallback(async()=>{
+    const [nt, rd]=await Promise.all([
+      sb.from('notifications').select('*').order('created_at',{ascending:false}).limit(30),
+      sb.from('notification_reads').select('notification_id').eq('user_id',profile.id),
+    ]);
+    let list=(nt.data||[]).filter(n=>{
+      if(!n.target_role) return true;
+      if(n.target_role==='staff') return profile.role==='owner'||profile.role==='assistant';
+      return n.target_role===profile.role;
+    });
+    setItems(list);
+    setReads(new Set((rd.data||[]).map(r=>r.notification_id)));
+  },[profile.id, profile.role]);
+  useEffect(()=>{ load(); const iv=setInterval(load,60000); return ()=>clearInterval(iv); },[load]);
+  useEffect(()=>{
+    const h=e=>{ if(ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    if(open) document.addEventListener('mousedown',h);
+    return ()=>document.removeEventListener('mousedown',h);
+  },[open]);
+  const unread=items.filter(n=>!reads.has(n.id)).length;
+  const markAll=async()=>{
+    const unreadIds=items.filter(n=>!reads.has(n.id)).map(n=>n.id);
+    if(!unreadIds.length) return;
+    await sb.from('notification_reads').upsert(unreadIds.map(id=>({user_id:profile.id, notification_id:id})),{onConflict:'user_id,notification_id'});
+    setReads(new Set([...reads, ...unreadIds]));
+  };
+  const openPanel=()=>{ setOpen(o=>{ const n=!o; if(n) setTimeout(markAll,1200); return n; }); };
+  const timeAgo=(ts)=>{ const s=(Date.now()-new Date(ts))/1000; if(s<60)return'just now'; if(s<3600)return Math.floor(s/60)+'m ago'; if(s<86400)return Math.floor(s/3600)+'h ago'; return Math.floor(s/86400)+'d ago'; };
+  return <div className="bell" ref={ref}>
+    <button className="bell-btn" onClick={openPanel} aria-label="Notifications">
+      <span className="bell-ic">🔔</span>
+      {unread>0 && <span className="bell-badge">{unread>9?'9+':unread}</span>}
+    </button>
+    {open && <div className="bell-panel">
+      <div className="bell-head"><span>Notifications</span>{unread>0 && <button className="bell-clear" onClick={markAll}>Mark all read</button>}</div>
+      {items.length===0 ? <div className="bell-empty">No notifications yet.</div> :
+        items.map(n=><button key={n.id} className={'bell-item'+(reads.has(n.id)?'':' unread')}
+          onClick={()=>{ if(n.link_tab && onNavigate) onNavigate(n.link_tab); setOpen(false); }}>
+          <div className="bell-item-t">{n.title}</div>
+          {n.body && <div className="bell-item-b">{n.body}</div>}
+          <div className="bell-item-time">{timeAgo(n.created_at)}</div>
+        </button>)}
+    </div>}
+  </div>;
+}
+
 function AccountMenu({profile, pendingCount, onNotifications}){
   const [open,setOpen]=useState(false);
   const [notif,setNotif]=useState('idle'); // idle|on|off|denied|unsupported
@@ -2896,6 +3145,7 @@ function App(){
         {n.id==='approvals' && pendingCount>0 && <span className="nav-badge">{pendingCount}</span>}
       </button>)}
       <div className="foot">
+        <NotificationBell profile={profile} onNavigate={(t)=>setTab(t)}/>
         <AccountMenu profile={profile} pendingCount={pendingCount} onNotifications={()=>setTab(nav.some(n=>n.id==='alerts')?'alerts':'settings')}/>
       </div>
     </div>

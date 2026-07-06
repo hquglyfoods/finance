@@ -60,21 +60,39 @@ exports.handler = async () => {
   const custRules = parseCustomerMap(process.env.INV_CUSTOMER_MAP) || DEFAULT_CUSTOMER_MAP;
   const ummaMap = parseUmmaMap(process.env.INV_UMMA_MAP) || DEFAULT_UMMA_MAP;
 
-  // date window
-  const dates = [];
-  for (let back = 1; back <= 10; back++) {
-    const d = new Date(); d.setDate(d.getDate() - back);
-    dates.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+  // date window: default last 10 days, or an explicit range via ?from=&to=
+  // (use the range to backfill months of history, e.g. UMMA orders).
+  const qs = (event && event.queryStringParameters) || {};
+  let dMin, dMax;
+  if (qs.from && qs.to) {
+    dMin = qs.from; dMax = qs.to;
+  } else {
+    const dates = [];
+    for (let back = 1; back <= 10; back++) {
+      const d = new Date(); d.setDate(d.getDate() - back);
+      dates.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+    }
+    dMin = dates[dates.length - 1]; dMax = dates[0];
   }
-  const dMin = dates[dates.length - 1], dMax = dates[0];
 
-  // pull inventory orders in window, join customer name
-  const { data: orders, error } = await inv
-    .from('orders')
-    .select('source, order_date, total_amount, customer_id, customers(name)')
-    .gte('order_date', dMin).lte('order_date', dMax)
-    .in('source', ['quickbooks', 'ummasrecipe-store', 'wix']);
-  if (error) return { statusCode: 500, body: JSON.stringify({ error: 'inventory read failed: ' + error.message }) };
+  // pull inventory orders in window, join customer name (paginated: a wide
+  // backfill range can exceed the 1000-row cap)
+  let orders = [];
+  {
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await inv
+        .from('orders')
+        .select('source, order_date, total_amount, customer_id, customers(name)')
+        .gte('order_date', dMin).lte('order_date', dMax)
+        .in('source', ['quickbooks', 'ummasrecipe-store', 'wix'])
+        .order('order_date').range(from, from + PAGE - 1);
+      if (error) return { statusCode: 500, body: JSON.stringify({ error: 'inventory read failed: ' + error.message }) };
+      const rows = data || [];
+      orders = orders.concat(rows);
+      if (rows.length < PAGE || from > 200000) break;
+    }
+  }
 
   // resolve Finance Tool corp ids, channels, categories
   const { data: corps } = await fin.from('corporations').select('id,code');

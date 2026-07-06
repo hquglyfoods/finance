@@ -48,11 +48,13 @@ exports.handler = async () => {
         ? d.getDay() === r.day_of_week
         : d.getDate() === targetDom;
       if (due && !have.has(r.id + '|' + date)) {
+        const amt = (r.next_amount != null && r.next_amount_from && date >= r.next_amount_from)
+          ? Number(r.next_amount) : Number(r.amount);
         inserts.push({
           corporation_id: r.corporation_id,
           category_id: r.category_id,
           date,
-          amount: Number(r.amount),
+          amount: amt,
           payee: r.payee || null,
           memo: r.name,
           source: 'recurring',

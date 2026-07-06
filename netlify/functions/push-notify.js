@@ -67,6 +67,25 @@ exports.handler = async (event) => {
     return { statusCode: 200, body: 'ignored' };
   }
 
+  // Log to the in-app notifications feed (the bell), so alerts show in-app too.
+  try {
+    await fetch(`${process.env.SUPABASE_URL}/rest/v1/notifications`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: process.env.SUPABASE_SERVICE_KEY,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}`,
+      },
+      body: JSON.stringify({
+        title, body,
+        kind: table === 'expenses' ? 'pending' : 'published',
+        target_role: table === 'expenses' ? 'staff' : 'investor',
+        corporation_id: corpId || null,
+        link_tab: table === 'expenses' ? 'approvals' : 'investor',
+      }),
+    });
+  } catch (e) { /* non-fatal: push still sends */ }
+
   const opts = {
     publicKey: process.env.VAPID_PUBLIC_KEY,
     privateKey: (process.env.VAPID_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
