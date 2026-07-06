@@ -105,15 +105,14 @@ function summarize(orders, diningNames) {
   return { sums, tips: +tips.toFixed(2) };
 }
 
-// business date string YYYYMMDD for N days ago in a fixed offset (store local ~ ET)
-function bizDates() {
-  // Use ET (UTC-4/5). Toast business day rolls at ~4am local. We sync the last
-  // 2 completed days plus today (provisional).
+// business date strings for the last N days given a timezone offset in hours
+// (ET ~ -4, CT ~ -5). Toast business day rolls at ~4am local.
+function bizDates(offsetHours) {
   const now = new Date();
-  const et = new Date(now.getTime() - 4 * 3600 * 1000); // approx ET
+  const local = new Date(now.getTime() + offsetHours * 3600 * 1000);
   const list = [];
   for (let back = 0; back <= 2; back++) {
-    const d = new Date(et); d.setDate(d.getDate() - back);
+    const d = new Date(local); d.setDate(d.getDate() - back);
     list.push({
       ymd: `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`,
       iso: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
@@ -136,18 +135,22 @@ exports.handler = async () => {
   catch (e) { return { statusCode: 500, body: JSON.stringify({ error: e.message }) }; }
 
   const log = [];
+  const CENTRAL = new Set(['PEARLAND']); // stores on Central time
   for (const [code, guid] of Object.entries(map)) {
-    const { data: corp } = await admin.from('corporations').select('id').eq('code', code).maybeSingle();
+    const { data: corp } = await admin.from('corporations').select('id,corp_type').eq('code', code).maybeSingle();
     if (!corp) { log.push(`${code}: no corp`); continue; }
+    const isFranchise = corp.corp_type === 'franchisee';
     const { data: chs } = await admin.from('revenue_channels').select('id,code').eq('corporation_id', corp.id);
     const chId = {}; (chs || []).forEach(c => chId[c.code] = c.id);
-    const { data: tipCat } = await admin.from('expense_categories').select('id')
+    // franchisee stores are revenue-only (no tips expense on our books)
+    const { data: tipCat } = isFranchise ? { data: null } : await admin.from('expense_categories').select('id')
       .eq('corporation_id', corp.id).eq('code', 'tips').maybeSingle();
 
     let dn = {};
     try { dn = await diningNameMap(token, guid); } catch (e) {}
 
-    for (const d of bizDates()) {
+    const offset = CENTRAL.has(code) ? -5 : -4;
+    for (const d of bizDates(offset)) {
       let orders;
       try { orders = await fetchOrders(token, guid, d.ymd); }
       catch (e) { log.push(`${code} ${d.ymd}: ${e.message}`); continue; }

@@ -29,10 +29,10 @@ exports.handler = async () => {
   const iso = `${et.getFullYear()}-${pad(et.getMonth() + 1)}-${pad(et.getDate())}`;
   const label = `${et.getMonth() + 1}/${pad(et.getDate())}/${et.getFullYear()}`;
 
-  // corporations that have store sales (corporate + franchisee); skip HQ / UMMA
+  // corporate store corporations only (skip HQ / UMMA / franchisee)
   const { data: corps } = await admin.from('corporations')
     .select('id,code,name,corp_type,display_order').order('display_order');
-  const storeCorps = (corps || []).filter(c => c.corp_type === 'corporate' || c.corp_type === 'franchisee'
+  const storeCorps = (corps || []).filter(c => c.corp_type === 'corporate'
     || (c.corp_type == null && !['HQ', 'UMMA'].includes(c.code)));
   if (!storeCorps.length) return { statusCode: 200, body: 'no store corps' };
 
@@ -52,25 +52,14 @@ exports.handler = async () => {
     totalByCorp[r.corporation_id] += Number(r.amount) * Number(ch.total_multiplier || 1);
   });
 
-  const corporate = storeCorps.filter(c => c.corp_type === 'corporate' || c.corp_type == null);
-  const franchise = storeCorps.filter(c => c.corp_type === 'franchisee');
-
-  // pretty store label: use name without the "Ugly XX (" wrapper if present
+  // pretty store label: use the name inside parentheses if present
   const nameOf = c => {
     const m = c.name.match(/\(([^)]+)\)/);
     return m ? m[1] : c.name.replace(/^Ugly\s+\w+\s*/, '') || c.name;
   };
 
   let text = `*DAILY SALES PER STORE ${label}*\n\n`;
-  if (corporate.length) {
-    text += `:white_check_mark: Corporate stores:\n`;
-    corporate.forEach(c => { text += `${nameOf(c)}: ${fmtMoney(totalByCorp[c.id])}\n`; });
-    text += `\n`;
-  }
-  if (franchise.length) {
-    text += `:white_check_mark: Franchisee stores:\n`;
-    franchise.forEach(c => { text += `${nameOf(c)}: ${fmtMoney(totalByCorp[c.id])}\n`; });
-  }
+  storeCorps.forEach(c => { text += `${nameOf(c)}: ${fmtMoney(totalByCorp[c.id])}\n`; });
 
   const channel = (process.env.FINANCIAL_CHANNEL_ID || '').trim();
   const payload = { channel, text };
@@ -94,5 +83,5 @@ exports.handler = async () => {
     },
     date: iso,
   }, null, 2) };
-  return { statusCode: 200, body: JSON.stringify({ ok: true, date: iso, corporate: corporate.length, franchise: franchise.length }) };
+  return { statusCode: 200, body: JSON.stringify({ ok: true, date: iso, stores: storeCorps.length }) };
 };

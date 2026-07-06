@@ -75,6 +75,20 @@ a{color:var(--gold);text-decoration:none}
 .corp-tabs{display:flex;gap:6px;flex-wrap:wrap}
 .corp-tab{padding:7px 14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text2);font-weight:500;font-size:13px}
 .corp-tab.on{border-color:var(--gold-soft);color:var(--gold);background:var(--gold-dim)}
+.viewbar{display:flex;gap:4px;margin-bottom:18px;background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:4px;width:fit-content}
+.viewtab{padding:7px 18px;border-radius:6px;border:none;background:transparent;color:var(--text2);font-weight:500;font-size:13px;cursor:pointer}
+.viewtab.on{background:var(--gold-dim);color:var(--gold)}
+.subtabs{display:flex;gap:18px;margin:0 0 16px 2px;border-bottom:1px solid var(--border)}
+.subtab{padding:9px 2px;border:none;background:transparent;color:var(--text2);font-weight:500;font-size:14px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.subtab.on{color:var(--gold);border-bottom-color:var(--gold)}
+.findings{display:flex;flex-direction:column;gap:9px}
+.finding{display:flex;align-items:flex-start;gap:10px;font-size:14px;line-height:1.45}
+.finding .fdot{flex:0 0 8px;width:8px;height:8px;border-radius:50%;margin-top:6px}
+.finding.good .fdot{background:#4a9e6f}
+.finding.bad .fdot{background:#c25b52}
+.finding.info .fdot{background:var(--gold)}
+.finding.good{color:var(--text)}
+.finding.bad{color:var(--text)}
 .month-pick{display:flex;align-items:center;gap:8px}
 .month-pick .lbl{font-family:var(--font-m);font-size:14px;min-width:86px;text-align:center}
 .month-pick button{width:30px;height:30px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text2)}
@@ -150,6 +164,15 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 
 @media(max-width:820px){
   .shell{flex-direction:column}
+  /* prevent any accidental horizontal page scroll */
+  html,body{max-width:100%;overflow-x:hidden}
+  .main{max-width:100vw;overflow-x:hidden}
+  /* wide tables scroll inside their card instead of stretching the page */
+  .card{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table.t{min-width:max-content}
+  /* view tabs: horizontal scroll if they don't fit */
+  .viewbar{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap}
+  .viewtab{white-space:nowrap;flex:0 0 auto}
   /* top bar: brand + sign out only */
   .side{width:100%;height:auto;position:sticky;top:0;z-index:20;flex-direction:row;align-items:center;
     gap:10px;padding:12px 16px;border-right:none;border-bottom:1px solid var(--border-soft)}
@@ -310,12 +333,65 @@ async function loadCorpMeta(corpId){
 
 async function loadMonthRaw(corpId, y, m){
   const start = `${y}-${pad(m)}-01`, end = `${y}-${pad(m)}-${pad(lastDay(y,m))}`;
-  const [rev, exp, inp] = await Promise.all([
+  const [rev, exp, inp, rates] = await Promise.all([
     sb.from('daily_revenue').select('*').eq('corporation_id', corpId).gte('date', start).lte('date', end),
     sb.from('expenses').select('*').eq('corporation_id', corpId).gte('date', start).lte('date', end),
     sb.from('monthly_inputs').select('*').eq('corporation_id', corpId).eq('year', y).eq('month', m),
+    sb.from('rate_schedule').select('rate_type,rate,effective_from').eq('corporation_id', corpId),
   ]);
-  return { revenue: rev.data||[], expenses: exp.data||[], inputs: inp.data||[] };
+  return { revenue: rev.data||[], expenses: exp.data||[], inputs: inp.data||[],
+    rates: rates.data||[], monthKey: `${y}-${pad(m)}` };
+}
+
+// Load a whole year and compute each month's P&L. Returns array of 12 {m, pl}.
+// Load the ENTIRE history for a corp and compute each month's P&L, grouped by year.
+// Returns { years:[{y, months:[{m,pl}], totals:{s,e,n}}], firstYear, lastYear }.
+async function loadAllTimePL(corpId, meta){
+  const [rv, ex, inp, rt] = await Promise.all([
+    sb.from('daily_revenue').select('date,amount,channel_id,source').eq('corporation_id',corpId),
+    sb.from('expenses').select('date,amount,category_id,status,source').eq('corporation_id',corpId),
+    sb.from('monthly_inputs').select('*').eq('corporation_id',corpId),
+    sb.from('rate_schedule').select('rate_type,rate,effective_from').eq('corporation_id',corpId),
+  ]);
+  const rev=rv.data||[], exp=ex.data||[], inps=inp.data||[], rates=rt.data||[];
+  // find year span from data
+  const allDates=[...rev.map(r=>r.date), ...exp.map(e=>e.date)].filter(Boolean);
+  if(!allDates.length) return { years:[], firstYear:null, lastYear:null };
+  const firstYear=parseInt(allDates.reduce((a,b)=>a<b?a:b).slice(0,4));
+  const lastYear=parseInt(allDates.reduce((a,b)=>a>b?a:b).slice(0,4));
+  const years=[];
+  for(let y=firstYear; y<=lastYear; y++){
+    const months=[];
+    for(let m=1;m<=12;m++){
+      const pref=`${y}-${pad(m)}`;
+      const raw={ revenue:rev.filter(r=>r.date.startsWith(pref)),
+        expenses:exp.filter(e=>e.date.startsWith(pref)),
+        inputs:inps.filter(r=>r.year===y&&r.month===m), rates, monthKey:pref };
+      months.push({ m, pl: computePL(meta, raw) });
+    }
+    const totals=months.reduce((a,x)=>({s:a.s+x.pl.totalSales,e:a.e+x.pl.totalExpenses,n:a.n+x.pl.net}),{s:0,e:0,n:0});
+    years.push({ y, months, totals });
+  }
+  return { years, firstYear, lastYear };
+}
+
+async function loadYearPL(corpId, meta, y){
+  const start=`${y}-01-01`, end=`${y}-12-31`;
+  const [rv, ex, inp, rt] = await Promise.all([
+    sb.from('daily_revenue').select('date,amount,channel_id,source').eq('corporation_id',corpId).gte('date',start).lte('date',end),
+    sb.from('expenses').select('date,amount,category_id,status,source').eq('corporation_id',corpId).gte('date',start).lte('date',end),
+    sb.from('monthly_inputs').select('*').eq('corporation_id',corpId).eq('year',y),
+    sb.from('rate_schedule').select('rate_type,rate,effective_from').eq('corporation_id',corpId),
+  ]);
+  const months=[];
+  for(let m=1;m<=12;m++){
+    const pref=`${y}-${pad(m)}`;
+    const raw={ revenue:(rv.data||[]).filter(r=>r.date.startsWith(pref)),
+      expenses:(ex.data||[]).filter(r=>r.date.startsWith(pref)),
+      inputs:(inp.data||[]).filter(r=>r.month===m), rates:(rt.data||[]), monthKey:pref };
+    months.push({ m, pl: computePL(meta, raw) });
+  }
+  return months;
 }
 
 // compute a full monthly P&L from raw rows + meta
@@ -343,6 +419,20 @@ function computePL(meta, raw){
   Object.entries(chSum).forEach(([k,v]) => vars['ch_'+k] = v);
   Object.entries(catSum).forEach(([k,v]) => vars['cat_'+k] = v);
   raw.inputs.forEach(i => vars['inp_'+i.key] = Number(i.value));
+  // effective rates from rate_schedule (most recent on/before this month).
+  // Exposed as royalty_rate / marketing_rate / sales_commission_rate for use in
+  // auto-rule expressions. Falls back to defaults when no schedule row exists.
+  const rateDefaults = { royalty: 0.03, marketing: 0, sales_commission: 0 };
+  const monthEnd = raw.monthKey ? `${raw.monthKey}-31` : null;
+  const pickRate = type => {
+    const applicable = (raw.rates||[])
+      .filter(r => r.rate_type===type && (!monthEnd || r.effective_from <= monthEnd))
+      .sort((a,b)=> a.effective_from < b.effective_from ? 1 : -1);
+    return applicable.length ? Number(applicable[0].rate) : rateDefaults[type];
+  };
+  vars['royalty_rate'] = pickRate('royalty');
+  vars['marketing_rate'] = pickRate('marketing');
+  vars['sales_commission_rate'] = pickRate('sales_commission');
   // auto-rules only for non-board (current/future) months
   const ruleRows = hasBoard ? [] : meta.rules.map(r => {
     const val = evalExpr(r.expr, vars);
@@ -490,68 +580,207 @@ function Dashboard({corps, canEditIds}){
   const now = new Date();
   const [y, setY] = useState(now.getFullYear());
   const [m, setM] = useState(now.getMonth()+1);
+  const [view, setView] = useState('month');   // month | daily | year | compare
   const [meta, setMeta] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // shared data holders
   const [pl, setPl] = useState(null);
   const [yoy, setYoy] = useState(null);
   const [trend, setTrend] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [dayRows, setDayRows] = useState([]);        // daily view
+  const [yearMonths, setYearMonths] = useState([]);  // year view: [{m, pl}]
+  const [yearMonthsPrev, setYearMonthsPrev] = useState([]); // compare view
+  const [yearMonthsPrev2, setYearMonthsPrev2] = useState([]); // 3-year
+  const [allTime, setAllTime] = useState(null); // all-time view
 
-  useEffect(()=>{ if(!corpId) return; let dead=false;
+  useEffect(()=>{ if(!corpId) return; let dead=false; setLoading(true);
     (async()=>{
-      setLoading(true);
-      const mt = await loadCorpMeta(corpId);
-      const [raw, rawLY] = await Promise.all([loadMonthRaw(corpId, y, m), loadMonthRaw(corpId, y-1, m)]);
-      if(dead) return;
-      setMeta(mt); setPl(computePL(mt, raw));
-      const ply = computePL(mt, rawLY);
-      setYoy((ply.totalSales!==0 || ply.totalExpenses!==0) ? ply : null);
-      // 12-month trend
-      const endD = `${y}-${pad(m)}-${pad(lastDay(y,m))}`;
-      let sy=y, sm=m-11; while(sm<1){sm+=12;sy--;}
-      const startD = `${sy}-${pad(sm)}-01`;
-      const [rv, ex] = await Promise.all([
-        sb.from('daily_revenue').select('date,amount,channel_id').eq('corporation_id',corpId).gte('date',startD).lte('date',endD),
-        sb.from('expenses').select('date,amount,category_id,status').eq('corporation_id',corpId).gte('date',startD).lte('date',endD),
-      ]);
-      if(dead) return;
-      const pts=[]; let cy=sy, cm=sm;
-      for(let i=0;i<12;i++){
-        const pref = `${cy}-${pad(cm)}`;
-        const raw2 = { revenue:(rv.data||[]).filter(r=>r.date.startsWith(pref)),
-                       expenses:(ex.data||[]).filter(r=>r.date.startsWith(pref)), inputs:[] };
-        const p = computePL(mt, raw2);
-        if(p.totalSales!==0 || p.totalExpenses!==0) pts.push({label:`${pad(cm)}`, sales:p.totalSales, net:p.net, payrollPct:p.payrollPct, suppliesPct:p.suppliesPct});
-        cm++; if(cm>12){cm=1;cy++;}
+      const mt = await loadCorpMeta(corpId); if(dead) return; setMeta(mt);
+
+      if(view==='month'){
+        const [raw, rawLY] = await Promise.all([loadMonthRaw(corpId,y,m), loadMonthRaw(corpId,y-1,m)]);
+        if(dead) return;
+        setPl(computePL(mt,raw));
+        const ply=computePL(mt,rawLY);
+        setYoy((ply.totalSales!==0||ply.totalExpenses!==0)?ply:null);
+        // 12-month trend ending this month
+        const endD=`${y}-${pad(m)}-${pad(lastDay(y,m))}`; let sy=y,sm=m-11; while(sm<1){sm+=12;sy--;}
+        const startD=`${sy}-${pad(sm)}-01`;
+        const [rv,ex,rt]=await Promise.all([
+          sb.from('daily_revenue').select('date,amount,channel_id,source').eq('corporation_id',corpId).gte('date',startD).lte('date',endD),
+          sb.from('expenses').select('date,amount,category_id,status,source').eq('corporation_id',corpId).gte('date',startD).lte('date',endD),
+          sb.from('rate_schedule').select('rate_type,rate,effective_from').eq('corporation_id',corpId),
+        ]);
+        if(dead) return;
+        const pts=[]; let cy=sy,cm=sm;
+        for(let i=0;i<12;i++){ const pref=`${cy}-${pad(cm)}`;
+          const raw2={revenue:(rv.data||[]).filter(r=>r.date.startsWith(pref)),expenses:(ex.data||[]).filter(r=>r.date.startsWith(pref)),inputs:[],rates:(rt.data||[]),monthKey:pref};
+          const p=computePL(mt,raw2);
+          if(p.totalSales!==0||p.totalExpenses!==0) pts.push({label:pad(cm),sales:p.totalSales,net:p.net,payrollPct:p.payrollPct,suppliesPct:p.suppliesPct});
+          cm++; if(cm>12){cm=1;cy++;} }
+        setTrend(pts);
       }
-      setTrend(pts); setLoading(false);
+      else if(view==='daily'){
+        const [raw, rawLY] = await Promise.all([loadMonthRaw(corpId,y,m), loadMonthRaw(corpId,y-1,m)]);
+        if(dead) return;
+        setPl(computePL(mt,raw));
+        const chBy={}; mt.channels.forEach(c=>chBy[c.id]=c);
+        const catBy={}; mt.categories.forEach(c=>catBy[c.id]=c);
+        const buildDays=(rawX, yy)=>{
+          const nD=lastDay(yy,m); const days={};
+          for(let d=1;d<=nD;d++) days[d]={rev:0,exp:0,items:[]};
+          rawX.revenue.forEach(r=>{ const ch=chBy[r.channel_id]; if(!ch||!ch.counts_in_total)return;
+            const d=parseInt(r.date.slice(8)); if(days[d]) days[d].rev+=Number(r.amount)*Number(ch.total_multiplier||1); });
+          const hasBoard=rawX.expenses.some(e=>e.source==='board');
+          rawX.expenses.forEach(e=>{ if(e.status!=='confirmed')return; if(hasBoard&&e.source!=='board')return;
+            const d=parseInt(e.date.slice(8)); if(days[d]){ days[d].exp+=Number(e.amount);
+              days[d].items.push({cat:(catBy[e.category_id]||{}).name||'?', amount:Number(e.amount), payee:e.payee, memo:e.memo, source:e.source, by:e.entered_by, slack_user:e.slack_user}); } });
+          return days;
+        };
+        const cur=buildDays(raw,y), prev=buildDays(rawLY,y-1);
+        const nD=lastDay(y,m); const out=[];
+        for(let d=1;d<=nD;d++){ const c=cur[d], p=prev[d]||{rev:0,exp:0,items:[]};
+          out.push({ d, date:`${y}-${pad(m)}-${pad(d)}`, rev:c.rev, exp:c.exp, items:c.items,
+            lyRev:p.rev, lyExp:p.exp }); }
+        setDayRows(out);
+      }
+      else if(view==='year'){
+        const yr = await loadYearPL(corpId,mt,y); if(dead) return; setYearMonths(yr);
+      }
+      else if(view==='compare'){
+        const [a,b,c] = await Promise.all([loadYearPL(corpId,mt,y), loadYearPL(corpId,mt,y-1), loadYearPL(corpId,mt,y-2)]);
+        if(dead) return; setYearMonths(a); setYearMonthsPrev(b); setYearMonthsPrev2(c);
+      }
+      else if(view==='alltime'){
+        const at = await loadAllTimePL(corpId,mt); if(dead) return; setAllTime(at);
+      }
+      setLoading(false);
     })();
     return ()=>{dead=true};
-  },[corpId,y,m]);
+  },[corpId,y,m,view]);
 
   if(!editable.length) return <div className="card">No corporations available for your account.</div>;
+
+  const VIEWS=[['month','Month'],['daily','Daily'],['year','Year'],['compare','3-Year'],['alltime','All-Time']];
+  const showPicker = view!=='alltime';
   return <div>
     <div className="page-head">
-      <div><div className="eyebrow">Insights</div><h2>Monthly P&L</h2></div>
+      <div><div className="eyebrow">Insights</div><h2>{view==='daily'?'Daily Breakdown':view==='year'?'Yearly P&L':view==='compare'?'Three-Year Comparison':view==='alltime'?'All-Time':'Monthly P&L'}</h2></div>
       <div style={{display:'flex',gap:14,alignItems:'center',flexWrap:'wrap'}}>
         <CorpTabs corps={editable} sel={corpId} onSel={setCorpId}/>
-        <MonthPick y={y} m={m} onChange={(a,b)=>{setY(a);setM(b);}}/>
+        {showPicker && (view==='year'||view==='compare'
+          ? <YearPick y={y} onChange={setY}/>
+          : <MonthPick y={y} m={m} onChange={(a,b)=>{setY(a);setM(b);}}/>)}
       </div>
     </div>
-    {loading || !pl ? <Spinner/> : <>
-      <div className="kpis">
-        <div className="kpi"><div className="k-lbl">Total Sales</div><div className="k-val">{fmt$(pl.totalSales)}</div>
-          <div className="k-sub"><YoYDelta cur={pl.totalSales} prev={yoy&&yoy.totalSales}/></div></div>
-        <div className="kpi"><div className="k-lbl">Total Expenses</div><div className="k-val">{fmt$(pl.totalExpenses)}</div>
-          <div className="k-sub"><YoYDelta cur={pl.totalExpenses} prev={yoy&&yoy.totalExpenses}/></div></div>
-        <div className="kpi"><div className="k-lbl">Net Profit</div><div className={'k-val '+(pl.net>=0?'pos':'neg')}>{fmt$(pl.net)}</div>
-          <div className="k-sub">Margin {fmtPct(pl.margin)} · <YoYDelta cur={pl.net} prev={yoy&&yoy.net}/></div></div>
-        <div className="kpi"><div className="k-lbl">Payroll %</div><div className="k-val">{fmtPct(pl.payrollPct)}
-          <TrendArrow cur={pl.payrollPct} prev={trend.length>1?trend[trend.length-2].payrollPct:null} higherIsBad={true}/></div>
-          {yoy && <div className="k-sub">Last year {fmtPct(yoy.payrollPct)}</div>}</div>
-        <div className="kpi"><div className="k-lbl">Supplies %</div><div className="k-val">{fmtPct(pl.suppliesPct)}
-          <TrendArrow cur={pl.suppliesPct} prev={trend.length>1?trend[trend.length-2].suppliesPct:null} higherIsBad={true}/></div>
-          {yoy && <div className="k-sub">Last year {fmtPct(yoy.suppliesPct)}</div>}</div>
-      </div>
+    <div className="viewbar">
+      {VIEWS.map(([id,label])=>
+        <button key={id} className={'viewtab'+(view===id?' on':'')} onClick={()=>setView(id)}>{label}</button>)}
+    </div>
+    {loading ? <Spinner/> :
+      view==='month'   ? <MonthView pl={pl} yoy={yoy} trend={trend} y={y} m={m}/> :
+      view==='daily'   ? <DailyView rows={dayRows} pl={pl} y={y} m={m}/> :
+      view==='year'    ? <YearView months={yearMonths} y={y}/> :
+      view==='alltime' ? <AllTimeView data={allTime}/> :
+                         <CompareView cur={yearMonths} prev={yearMonthsPrev} prev2={yearMonthsPrev2} y={y}/>}
+  </div>;
+}
+
+function YearPick({y,onChange}){
+  return <div style={{display:'flex',alignItems:'center',gap:8}}>
+    <button className="btn btn-sm" onClick={()=>onChange(y-1)}>‹</button>
+    <span className="mono" style={{minWidth:48,textAlign:'center'}}>{y}</span>
+    <button className="btn btn-sm" onClick={()=>onChange(y+1)}>›</button>
+  </div>;
+}
+
+// ---- MONTH VIEW (overview + revenue + expense sections) ----
+// Generate plain-language findings explaining what changed vs last year.
+function analyzeChange(pl, yoy){
+  if(!yoy) return [];
+  const out=[];
+  const pct=(a,b)=> b ? (a-b)/b : null;
+  // net profit direction
+  const netD=pct(pl.net, yoy.net);
+  if(yoy.net!==0){
+    if(pl.net>yoy.net) out.push({kind:'good', text:`Net profit up ${fmtPct(Math.abs(netD))} vs last year (${fmt$(yoy.net,0)} → ${fmt$(pl.net,0)}).`});
+    else if(pl.net<yoy.net) out.push({kind:'bad', text:`Net profit down ${fmtPct(Math.abs(netD))} vs last year (${fmt$(yoy.net,0)} → ${fmt$(pl.net,0)}).`});
+  }
+  // margin
+  if(pl.margin!=null && yoy.margin!=null){
+    const dd=(pl.margin-yoy.margin)*100;
+    if(Math.abs(dd)>=0.5) out.push({kind:dd>0?'good':'bad', text:`Net margin ${dd>0?'improved':'fell'} ${Math.abs(dd).toFixed(1)} points (${fmtPct(yoy.margin)} → ${fmtPct(pl.margin)}).`});
+  }
+  // payroll ratio
+  if(pl.payrollPct!=null && yoy.payrollPct!=null){
+    const dd=(pl.payrollPct-yoy.payrollPct)*100;
+    if(Math.abs(dd)>=1) out.push({kind:dd>0?'bad':'good', text:`Payroll is ${Math.abs(dd).toFixed(1)} points ${dd>0?'higher':'lower'} as a share of sales (${fmtPct(yoy.payrollPct)} → ${fmtPct(pl.payrollPct)}).`});
+  }
+  // supplies ratio
+  if(pl.suppliesPct!=null && yoy.suppliesPct!=null){
+    const dd=(pl.suppliesPct-yoy.suppliesPct)*100;
+    if(Math.abs(dd)>=1) out.push({kind:dd>0?'bad':'good', text:`Supplies / food cost is ${Math.abs(dd).toFixed(1)} points ${dd>0?'higher':'lower'} as a share of sales (${fmtPct(yoy.suppliesPct)} → ${fmtPct(pl.suppliesPct)}).`});
+  }
+  // channel mix: delivery share and cash share
+  const shareOf=(plx, codes)=>{ if(!plx.totalSales) return null;
+    const s=plx.channelRows.filter(c=>codes.includes(c.code)).reduce((a,c)=>a+c.amount,0);
+    return s/plx.totalSales; };
+  const delNow=shareOf(pl,['uber','doordash','grubhub']), delLy=shareOf(yoy,['uber','doordash','grubhub']);
+  if(delNow!=null && delLy!=null){ const dd=(delNow-delLy)*100;
+    if(Math.abs(dd)>=1.5) out.push({kind:'info', text:`Delivery is ${Math.abs(dd).toFixed(1)} points ${dd>0?'more':'less'} of sales than last year (${fmtPct(delLy)} → ${fmtPct(delNow)}).`}); }
+  const cashNow=shareOf(pl,['cash']), cashLy=shareOf(yoy,['cash']);
+  if(cashNow!=null && cashLy!=null){ const dd=(cashNow-cashLy)*100;
+    if(Math.abs(dd)>=1.5) out.push({kind:'info', text:`Cash is ${Math.abs(dd).toFixed(1)} points ${dd>0?'more':'less'} of sales than last year (${fmtPct(cashLy)} → ${fmtPct(cashNow)}).`}); }
+  // biggest expense category movers (by share of sales)
+  if(pl.totalSales && yoy.totalSales){
+    const lyCat={}; yoy.categoryRows.forEach(c=>lyCat[c.code]=c.amount);
+    yoy.ruleRows.forEach(r=>lyCat[r.code]=r.amount);
+    const nowRows=[...pl.categoryRows.map(c=>({code:c.code,name:c.name,amount:c.amount})),
+                  ...pl.ruleRows.map(r=>({code:r.code,name:r.name,amount:r.amount}))];
+    const movers=nowRows.map(c=>{ const lyShare=(lyCat[c.code]||0)/yoy.totalSales; const nowShare=c.amount/pl.totalSales;
+      return {name:c.name, dd:(nowShare-lyShare)*100}; })
+      .filter(x=>Math.abs(x.dd)>=1 && !['payroll','supplies','supplies_food'].includes(x.name.toLowerCase()))
+      .sort((a,b)=>Math.abs(b.dd)-Math.abs(a.dd)).slice(0,2);
+    movers.forEach(mv=> out.push({kind:mv.dd>0?'bad':'good',
+      text:`${mv.name} is ${Math.abs(mv.dd).toFixed(1)} points ${mv.dd>0?'higher':'lower'} as a share of sales than last year.`}));
+  }
+  return out;
+}
+
+function MonthView({pl, yoy, trend, y, m}){
+  const [tab,setTab]=useState('overview');
+  if(!pl) return <Spinner/>;
+  return <>
+    <div className="kpis">
+      <div className="kpi"><div className="k-lbl">Total Sales</div><div className="k-val">{fmt$(pl.totalSales)}</div>
+        <div className="k-sub"><YoYDelta cur={pl.totalSales} prev={yoy&&yoy.totalSales}/></div></div>
+      <div className="kpi"><div className="k-lbl">Total Expenses</div><div className="k-val">{fmt$(pl.totalExpenses)}</div>
+        <div className="k-sub"><YoYDelta cur={pl.totalExpenses} prev={yoy&&yoy.totalExpenses}/></div></div>
+      <div className="kpi"><div className="k-lbl">Net Profit</div><div className={'k-val '+(pl.net>=0?'pos':'neg')}>{fmt$(pl.net)}</div>
+        <div className="k-sub">Margin {fmtPct(pl.margin)} · <YoYDelta cur={pl.net} prev={yoy&&yoy.net}/></div></div>
+      <div className="kpi"><div className="k-lbl">Payroll %</div><div className="k-val">{fmtPct(pl.payrollPct)}
+        <TrendArrow cur={pl.payrollPct} prev={trend.length>1?trend[trend.length-2].payrollPct:null} higherIsBad={true}/></div>
+        {yoy && <div className="k-sub">Last year {fmtPct(yoy.payrollPct)}</div>}</div>
+      <div className="kpi"><div className="k-lbl">Supplies %</div><div className="k-val">{fmtPct(pl.suppliesPct)}
+        <TrendArrow cur={pl.suppliesPct} prev={trend.length>1?trend[trend.length-2].suppliesPct:null} higherIsBad={true}/></div>
+        {yoy && <div className="k-sub">Last year {fmtPct(yoy.suppliesPct)}</div>}</div>
+    </div>
+
+    <div className="subtabs">
+      {[['overview','Overview'],['revenue','Revenue'],['expense','Expenses']].map(([id,l])=>
+        <button key={id} className={'subtab'+(tab===id?' on':'')} onClick={()=>setTab(id)}>{l}</button>)}
+    </div>
+
+    {tab==='overview' && <>
+      {yoy && (()=>{ const findings=analyzeChange(pl,yoy);
+        return findings.length>0 && <div className="card">
+          <h3>What Changed vs {MONTHS[m-1]} {y-1}</h3>
+          <div className="findings">
+            {findings.map((f,i)=><div key={i} className={'finding '+f.kind}>
+              <span className="fdot"></span><span>{f.text}</span></div>)}
+          </div>
+        </div>; })()}
       <div className="card"><h3>12-Month Trend</h3><TrendChart points={trend}/></div>
       <div className="grid2">
         <div className="card"><h3>Cost Ratios · 12 Months</h3><RatioChart points={trend}/>
@@ -561,50 +790,318 @@ function Dashboard({corps, canEditIds}){
           <table className="t">
             <thead><tr><th></th><th className="num">{y}</th><th className="num">{y-1}</th><th className="num">Change</th></tr></thead>
             <tbody>
-              <tr><td>Sales</td><td className="num">{fmt$(pl.totalSales,0)}</td><td className="num">{fmt$(yoy.totalSales,0)}</td>
-                <td className="num"><YoYDelta cur={pl.totalSales} prev={yoy.totalSales}/></td></tr>
-              <tr><td>Expenses</td><td className="num">{fmt$(pl.totalExpenses,0)}</td><td className="num">{fmt$(yoy.totalExpenses,0)}</td>
-                <td className="num"><YoYDelta cur={pl.totalExpenses} prev={yoy.totalExpenses}/></td></tr>
-              <tr><td>Net Profit</td><td className={'num '+(pl.net>=0?'pos':'neg')}>{fmt$(pl.net,0)}</td>
-                <td className={'num '+(yoy.net>=0?'pos':'neg')}>{fmt$(yoy.net,0)}</td>
-                <td className="num"><YoYDelta cur={pl.net} prev={yoy.net}/></td></tr>
-              <tr><td>Payroll %</td><td className="num">{fmtPct(pl.payrollPct)}</td><td className="num">{fmtPct(yoy.payrollPct)}</td>
-                <td className="num"><TrendArrow cur={pl.payrollPct} prev={yoy.payrollPct} higherIsBad={true}/></td></tr>
-              <tr><td>Supplies %</td><td className="num">{fmtPct(pl.suppliesPct)}</td><td className="num">{fmtPct(yoy.suppliesPct)}</td>
-                <td className="num"><TrendArrow cur={pl.suppliesPct} prev={yoy.suppliesPct} higherIsBad={true}/></td></tr>
+              <tr><td>Sales</td><td className="num">{fmt$(pl.totalSales,0)}</td><td className="num">{fmt$(yoy.totalSales,0)}</td><td className="num"><YoYDelta cur={pl.totalSales} prev={yoy.totalSales}/></td></tr>
+              <tr><td>Expenses</td><td className="num">{fmt$(pl.totalExpenses,0)}</td><td className="num">{fmt$(yoy.totalExpenses,0)}</td><td className="num"><YoYDelta cur={pl.totalExpenses} prev={yoy.totalExpenses}/></td></tr>
+              <tr><td>Net Profit</td><td className={'num '+(pl.net>=0?'pos':'neg')}>{fmt$(pl.net,0)}</td><td className={'num '+(yoy.net>=0?'pos':'neg')}>{fmt$(yoy.net,0)}</td><td className="num"><YoYDelta cur={pl.net} prev={yoy.net}/></td></tr>
+              <tr><td>Payroll %</td><td className="num">{fmtPct(pl.payrollPct)}</td><td className="num">{fmtPct(yoy.payrollPct)}</td><td className="num"><TrendArrow cur={pl.payrollPct} prev={yoy.payrollPct} higherIsBad={true}/></td></tr>
+              <tr><td>Supplies %</td><td className="num">{fmtPct(pl.suppliesPct)}</td><td className="num">{fmtPct(yoy.suppliesPct)}</td><td className="num"><TrendArrow cur={pl.suppliesPct} prev={yoy.suppliesPct} higherIsBad={true}/></td></tr>
             </tbody>
           </table>}
         </div>
       </div>
-      <div className="grid2">
-        <div className="card">
-          <h3>Revenue Channels</h3>
-          <table className="t"><tbody>
-            {pl.channelRows.map(c=><tr key={c.id}>
-              <td>{c.name} {!c.counts_in_total && <span className="badge">Excluded</span>}
-                {Number(c.total_multiplier)!==1 && c.counts_in_total && <span className="badge">x{c.total_multiplier}</span>}</td>
-              <td className="num">{fmt$(c.amount)}</td></tr>)}
-            <tr className="total"><td>Total Sales</td><td className="num">{fmt$(pl.totalSales)}</td></tr>
-          </tbody></table>
-        </div>
-        <div className="card">
-          <h3>Expenses</h3>
-          <table className="t"><tbody>
-            {pl.categoryRows.map(c=><tr key={c.id}><td>{c.name}</td><td className="num">{fmt$(c.amount)}</td></tr>)}
-            {pl.ruleRows.map(r=><tr key={r.code}><td>{r.name} <span className="badge gold">Auto</span></td><td className="num">{fmt$(r.amount)}</td></tr>)}
-            <tr className="total"><td>Total Expenses</td><td className="num">{fmt$(pl.totalExpenses)}</td></tr>
-            <tr className="total"><td>Net Profit</td><td className={'num '+(pl.net>=0?'pos':'neg')}>{fmt$(pl.net)}</td></tr>
-          </tbody></table>
-          {pl.dist.length>0 && <>
-            <hr className="divider"/>
-            <table className="t"><tbody>
-              {pl.dist.map(d=><tr key={d.holder}><td>{d.holder} <span className="faint">({d.pct}%)</span></td><td className="num">{fmt$(d.amount)}</td></tr>)}
-            </tbody></table>
-          </>}
-        </div>
-      </div>
     </>}
+
+    {tab==='revenue' && <div className="card">
+      <h3>Revenue Channels · {MONTHS[m-1]} {y}</h3>
+      <table className="t"><tbody>
+        {pl.channelRows.map(c=><tr key={c.id}>
+          <td>{c.name} {!c.counts_in_total && <span className="badge">Excluded</span>}
+            {Number(c.total_multiplier)!==1 && c.counts_in_total && <span className="badge">x{c.total_multiplier}</span>}</td>
+          <td className="num">{fmt$(c.amount)}</td>
+          <td className="num faint" style={{width:70}}>{pl.totalSales?fmtPct(c.amount/pl.totalSales):'-'}</td></tr>)}
+        <tr className="total"><td>Total Sales</td><td className="num">{fmt$(pl.totalSales)}</td><td></td></tr>
+      </tbody></table>
+    </div>}
+
+    {tab==='expense' && <div className="card">
+      <h3>Expenses · {MONTHS[m-1]} {y}</h3>
+      <table className="t"><tbody>
+        {pl.categoryRows.map(c=><tr key={c.id}><td>{c.name}</td><td className="num">{fmt$(c.amount)}</td>
+          <td className="num faint" style={{width:70}}>{pl.totalSales?fmtPct(c.amount/pl.totalSales):'-'}</td></tr>)}
+        {pl.ruleRows.map(r=><tr key={r.code}><td>{r.name} <span className="badge gold">Auto</span></td><td className="num">{fmt$(r.amount)}</td>
+          <td className="num faint">{pl.totalSales?fmtPct(r.amount/pl.totalSales):'-'}</td></tr>)}
+        <tr className="total"><td>Total Expenses</td><td className="num">{fmt$(pl.totalExpenses)}</td><td></td></tr>
+        <tr className="total"><td>Net Profit</td><td className={'num '+(pl.net>=0?'pos':'neg')}>{fmt$(pl.net)}</td><td></td></tr>
+      </tbody></table>
+      {pl.dist.length>0 && <><hr className="divider"/>
+        <table className="t"><tbody>
+          {pl.dist.map(d=><tr key={d.holder}><td>{d.holder} <span className="faint">({d.pct}%)</span></td><td className="num">{fmt$(d.amount)}</td><td></td></tr>)}
+        </tbody></table></>}
+    </div>}
+  </>;
+}
+
+// ---- DAILY VIEW (per-day rev/exp/net, vs last year, with expense detail) ----
+function DailyView({rows, pl, y, m}){
+  const [open, setOpen] = useState(null);
+  if(!rows.length) return <div className="card faint">No data for {MONTHS[m-1]} {y}.</div>;
+  const tot=rows.reduce((a,r)=>({rev:a.rev+r.rev,exp:a.exp+r.exp,lyRev:a.lyRev+r.lyRev,lyExp:a.lyExp+r.lyExp}),{rev:0,exp:0,lyRev:0,lyExp:0});
+  const net=tot.rev-tot.exp, lyNet=tot.lyRev-tot.lyExp;
+  return <>
+    <div className="kpis">
+      <div className="kpi"><div className="k-lbl">Sales</div><div className="k-val">{fmt$(tot.rev)}</div>
+        <div className="k-sub"><YoYDelta cur={tot.rev} prev={tot.lyRev}/> vs {y-1}</div></div>
+      <div className="kpi"><div className="k-lbl">Expenses</div><div className="k-val">{fmt$(tot.exp)}</div>
+        <div className="k-sub"><YoYDelta cur={tot.exp} prev={tot.lyExp}/> vs {y-1}</div></div>
+      <div className="kpi"><div className="k-lbl">Net</div><div className={'k-val '+(net>=0?'pos':'neg')}>{fmt$(net)}</div>
+        <div className="k-sub"><YoYDelta cur={net} prev={lyNet}/> vs {y-1}</div></div>
+    </div>
+    <div className="card">
+      <h3>{MONTHS[m-1]} {y} · Day by Day <span className="faint" style={{fontWeight:400,fontSize:13}}>vs {y-1}</span></h3>
+      <table className="t">
+        <thead><tr><th>Date</th><th className="num">Sales</th><th className="num faint">{y-1}</th>
+          <th className="num">Expenses</th><th className="num faint">{y-1}</th><th className="num">Net</th><th></th></tr></thead>
+        <tbody>
+          {rows.map(r=>{ const dnet=r.rev-r.exp; const has=r.rev!==0||r.exp!==0; const isOpen=open===r.d;
+            return <React.Fragment key={r.d}>
+              <tr style={{opacity:has?1:0.35}}>
+                <td className="mono">{pad(r.d)} {DOW[new Date(r.date+'T00:00').getDay()]}</td>
+                <td className="num mono">{r.rev?fmt$(r.rev):'-'}</td>
+                <td className="num mono faint">{r.lyRev?fmt$(r.lyRev,0):'-'}</td>
+                <td className="num mono">{r.exp?fmt$(r.exp):'-'}</td>
+                <td className="num mono faint">{r.lyExp?fmt$(r.lyExp,0):'-'}</td>
+                <td className={'num mono '+(dnet>0?'pos':dnet<0?'neg':'')}>{has?fmt$(dnet):'-'}</td>
+                <td style={{width:40,textAlign:'right'}}>
+                  {r.items.length>0 && <button className="btn btn-sm" onClick={()=>setOpen(isOpen?null:r.d)}>{isOpen?'▲':'▾'}</button>}
+                </td>
+              </tr>
+              {isOpen && r.items.length>0 && <tr><td colSpan={7} style={{background:'var(--panel2)',padding:0}}>
+                <table className="t" style={{margin:0}}><tbody>
+                  {r.items.map((it,i)=><tr key={i}>
+                    <td style={{paddingLeft:20}}>{it.cat} <span className="badge" style={{background:'var(--panel)',fontSize:10}}>{it.source}</span></td>
+                    <td className="faint" style={{fontSize:12.5}}>{it.memo||''}{it.payee?` · ${it.payee}`:''}{it.slack_user?` · @${it.slack_user}`:''}</td>
+                    <td className="num mono" style={{width:110}}>{fmt$(it.amount)}</td>
+                  </tr>)}
+                </tbody></table>
+              </td></tr>}
+            </React.Fragment>; })}
+          <tr className="total"><td>Total</td><td className="num">{fmt$(tot.rev)}</td><td className="num faint">{fmt$(tot.lyRev,0)}</td>
+            <td className="num">{fmt$(tot.exp)}</td><td className="num faint">{fmt$(tot.lyExp,0)}</td>
+            <td className={'num '+(net>=0?'pos':'neg')}>{fmt$(net)}</td><td></td></tr>
+        </tbody>
+      </table>
+      <div className="hint">Tap the arrow on a day to see every expense (category, note, payee, source) for auditing who spent what.</div>
+    </div>
+  </>;
+}
+
+// ---- YEAR VIEW (12 months across) ----
+function YearView({months, y}){
+  const tot=months.reduce((a,x)=>({s:a.s+x.pl.totalSales,e:a.e+x.pl.totalExpenses,n:a.n+x.pl.net}),{s:0,e:0,n:0});
+  const trendPts=months.filter(x=>x.pl.totalSales!==0||x.pl.totalExpenses!==0)
+    .map(x=>({label:pad(x.m),sales:x.pl.totalSales,net:x.pl.net,payrollPct:x.pl.payrollPct,suppliesPct:x.pl.suppliesPct}));
+  return <>
+    <div className="kpis">
+      <div className="kpi"><div className="k-lbl">{y} Sales</div><div className="k-val">{fmt$(tot.s)}</div></div>
+      <div className="kpi"><div className="k-lbl">{y} Expenses</div><div className="k-val">{fmt$(tot.e)}</div></div>
+      <div className="kpi"><div className="k-lbl">{y} Net Profit</div><div className={'k-val '+(tot.n>=0?'pos':'neg')}>{fmt$(tot.n)}</div>
+        <div className="k-sub">Margin {fmtPct(tot.s?tot.n/tot.s:null)}</div></div>
+    </div>
+    <div className="card"><h3>{y} by Month</h3><TrendChart points={trendPts}/></div>
+    <div className="card">
+      <h3>{y} Monthly P&L</h3>
+      <table className="t">
+        <thead><tr><th>Month</th><th className="num">Sales</th><th className="num">Expenses</th><th className="num">Net</th><th className="num">Margin</th></tr></thead>
+        <tbody>
+          {months.map(x=>{ const has=x.pl.totalSales!==0||x.pl.totalExpenses!==0;
+            return <tr key={x.m} style={{opacity:has?1:0.35}}>
+              <td>{MONTHS[x.m-1]}</td>
+              <td className="num mono">{has?fmt$(x.pl.totalSales,0):'-'}</td>
+              <td className="num mono">{has?fmt$(x.pl.totalExpenses,0):'-'}</td>
+              <td className={'num mono '+(x.pl.net>=0?'pos':'neg')}>{has?fmt$(x.pl.net,0):'-'}</td>
+              <td className="num mono faint">{has?fmtPct(x.pl.margin):'-'}</td>
+            </tr>; })}
+          <tr className="total"><td>Total</td><td className="num">{fmt$(tot.s,0)}</td><td className="num">{fmt$(tot.e,0)}</td>
+            <td className={'num '+(tot.n>=0?'pos':'neg')}>{fmt$(tot.n,0)}</td><td className="num">{fmtPct(tot.s?tot.n/tot.s:null)}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </>;
+}
+
+// ---- COMPARE VIEW (three years, month by month) ----
+function CompareView({cur, prev, prev2, y}){
+  const sum=arr=>arr.reduce((a,x)=>({s:a.s+x.pl.totalSales,e:a.e+x.pl.totalExpenses,n:a.n+x.pl.net}),{s:0,e:0,n:0});
+  const tc=sum(cur), tp=sum(prev), tp2=sum(prev2||[]);
+  const prevBy={}; prev.forEach(x=>prevBy[x.m]=x.pl);
+  const prev2By={}; (prev2||[]).forEach(x=>prev2By[x.m]=x.pl);
+  const has2=(prev2||[]).some(x=>x.pl.totalSales!==0||x.pl.totalExpenses!==0);
+  return <>
+    <div className="kpis">
+      <div className="kpi"><div className="k-lbl">{y} Sales</div><div className="k-val">{fmt$(tc.s,0)}</div>
+        <div className="k-sub"><YoYDelta cur={tc.s} prev={tp.s}/> vs {y-1}</div></div>
+      <div className="kpi"><div className="k-lbl">{y} Expenses</div><div className="k-val">{fmt$(tc.e,0)}</div>
+        <div className="k-sub"><YoYDelta cur={tc.e} prev={tp.e}/> vs {y-1}</div></div>
+      <div className="kpi"><div className="k-lbl">{y} Net</div><div className={'k-val '+(tc.n>=0?'pos':'neg')}>{fmt$(tc.n,0)}</div>
+        <div className="k-sub"><YoYDelta cur={tc.n} prev={tp.n}/> vs {y-1}</div></div>
+    </div>
+    <div className="card">
+      <h3>Sales by Month · {y-2}–{y}</h3>
+      <MultiYearChart series={[
+        has2 && {label:String(y-2), months:prev2, color:'#6b6455'},
+        {label:String(y-1), months:prev, color:'#a08a4a'},
+        {label:String(y), months:cur, color:'#d9b441'},
+      ].filter(Boolean)}/>
+    </div>
+    <div className="card">
+      <h3>Annual Totals</h3>
+      <table className="t">
+        <thead><tr><th>Year</th><th className="num">Sales</th><th className="num">Expenses</th><th className="num">Net</th><th className="num">Margin</th></tr></thead>
+        <tbody>
+          {has2 && <tr><td>{y-2}</td><td className="num mono">{fmt$(tp2.s,0)}</td><td className="num mono">{fmt$(tp2.e,0)}</td>
+            <td className={'num mono '+(tp2.n>=0?'pos':'neg')}>{fmt$(tp2.n,0)}</td><td className="num mono faint">{fmtPct(tp2.s?tp2.n/tp2.s:null)}</td></tr>}
+          <tr><td>{y-1}</td><td className="num mono">{fmt$(tp.s,0)}</td><td className="num mono">{fmt$(tp.e,0)}</td>
+            <td className={'num mono '+(tp.n>=0?'pos':'neg')}>{fmt$(tp.n,0)}</td><td className="num mono faint">{fmtPct(tp.s?tp.n/tp.s:null)}</td></tr>
+          <tr style={{fontWeight:600}}><td>{y}</td><td className="num mono">{fmt$(tc.s,0)}</td><td className="num mono">{fmt$(tc.e,0)}</td>
+            <td className={'num mono '+(tc.n>=0?'pos':'neg')}>{fmt$(tc.n,0)}</td><td className="num mono">{fmtPct(tc.s?tc.n/tc.s:null)}</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div className="card">
+      <h3>Sales · Month by Month</h3>
+      <table className="t">
+        <thead><tr><th>Month</th>{has2 && <th className="num faint">{y-2}</th>}<th className="num faint">{y-1}</th><th className="num">{y}</th><th className="num">vs {y-1}</th></tr></thead>
+        <tbody>
+          {cur.map(x=>{ const p=prevBy[x.m]||{totalSales:0}; const p2=prev2By[x.m]||{totalSales:0};
+            const anyv=x.pl.totalSales!==0||p.totalSales!==0||p2.totalSales!==0;
+            return <tr key={x.m} style={{opacity:anyv?1:0.35}}>
+              <td>{MONTHS[x.m-1].slice(0,3)}</td>
+              {has2 && <td className="num mono faint">{fmt$(p2.totalSales,0)}</td>}
+              <td className="num mono faint">{fmt$(p.totalSales,0)}</td>
+              <td className="num mono">{fmt$(x.pl.totalSales,0)}</td>
+              <td className="num"><YoYDelta cur={x.pl.totalSales} prev={p.totalSales}/></td>
+            </tr>; })}
+          <tr className="total"><td>Total</td>{has2 && <td className="num">{fmt$(tp2.s,0)}</td>}<td className="num">{fmt$(tp.s,0)}</td>
+            <td className="num">{fmt$(tc.s,0)}</td><td className="num"><YoYDelta cur={tc.s} prev={tp.s}/></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </>;
+}
+
+// simple multi-year bar chart (sales by month, grouped)
+function MultiYearChart({series}){
+  if(!series.length) return <div className="faint">No data.</div>;
+  const max=Math.max(1,...series.flatMap(s=>s.months.map(x=>x.pl.totalSales)));
+  const H=170, W=760, pad=30, bw=W/12;
+  return <div style={{overflowX:'auto'}}>
+    <svg viewBox={`0 0 ${W} ${H+30}`} style={{width:'100%',minWidth:640}}>
+      {[0.25,0.5,0.75,1].map(f=><line key={f} x1={pad} x2={W} y1={H-H*f} y2={H-H*f} stroke="var(--border)" strokeWidth="0.5"/>)}
+      {series[0].months.map((_,i)=>{
+        const gw=(bw-8)/series.length;
+        return series.map((s,si)=>{
+          const v=s.months[i].pl.totalSales; const h=max?v/max*H:0;
+          return <rect key={s.label+i} x={pad+i*bw+4+si*gw} y={H-h} width={gw-1} height={h} fill={s.color} rx="1"/>;
+        });
+      })}
+      {MONTHS.map((mn,i)=><text key={i} x={pad+i*bw+bw/2} y={H+14} fill="var(--text2)" fontSize="9" textAnchor="middle">{mn.slice(0,1)}</text>)}
+    </svg>
+    <div style={{display:'flex',gap:16,marginTop:8,fontSize:12}}>
+      {series.map(s=><span key={s.label} style={{display:'flex',alignItems:'center',gap:6}}>
+        <span style={{width:12,height:12,background:s.color,borderRadius:2,display:'inline-block'}}></span>{s.label}</span>)}
+    </div>
   </div>;
+}
+
+// ---- ALL-TIME VIEW (entire history: growth, trajectory, insights) ----
+function AllTimeView({data}){
+  if(!data || !data.years.length) return <div className="card faint">No history yet.</div>;
+  const years=data.years;
+  const life=years.reduce((a,yr)=>({s:a.s+yr.totals.s,e:a.e+yr.totals.e,n:a.n+yr.totals.n}),{s:0,e:0,n:0});
+  // only "complete-ish" years for growth (have any data)
+  const active=years.filter(yr=>yr.totals.s!==0||yr.totals.e!==0);
+  // best / worst by net
+  const withData=active.slice();
+  const bestYear=withData.reduce((a,b)=>b.totals.n>a.totals.n?b:a, withData[0]);
+  const bestSalesYear=withData.reduce((a,b)=>b.totals.s>a.totals.s?b:a, withData[0]);
+  // year-over-year sales growth (last full transition)
+  const insights=allTimeInsights(active);
+  // monthly series across all time for the trend line
+  const monthlySeries=[];
+  years.forEach(yr=>yr.months.forEach(mo=>{
+    if(mo.pl.totalSales!==0||mo.pl.totalExpenses!==0)
+      monthlySeries.push({label:`${String(yr.y).slice(2)}/${pad(mo.m)}`, sales:mo.pl.totalSales, net:mo.pl.net});
+  }));
+
+  return <>
+    <div className="kpis">
+      <div className="kpi"><div className="k-lbl">Lifetime Sales</div><div className="k-val">{fmt$(life.s,0)}</div>
+        <div className="k-sub">{data.firstYear}–{data.lastYear}</div></div>
+      <div className="kpi"><div className="k-lbl">Lifetime Net</div><div className={'k-val '+(life.n>=0?'pos':'neg')}>{fmt$(life.n,0)}</div>
+        <div className="k-sub">Margin {fmtPct(life.s?life.n/life.s:null)}</div></div>
+      <div className="kpi"><div className="k-lbl">Best Sales Year</div><div className="k-val">{bestSalesYear?bestSalesYear.y:'-'}</div>
+        <div className="k-sub">{bestSalesYear?fmt$(bestSalesYear.totals.s,0):''}</div></div>
+      <div className="kpi"><div className="k-lbl">Best Profit Year</div><div className="k-val">{bestYear?bestYear.y:'-'}</div>
+        <div className="k-sub">{bestYear?fmt$(bestYear.totals.n,0):''}</div></div>
+    </div>
+
+    {insights.length>0 && <div className="card">
+      <h3>The Long View</h3>
+      <div className="findings">
+        {insights.map((f,i)=><div key={i} className={'finding '+f.kind}><span className="fdot"></span><span>{f.text}</span></div>)}
+      </div>
+    </div>}
+
+    <div className="card"><h3>Sales & Net · Every Month</h3>
+      <TrendChart points={monthlySeries}/>
+      <div className="hint">Full history since {data.firstYear}. Bars are monthly sales; the line is monthly net profit.</div>
+    </div>
+
+    <div className="card">
+      <h3>Year by Year</h3>
+      <table className="t">
+        <thead><tr><th>Year</th><th className="num">Sales</th><th className="num">Growth</th><th className="num">Expenses</th><th className="num">Net</th><th className="num">Margin</th></tr></thead>
+        <tbody>
+          {active.map((yr,i)=>{ const prev=i>0?active[i-1]:null;
+            return <tr key={yr.y}>
+              <td>{yr.y}</td>
+              <td className="num mono">{fmt$(yr.totals.s,0)}</td>
+              <td className="num">{prev?<YoYDelta cur={yr.totals.s} prev={prev.totals.s}/>:<span className="faint">-</span>}</td>
+              <td className="num mono">{fmt$(yr.totals.e,0)}</td>
+              <td className={'num mono '+(yr.totals.n>=0?'pos':'neg')}>{fmt$(yr.totals.n,0)}</td>
+              <td className="num mono faint">{fmtPct(yr.totals.s?yr.totals.n/yr.totals.s:null)}</td>
+            </tr>; })}
+          <tr className="total"><td>Lifetime</td><td className="num">{fmt$(life.s,0)}</td><td></td>
+            <td className="num">{fmt$(life.e,0)}</td><td className={'num '+(life.n>=0?'pos':'neg')}>{fmt$(life.n,0)}</td>
+            <td className="num">{fmtPct(life.s?life.n/life.s:null)}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </>;
+}
+
+// long-term plain-language insights across all years
+function allTimeInsights(active){
+  const out=[];
+  if(active.length<2) return out;
+  const first=active[0], last=active[active.length-1];
+  // overall sales trajectory first->last
+  if(first.totals.s>0){
+    const mult=last.totals.s/first.totals.s;
+    if(mult>=1.15) out.push({kind:'good', text:`Sales have grown ${mult.toFixed(1)}x since ${first.y} (${fmt$(first.totals.s,0)} → ${fmt$(last.totals.s,0)}).`});
+    else if(mult<=0.85) out.push({kind:'bad', text:`Sales are down since ${first.y} (${fmt$(first.totals.s,0)} → ${fmt$(last.totals.s,0)}).`});
+    else out.push({kind:'info', text:`Sales have held roughly steady since ${first.y} (${fmt$(first.totals.s,0)} → ${fmt$(last.totals.s,0)}).`});
+  }
+  // consecutive growth streak (by sales)
+  let streak=0;
+  for(let i=active.length-1;i>0;i--){ if(active[i].totals.s>active[i-1].totals.s) streak++; else break; }
+  if(streak>=2) out.push({kind:'good', text:`Sales have grown ${streak} years in a row.`});
+  // margin trend: compare avg margin of first half vs second half
+  const marg=yr=>yr.totals.s?yr.totals.n/yr.totals.s:0;
+  const half=Math.floor(active.length/2);
+  if(half>=1){
+    const early=active.slice(0,half), late=active.slice(half);
+    const am=arr=>arr.reduce((a,x)=>a+marg(x),0)/arr.length;
+    const dd=(am(late)-am(early))*100;
+    if(Math.abs(dd)>=1.5) out.push({kind:dd>0?'good':'bad', text:`Net margin is trending ${dd>0?'up':'down'} over time (${Math.abs(dd).toFixed(1)} points ${dd>0?'higher':'lower'} in recent years).`});
+  }
+  // best and worst single years
+  const best=active.reduce((a,b)=>b.totals.n>a.totals.n?b:a,active[0]);
+  const worst=active.reduce((a,b)=>b.totals.n<a.totals.n?b:a,active[0]);
+  if(best.y!==worst.y){
+    out.push({kind:'info', text:`Most profitable year was ${best.y} (${fmt$(best.totals.n,0)}); weakest was ${worst.y} (${fmt$(worst.totals.n,0)}).`});
+  }
+  return out;
 }
 
 // ================= ENTRY (Maria) =================
@@ -646,11 +1143,13 @@ function Entry({corps, canEditIds, profile, presetCorp}){
   };
 
   const addExp = async () => {
-    if(!form.category_id || !form.amount){ showToast('Select a category and enter an amount'); return; }
+    if(!form.category_id){ showToast('Select a category'); return; }
+    if(!form.memo || !form.memo.trim()){ showToast('Enter details for this expense'); return; }
+    if(!form.amount || isNaN(parseFloat(form.amount))){ showToast('Enter an amount'); return; }
     setBusy(true);
     const { error } = await sb.from('expenses').insert({
       corporation_id:corpId, category_id:form.category_id, date,
-      amount:parseFloat(form.amount), payee:form.payee||null, memo:form.memo||null,
+      amount:parseFloat(form.amount), payee:form.payee||null, memo:form.memo.trim(),
       source:'manual', entered_by:profile.id });
     setBusy(false);
     if(error) showToast('Save failed: '+error.message);
@@ -730,19 +1229,26 @@ function Entry({corps, canEditIds, profile, presetCorp}){
 
       <div className="card">
         <h3><span className="step-tag">2</span>Add Expense</h3>
+        <label className="hint" style={{marginTop:0}}>Category</label>
+        <select value={form.category_id} onChange={e=>setForm({...form,category_id:e.target.value})} style={{marginBottom:10}}>
+          <option value="">Select a category</option>
+          {(meta?meta.categories.filter(c=>c.active):[]).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <label className="hint" style={{marginTop:0}}>Details <span style={{color:'var(--gold)'}}>*</span></label>
+        <input placeholder="What was this for? (required)" value={form.memo}
+          onChange={e=>setForm({...form,memo:e.target.value})} style={{marginBottom:10}}/>
         <div className="form-row">
-          <select value={form.category_id} onChange={e=>setForm({...form,category_id:e.target.value})}>
-            <option value="">Category</option>
-            {(meta?meta.categories.filter(c=>c.active):[]).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <input className="w-sm" type="number" step="0.01" placeholder="Amount" value={form.amount}
-            onChange={e=>setForm({...form,amount:e.target.value})}/>
+          <div style={{flex:1}}>
+            <label className="hint" style={{marginTop:0}}>Amount <span style={{color:'var(--gold)'}}>*</span></label>
+            <input type="number" step="0.01" placeholder="0.00" value={form.amount}
+              onChange={e=>setForm({...form,amount:e.target.value})}/>
+          </div>
+          <div style={{flex:1}}>
+            <label className="hint" style={{marginTop:0}}>Payee (optional)</label>
+            <input placeholder="Vendor / person" value={form.payee} onChange={e=>setForm({...form,payee:e.target.value})}/>
+          </div>
         </div>
-        <div className="form-row">
-          <input placeholder="Payee (optional)" value={form.payee} onChange={e=>setForm({...form,payee:e.target.value})}/>
-          <input placeholder="Memo (optional)" value={form.memo} onChange={e=>setForm({...form,memo:e.target.value})}/>
-        </div>
-        <button className="btn btn-gold" disabled={busy} onClick={addExp}>Save Expense</button>
+        <button className="btn btn-gold" disabled={busy} onClick={addExp} style={{marginTop:12}}>Save Expense</button>
         <hr className="divider"/>
         <h3>Expenses on This Date {dayExp.length>0 && <span className="faint" style={{fontWeight:400}}>{fmt$(dayExp.reduce((a,e)=>a+Number(e.amount),0))}</span>}</h3>
         {dayExp.length===0 ? <div className="faint">No expenses entered.</div> :
@@ -931,6 +1437,32 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
     if(error){ showToast(error.code==='23505' ? 'A category with this name already exists' : 'Add failed: '+error.message); return; }
     setNewCat(''); showToast('Category added: '+name); reload();
   };
+  const renameCategory = async(cat)=>{
+    const name = (prompt('Rename category', cat.name)||'').trim();
+    if(!name || name===cat.name) return;
+    const { error } = await sb.from('expense_categories').update({name}).eq('id',cat.id);
+    if(error){ showToast('Rename failed: '+error.message); return; }
+    showToast('Renamed'); reload();
+  };
+  const deleteCategory = async(cat)=>{
+    if(cat.protected){ showToast('This category is used by automatic syncing and cannot be deleted'); return; }
+    // check if the category has any expenses; if so, deactivate instead of hard delete
+    const { count } = await sb.from('expenses').select('id',{count:'exact',head:true}).eq('category_id',cat.id);
+    if(count>0){
+      if(!confirm(`"${cat.name}" has ${count} expense(s). Hide it from new entries? (Past records are kept.)`)) return;
+      const { error } = await sb.from('expense_categories').update({active:false}).eq('id',cat.id);
+      if(error){ showToast('Failed: '+error.message); return; }
+      showToast('Category hidden'); reload();
+    } else {
+      if(!confirm(`Delete category "${cat.name}"?`)) return;
+      const { error } = await sb.from('expense_categories').delete().eq('id',cat.id);
+      if(error){ showToast('Delete failed: '+error.message); return; }
+      showToast('Category deleted'); reload();
+    }
+  };
+  const restoreCategory = async(cat)=>{
+    await sb.from('expense_categories').update({active:true}).eq('id',cat.id); reload();
+  };
 
   // materialize due entries for the current month up to today
   const generate = async()=>{
@@ -972,12 +1504,30 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
       </div>
     </div>
     {isOwner && <div className="card">
-      <h3>Add Expense Category</h3>
+      <h3>Expense Categories</h3>
       <div className="hint" style={{marginTop:0,marginBottom:10}}>Create a category for anything you want as its own line on the P&L, like Accounting, Toast Fee, or Trash Removal.</div>
       <div className="form-row">
         <input placeholder="Category name (e.g. Accounting, Toast Fee, Trash Removal)" value={newCat} onChange={e=>setNewCat(e.target.value)}/>
         <button className="btn" style={{flex:'0 0 auto'}} onClick={addCategory}>Add Category</button>
       </div>
+      {meta && meta.categories.length>0 && <table className="t" style={{marginTop:14}}><tbody>
+        {meta.categories.map(c=><tr key={c.id} style={{opacity:c.active?1:0.5}}>
+          <td>{c.name}
+            {c.protected && <span className="badge gold">Auto</span>}
+            {!c.active && <span className="badge" style={{background:'var(--panel2)'}}>Hidden</span>}
+            {c.investor_group && <span className="faint" style={{fontSize:11}}> · shown as "{c.investor_group}" to investors</span>}
+          </td>
+          <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+            {c.active
+              ? <>
+                  {!c.protected && <button className="btn btn-sm" onClick={()=>renameCategory(c)}>Rename</button>}
+                  {!c.protected && <button className="btn btn-sm btn-danger" style={{marginLeft:6}} onClick={()=>deleteCategory(c)}>Delete</button>}
+                  {c.protected && <span className="faint" style={{fontSize:12}}>protected</span>}
+                </>
+              : <button className="btn btn-sm" onClick={()=>restoreCategory(c)}>Restore</button>}
+          </td>
+        </tr>)}
+      </tbody></table>}
     </div>}
     {isOwner && <div className="card">
       <h3>New Recurring Expense</h3>
@@ -1432,6 +1982,7 @@ function Approvals({corps, canEditIds, profile, isOwner}){
                 <span className="badge gold">{corpCode(e.corporation_id)}</span>
                 <span className="mono">{e.date}</span>
                 {e.source==='slack' && <span className="badge blue">Slack</span>}
+                {e.source==='payroll_bot' && <span className="badge gold">Payroll · ADP</span>}
                 {e.slack_user && <span className="faint" style={{fontSize:12}}>@{e.slack_user}</span>}
               </div>
               <div style={{marginTop:5}}>{e.memo||<span className="faint">(no description)</span>}</div>
@@ -1599,7 +2150,6 @@ function ToastDiag({session}){
         <div><label className="hint" style={{marginTop:0}}>Store</label>
           <select value={store} onChange={e=>setStore(e.target.value)}>
             <option value="AD">AD</option><option value="BW">BW</option><option value="FH">FH</option>
-            <option value="PEARLAND">Pearland (TX)</option>
           </select></div>
         <div><label className="hint" style={{marginTop:0}}>Business date</label>
           <input type="date" value={date} onChange={e=>setDate(e.target.value)}/></div>
@@ -1698,6 +2248,89 @@ function ToastDiag({session}){
   </div>;
 }
 
+// ================= RATES (royalty / marketing, effective-from) =================
+function RatesManager({corps, canEditIds}){
+  const editable = corps.filter(c=>canEditIds.has(c.id));
+  const [corpId, setCorpId] = useState(editable[0] && editable[0].id);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [f, setF] = useState({rate_type:'royalty', pct:'', effective_from:todayStr()});
+  const [toast, showToast] = useToast();
+
+  const reload = useCallback(async()=>{
+    if(!corpId) return; setLoading(true);
+    const { data } = await sb.from('rate_schedule').select('*')
+      .eq('corporation_id',corpId).order('rate_type').order('effective_from',{ascending:false});
+    setRows(data||[]); setLoading(false);
+  },[corpId]);
+  useEffect(()=>{ reload(); },[reload]);
+
+  const add = async()=>{
+    const pct = parseFloat(f.pct);
+    if(isNaN(pct)){ showToast('Enter a rate percentage'); return; }
+    if(!f.effective_from){ showToast('Choose an effective-from date'); return; }
+    const { error } = await sb.from('rate_schedule').insert({
+      corporation_id:corpId, rate_type:f.rate_type, rate:pct/100, effective_from:f.effective_from });
+    if(error){ showToast('Save failed: '+error.message); return; }
+    setF({rate_type:f.rate_type, pct:'', effective_from:todayStr()});
+    showToast('Rate added'); reload();
+  };
+  const del = async(r)=>{
+    if(!confirm(`Remove this ${r.rate_type} rate effective ${r.effective_from}?`)) return;
+    const { error } = await sb.from('rate_schedule').delete().eq('id',r.id);
+    if(error){ showToast('Delete failed: '+error.message); return; }
+    reload();
+  };
+
+  const RATE_LABEL = {royalty:'Royalty', marketing:'Marketing Fee', sales_commission:'Sales Commission'};
+  if(!editable.length) return <div className="card">No corporations available.</div>;
+  const byType={}; rows.forEach(r=>{ (byType[r.rate_type]=byType[r.rate_type]||[]).push(r); });
+
+  return <div>
+    <div className="page-head" style={{marginBottom:14}}>
+      <div><div className="sub">Royalty and marketing rates with an effective-from date. When a rate changes (e.g. 5% to 6%), add a new row with the start date. The most recent rate on or before a month is used for that month's automatic calculation.</div></div>
+      <CorpTabs corps={editable} sel={corpId} onSel={setCorpId}/>
+    </div>
+    <div className="card">
+      <h3>Add / Change a Rate</h3>
+      <div className="form-row">
+        <div style={{flex:1}}>
+          <label className="hint" style={{marginTop:0}}>Type</label>
+          <select value={f.rate_type} onChange={e=>setF({...f,rate_type:e.target.value})}>
+            <option value="royalty">Royalty</option>
+            <option value="marketing">Marketing Fee</option>
+            <option value="sales_commission">Sales Commission</option>
+          </select>
+        </div>
+        <div style={{flex:1}}>
+          <label className="hint" style={{marginTop:0}}>Rate (%)</label>
+          <input type="number" step="0.01" placeholder="e.g. 6" value={f.pct} onChange={e=>setF({...f,pct:e.target.value})}/>
+        </div>
+        <div style={{flex:1}}>
+          <label className="hint" style={{marginTop:0}}>Effective from</label>
+          <input type="date" value={f.effective_from} onChange={e=>setF({...f,effective_from:e.target.value})}/>
+        </div>
+      </div>
+      <button className="btn btn-gold" onClick={add} style={{marginTop:12}}>Add Rate</button>
+    </div>
+    {loading ? <Spinner/> : Object.keys(byType).length===0
+      ? <div className="card faint">No rates set yet. Royalty uses the database default until you add one here.</div>
+      : Object.keys(byType).map(type=>(
+        <div className="card" key={type}>
+          <h3>{RATE_LABEL[type]||type} history</h3>
+          <table className="t"><tbody>
+            {byType[type].map((r,i)=><tr key={r.id}>
+              <td>{i===0 && <span className="badge gold">Current</span>} From {r.effective_from}</td>
+              <td className="num mono">{(Number(r.rate)*100).toFixed(2)}%</td>
+              <td style={{textAlign:'right'}}><button className="btn btn-sm btn-danger" onClick={()=>del(r)}>Remove</button></td>
+            </tr>)}
+          </tbody></table>
+        </div>
+      ))}
+    {toast && <div className="toast">{toast}</div>}
+  </div>;
+}
+
 // ================= SETTINGS =================
 function Settings({corps, canEditIds, profile, isOwner, session}){
   const [sub, setSub] = useState('recurring');
@@ -1706,12 +2339,14 @@ function Settings({corps, canEditIds, profile, isOwner, session}){
       <div><div className="eyebrow">Settings</div><h2>Settings</h2></div>
       <div className="corp-tabs">
         <button className={'corp-tab'+(sub==='recurring'?' on':'')} onClick={()=>setSub('recurring')}>Recurring & Categories</button>
+        <button className={'corp-tab'+(sub==='rates'?' on':'')} onClick={()=>setSub('rates')}>Rates</button>
         <button className={'corp-tab'+(sub==='accounts'?' on':'')} onClick={()=>setSub('accounts')}>Accounts</button>
         <button className={'corp-tab'+(sub==='device'?' on':'')} onClick={()=>setSub('device')}>App & Alerts</button>
         <button className={'corp-tab'+(sub==='diag'?' on':'')} onClick={()=>setSub('diag')}>Diagnostics</button>
       </div>
     </div>
     {sub==='recurring' && <Recurring corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} embedded={true}/>}
+    {sub==='rates' && <RatesManager corps={corps} canEditIds={canEditIds}/>}
     {sub==='accounts' && <Admin corps={corps} session={session} embedded={true}/>}
     {sub==='device' && <PwaCard profile={profile}/>}
     {sub==='diag' && <ToastDiag session={session}/>}
@@ -1913,18 +2548,20 @@ function App(){
   const canEditIds = new Set(isOwner ? corps.map(c=>c.id) : perms.filter(p=>p.can_edit).map(p=>p.corporation_id));
   const canViewIds = new Set(isOwner ? corps.map(c=>c.id) : perms.filter(p=>p.can_view).map(p=>p.corporation_id));
   const viewCorps = corps.filter(c=>canViewIds.has(c.id));
+  // franchisee corps (if any) are excluded from every screen
+  const storeCorps = corps.filter(c=>c.corp_type!=='franchisee');
   const nav = NAV.filter(n=>n.roles.includes(profile.role));
   const effTab = nav.some(n=>n.id===tab) ? tab : nav[0].id;
 
   const page = {
-    home:      <Home corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} goEntry={goEntry} goClose={goClose} goApprovals={goApprovals}/>,
-    approvals: <Approvals corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner}/>,
-    entry:     <Entry corps={corps} canEditIds={canEditIds} profile={profile} presetCorp={entryCorp}/>,
-    insights:  <Dashboard corps={corps} canEditIds={canEditIds}/>,
-    cash:      <CashPage corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner}/>,
-    close:     <ClosePage corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} preset={closePreset}/>,
-    investor:  <InvestorPortal corps={isOwner?corps:viewCorps}/>,
-    settings:  <Settings corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} session={session}/>,
+    home:      <Home corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} goEntry={goEntry} goClose={goClose} goApprovals={goApprovals}/>,
+    approvals: <Approvals corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner}/>,
+    entry:     <Entry corps={storeCorps} canEditIds={canEditIds} profile={profile} presetCorp={entryCorp}/>,
+    insights:  <Dashboard corps={storeCorps} canEditIds={canEditIds}/>,
+    cash:      <CashPage corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner}/>,
+    close:     <ClosePage corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} preset={closePreset}/>,
+    investor:  <InvestorPortal corps={isOwner?storeCorps:viewCorps}/>,
+    settings:  <Settings corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} session={session}/>,
     alerts:    <div><div className="page-head"><div><div className="eyebrow">App & Alerts</div><h2>App & Alerts</h2></div></div><PwaCard profile={profile}/></div>,
   }[effTab];
 
