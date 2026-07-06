@@ -1655,6 +1655,28 @@ function ToastDiag({session}){
           </tbody></table>
         </div>
       </div>
+
+      <div className="grid2">
+        <div className="card">
+          <h3>By dining option (delivery lives here)</h3>
+          {Object.keys(res.byDiningOptionName||{}).length===0
+            ? <div className="faint">None</div>
+            : <table className="t"><tbody>
+                {Object.entries(res.byDiningOptionName).map(([k,v])=>
+                  <tr key={k}><td>{k}</td><td className="num mono">{fmt$(v)}</td></tr>)}
+              </tbody></table>}
+          <div className="hint" style={{marginTop:8}}>This is where Toast tags Grubhub / Uber Eats / DoorDash. If everything says "null", the orders API is not returning dining options and delivery cannot be split out.</div>
+        </div>
+        <div className="card">
+          <h3>Business date check</h3>
+          <table className="t"><tbody>
+            <tr><td>Orders with a different business date</td><td className="num mono">{res.ordersWithWrongBusinessDate}</td></tr>
+            {Object.entries(res.byBusinessDate||{}).map(([k,v])=>
+              <tr key={k}><td>businessDate {k}</td><td className="num mono">{v} orders</td></tr>)}
+          </tbody></table>
+          <div className="hint" style={{marginTop:8}}>If orders from more than one business date appear here, we are mixing days and the daily total will not match Toast.</div>
+        </div>
+      </div>
     </>}
   </div>;
 }

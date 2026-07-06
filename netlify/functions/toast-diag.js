@@ -77,11 +77,27 @@ exports.handler = async (event) => {
     let cash = 0, credit = 0, other = 0, tips = 0, refunds = 0, voided = 0;
     let salesExTips = 0;
 
+    const byBizDate = {};        // order.businessDate -> count
+    const byDiningName = {};      // diningOption name -> $ (delivery lives here)
+    let mismatchDate = 0;
+    const reqBiz = Number(date);  // YYYYMMDD
     for (const o of orders) {
       if (o.voided) continue;
       const src = (o.source || 'null');
       bySource[src] = bySource[src] || { count: 0, amount: 0 };
       bySource[src].count++;
+      const obd = o.businessDate != null ? String(o.businessDate) : 'null';
+      byBizDate[obd] = (byBizDate[obd] || 0) + 1;
+      if (o.businessDate != null && Number(o.businessDate) !== reqBiz) mismatchDate++;
+      // dining option name: Toast tags delivery here (e.g. 'Grubhub - Delivery')
+      let doName = 'null';
+      if (o.diningOption) doName = o.diningOption.name || o.diningOption.behavior || o.diningOption.guid || 'unknown';
+      for (const chk of o.checks || []) {
+        for (const p of chk.payments || []) {
+          if (p.paymentStatus === 'VOIDED') continue;
+          byDiningName[doName] = (byDiningName[doName] || 0) + Number(p.amount || 0) - Number(p.tipAmount || 0);
+        }
+      }
       for (const chk of o.checks || []) {
         if (chk.voided || chk.deleted) continue;
         for (const p of chk.payments || []) {
@@ -120,6 +136,9 @@ exports.handler = async (event) => {
       byOrderSource: bySource,
       byPaymentType: byPayType,
       otherPaymentBreakdown: byOtherName,
+      byBusinessDate: byBizDate,
+      ordersWithWrongBusinessDate: mismatchDate,
+      byDiningOptionName: (()=>{ const o={}; for(const k in byDiningName) o[k]=+byDiningName[k].toFixed(2); return o; })(),
     }) };
   } catch (e) {
     return { statusCode: 200, headers, body: JSON.stringify({ error: e.message }) };
