@@ -184,6 +184,7 @@ a{color:var(--gold);text-decoration:none}
 /* cards */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:22px}
 .kpis.kpis-3{grid-template-columns:repeat(3,1fr)}
+.kpis.kpis-2{grid-template-columns:repeat(2,1fr)}
 .kpi{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
 .kpi .k-lbl{font-size:11.5px;color:var(--text3);font-weight:500;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px}
 .kpi .k-val{font-family:var(--font-m);font-size:21px;font-weight:500}
@@ -241,18 +242,38 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .env-check{color:var(--green);font-weight:700}
 .env-x{color:var(--red);font-weight:700}
 .env-table tr.env-ok td{background:var(--green-dim,rgba(46,125,79,0.08))}
+.env-table tr.env-short td{background:rgba(196,100,76,0.07)}
+.env-note-row td{padding:0 8px 8px !important;background:rgba(196,100,76,0.07)}
+.env-note{width:100%;padding:7px 10px;font-size:13px;border:1px solid rgba(196,100,76,.35);border-radius:6px;background:var(--panel)}
+.env-note::placeholder{color:var(--text3);font-size:12px}
+.cal .day.tappable{cursor:pointer}
+.cal .day.tappable:hover{border-color:var(--gold);box-shadow:0 2px 6px rgba(0,0,0,0.08)}
+.cal .day .note-dot{position:absolute;bottom:3px;right:4px;font-size:10px;color:var(--red)}
+.modal-overlay{position:fixed;inset:0;background:rgba(30,26,20,0.45);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px}
+.modal{background:var(--panel);border-radius:16px;padding:20px;width:min(400px,100%);box-shadow:0 20px 60px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto}
+.modal-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
+.modal-title{font-family:var(--font-d);font-size:19px;font-weight:700}
+.modal-x{background:var(--panel2);border:none;width:30px;height:30px;border-radius:50%;cursor:pointer;color:var(--text2);font-size:14px}
+.modal-rows{background:var(--panel2);border-radius:10px;padding:6px 14px;margin-bottom:6px}
+.modal-row{display:flex;justify-content:space-between;padding:8px 0;font-size:14px;border-bottom:1px solid var(--border-soft)}
+.modal-row:last-child{border-bottom:none}
+.modal-row.modal-exp{font-size:15px}
+.modal-diff{margin-top:10px;padding:9px 12px;border-radius:8px;font-size:13.5px;font-weight:600;text-align:center}
+.modal-diff.pos{background:var(--green-dim,rgba(46,125,79,0.1));color:var(--green)}
+.modal-diff.neg{background:rgba(196,100,76,0.1);color:var(--red)}
 .cal .day.count-ok{border-color:var(--green);background:rgba(46,125,79,0.06)}
 .cal .day.count-bad{border-color:var(--red)}
 .cal .day .day-check{color:var(--green);font-weight:700;margin-left:3px;font-size:11px}
 .cal .day .day-x{color:var(--red);font-weight:700;margin-left:3px;font-size:11px}
 .cal .day .counted-lbl{font-family:var(--font-m);font-size:9.5px;color:var(--green);margin-top:1px}
 .cal-legend .lg-dot.green{background:var(--green)}
-.wc-card{padding:0;overflow:hidden}
-.wc-head{display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:none;padding:18px 22px;cursor:pointer;text-align:left;font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text)}
-.wc-head:hover{background:var(--panel2)}
-.wc-count{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--gold-dim);color:var(--gold-strong);font-family:var(--font-m);font-size:12px;margin-left:8px;vertical-align:1px}
-.wc-chev{color:var(--gold-strong);font-size:14px}
-.wc-card .findings{padding:0 22px 20px}
+.wc-card{padding:0;overflow:hidden;border:1px solid var(--gold-soft)}
+.wc-head{display:flex;align-items:center;justify-content:space-between;width:100%;background:var(--gold-dim);border:none;padding:12px 18px;cursor:pointer;text-align:left}
+.wc-head:hover{filter:brightness(0.98)}
+.wc-title{font-family:var(--font-d);font-size:14.5px;font-weight:700;color:var(--gold-strong)}
+.wc-count{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--panel);color:var(--gold-strong);font-family:var(--font-m);font-size:12px;margin-left:8px;vertical-align:1px}
+.wc-chev{color:var(--gold-strong);font-size:14px;background:var(--panel);width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 2px rgba(0,0,0,0.08)}
+.wc-findings{padding:14px 18px 16px}
 
 /* forms */
 .form-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
@@ -365,6 +386,9 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   .kpis.kpis-3 .k-lbl{font-size:9px;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .kpis.kpis-3 .k-val{font-size:16px;white-space:nowrap}
   .kpis.kpis-3 .k-sub{font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .kpis.kpis-2{grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px}
+  .kpis.kpis-2 .kpi{padding:12px 13px}
+  .kpis.kpis-2 .k-val{font-size:17px}
   /* iOS zooms any input under 16px on focus; force 16px on mobile so the keyboard
      never triggers a zoom (viewport maximum-scale also blocks it) */
   input, select, textarea, .env-table .env-input{font-size:16px}
@@ -409,6 +433,12 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .home-card .hc-name{font-family:var(--font-d);font-size:16px;font-weight:700;letter-spacing:-0.01em;margin:4px 0 12px;line-height:1.25;
   min-height:2.5em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .home-card .progress-lbl{margin-bottom:0}
+.home-card .hc-actions{margin-top:auto;display:flex;gap:6px;padding-top:4px}
+.home-card .hc-btn{flex:1;padding:8px 4px;border-radius:8px;border:1px solid var(--border);background:var(--panel);font-weight:700;font-size:12px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,0.04);transition:background .15s, box-shadow .15s}
+.home-card .hc-btn.income{color:var(--green);border-color:rgba(46,125,79,.35)}
+.home-card .hc-btn.income:hover{background:var(--green-dim)}
+.home-card .hc-btn.expense{color:var(--red);border-color:rgba(196,100,76,.35)}
+.home-card .hc-btn.expense:hover{background:var(--red-dim)}
 .home-card .hc-enter{margin-top:auto;width:100%;padding:10px;border-radius:8px;border:1px solid var(--gold-soft);background:var(--panel);color:var(--gold-strong);font-weight:600;font-size:13px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,0.04);transition:background .15s, box-shadow .15s}
 .home-card .hc-enter:hover{background:var(--gold-dim);box-shadow:0 2px 6px rgba(0,0,0,0.08)}
 .home-card .hc-amt{font-family:var(--font-m);font-size:24px;margin-bottom:12px}
@@ -1019,13 +1049,15 @@ function MonthView({pl, yoy, trend, y, m}){
   const [wcOpen,setWcOpen]=useState(false);   // "What Changed" folded by default
   if(!pl) return <Spinner/>;
   return <>
-    <div className="kpis">
+    <div className="kpis kpis-3">
       <div className="kpi accent-gold"><div className="k-lbl">Total Sales</div><div className="k-val">{fmt$k(pl.totalSales)}</div>
         <div className="k-sub"><YoYDelta cur={pl.totalSales} prev={yoy&&yoy.totalSales}/></div></div>
       <div className="kpi"><div className="k-lbl">Total Expenses</div><div className="k-val">{fmt$k(pl.totalExpenses)}</div>
         <div className="k-sub"><YoYDelta cur={pl.totalExpenses} prev={yoy&&yoy.totalExpenses}/></div></div>
       <div className={'kpi '+(pl.net>=0?'accent-green':'accent-red')}><div className="k-lbl">Net Profit</div><div className={'k-val '+(pl.net>=0?'pos':'neg')}>{fmt$k(pl.net)}</div>
-        <div className="k-sub">Margin {fmtPct(pl.margin)} · <YoYDelta cur={pl.net} prev={yoy&&yoy.net}/></div></div>
+        <div className="k-sub">Margin {fmtPct(pl.margin)}</div></div>
+    </div>
+    <div className="kpis kpis-2">
       <div className="kpi"><div className="k-lbl">Payroll %</div><div className="k-val">{fmtPct(pl.payrollPct)}
         <TrendArrow cur={pl.payrollPct} prev={trend.length>1?trend[trend.length-2].payrollPct:null} higherIsBad={true}/></div>
         {yoy && <div className="k-sub">Last year {fmtPct(yoy.payrollPct)}</div>}</div>
@@ -1043,18 +1075,35 @@ function MonthView({pl, yoy, trend, y, m}){
       {yoy && (()=>{ const findings=analyzeChange(pl,yoy);
         return findings.length>0 && <div className="card wc-card">
           <button className="wc-head" onClick={()=>setWcOpen(o=>!o)}>
-            <span>What Changed vs {MONTHS[m-1]} {y-1} <span className="wc-count">{findings.length}</span></span>
+            <span className="wc-title">What Changed vs {MONTHS[m-1]} {y-1} <span className="wc-count">{findings.length}</span></span>
             <span className="wc-chev">{wcOpen?'▲':'▾'}</span>
           </button>
-          {wcOpen && <div className="findings" style={{marginTop:14}}>
+          {wcOpen && <div className="findings wc-findings">
             {findings.map((f,i)=><div key={i} className={'finding '+f.kind}>
               <span className="fdot"></span><span>{f.text}</span></div>)}
           </div>}
         </div>; })()}
       <div className="card"><h3>12-Month Trend</h3><TrendChart points={trend}/></div>
+      <div className="grid2">
+        <div className="card"><h3>Cost Ratios · 12 Months</h3><RatioChart points={trend}/>
+          <div className="hint">Payroll and supplies as a share of sales. Rising lines mean costs are growing faster than sales.</div></div>
+        <div className="card"><h3>vs. {MONTHS[m-1]} {y-1}</h3>
+          {!yoy ? <div className="faint">No data for {MONTHS[m-1]} {y-1}.</div> :
+          <table className="t">
+            <thead><tr><th></th><th className="num">{y}</th><th className="num">{y-1}</th><th className="num">Change</th></tr></thead>
+            <tbody>
+              <tr><td>Sales</td><td className="num">{fmt$(pl.totalSales,0)}</td><td className="num">{fmt$(yoy.totalSales,0)}</td><td className="num"><YoYDelta cur={pl.totalSales} prev={yoy.totalSales}/></td></tr>
+              <tr><td>Expenses</td><td className="num">{fmt$(pl.totalExpenses,0)}</td><td className="num">{fmt$(yoy.totalExpenses,0)}</td><td className="num"><YoYDelta cur={pl.totalExpenses} prev={yoy.totalExpenses}/></td></tr>
+              <tr><td>Net Profit</td><td className={'num '+(pl.net>=0?'pos':'neg')}>{fmt$(pl.net,0)}</td><td className={'num '+(yoy.net>=0?'pos':'neg')}>{fmt$(yoy.net,0)}</td><td className="num"><YoYDelta cur={pl.net} prev={yoy.net}/></td></tr>
+              <tr><td>Payroll %</td><td className="num">{fmtPct(pl.payrollPct)}</td><td className="num">{fmtPct(yoy.payrollPct)}</td><td className="num"><TrendArrow cur={pl.payrollPct} prev={yoy.payrollPct} higherIsBad={true}/></td></tr>
+              <tr><td>Supplies %</td><td className="num">{fmtPct(pl.suppliesPct)}</td><td className="num">{fmtPct(yoy.suppliesPct)}</td><td className="num"><TrendArrow cur={pl.suppliesPct} prev={yoy.suppliesPct} higherIsBad={true}/></td></tr>
+            </tbody>
+          </table>}
+        </div>
+      </div>
       {(()=>{
         // Where the money went: every expense line (categories + auto rules),
-        // sorted biggest first, with a share-of-total bar.
+        // sorted biggest first, with a share-of-total bar. Placed LAST, after all charts.
         const items=[
           ...pl.categoryRows.filter(c=>c.amount!==0).map(c=>({name:c.name,amount:c.amount,auto:false})),
           ...pl.ruleRows.filter(r=>r.amount!==0).map(r=>({name:r.name,amount:r.amount,auto:true})),
@@ -1082,23 +1131,6 @@ function MonthView({pl, yoy, trend, y, m}){
           </div>
         </div>;
       })()}
-      <div className="grid2">
-        <div className="card"><h3>Cost Ratios · 12 Months</h3><RatioChart points={trend}/>
-          <div className="hint">Payroll and supplies as a share of sales. Rising lines mean costs are growing faster than sales.</div></div>
-        <div className="card"><h3>vs. {MONTHS[m-1]} {y-1}</h3>
-          {!yoy ? <div className="faint">No data for {MONTHS[m-1]} {y-1}.</div> :
-          <table className="t">
-            <thead><tr><th></th><th className="num">{y}</th><th className="num">{y-1}</th><th className="num">Change</th></tr></thead>
-            <tbody>
-              <tr><td>Sales</td><td className="num">{fmt$(pl.totalSales,0)}</td><td className="num">{fmt$(yoy.totalSales,0)}</td><td className="num"><YoYDelta cur={pl.totalSales} prev={yoy.totalSales}/></td></tr>
-              <tr><td>Expenses</td><td className="num">{fmt$(pl.totalExpenses,0)}</td><td className="num">{fmt$(yoy.totalExpenses,0)}</td><td className="num"><YoYDelta cur={pl.totalExpenses} prev={yoy.totalExpenses}/></td></tr>
-              <tr><td>Net Profit</td><td className={'num '+(pl.net>=0?'pos':'neg')}>{fmt$(pl.net,0)}</td><td className={'num '+(yoy.net>=0?'pos':'neg')}>{fmt$(yoy.net,0)}</td><td className="num"><YoYDelta cur={pl.net} prev={yoy.net}/></td></tr>
-              <tr><td>Payroll %</td><td className="num">{fmtPct(pl.payrollPct)}</td><td className="num">{fmtPct(yoy.payrollPct)}</td><td className="num"><TrendArrow cur={pl.payrollPct} prev={yoy.payrollPct} higherIsBad={true}/></td></tr>
-              <tr><td>Supplies %</td><td className="num">{fmtPct(pl.suppliesPct)}</td><td className="num">{fmtPct(yoy.suppliesPct)}</td><td className="num"><TrendArrow cur={pl.suppliesPct} prev={yoy.suppliesPct} higherIsBad={true}/></td></tr>
-            </tbody>
-          </table>}
-        </div>
-      </div>
     </>}
 
     {tab==='revenue' && <div className="card">
@@ -1405,7 +1437,7 @@ function allTimeInsights(active){
 }
 
 // ================= ENTRY (Maria) =================
-function Entry({corps, canEditIds, profile, presetCorp}){
+function Entry({corps, canEditIds, profile, presetCorp, presetMode}){
   const editable = corps.filter(c=>canEditIds.has(c.id));
   const [corpId, setCorpId] = useState(presetCorp || (editable[0] && editable[0].id));
   useEffect(()=>{ if(presetCorp) setCorpId(presetCorp); },[presetCorp]);
@@ -1416,6 +1448,7 @@ function Entry({corps, canEditIds, profile, presetCorp}){
   const [pending, setPending] = useState([]);
   const [form, setForm] = useState({category_id:'', amount:'', payee:'', memo:'', method:'card'});
   const [mode, setMode] = useState('income');
+  useEffect(()=>{ if(presetMode && presetMode.mode) setMode(presetMode.mode); },[presetMode]);
   const [toast, showToast] = useToast();
   const [busy, setBusy] = useState(false);
 
@@ -1613,7 +1646,9 @@ function CashPage({corps, canEditIds, profile, isOwner}){
   const [cashExp, setCashExp] = useState({});
   const [pickupOpen, setPickupOpen] = useState(false);
   const [counts, setCounts] = useState({});   // date -> actual counted amount string
+  const [cnotes, setCnotes] = useState({});   // date -> note explaining a shortage
   const [editingId, setEditingId] = useState(null);
+  const [dayModal, setDayModal] = useState(null);   // {date} when a calendar day is tapped
 
   const reload = useCallback(async()=>{
     if(!corpId) return;
@@ -1631,8 +1666,10 @@ function CashPage({corps, canEditIds, profile, isOwner}){
     const cexMap={}; (cex.data||[]).forEach(e=>{ (cexMap[e.date]=cexMap[e.date]||{total:0,items:[]}); cexMap[e.date].total+=Number(e.amount); cexMap[e.date].items.push(e); });
     // load any previously-counted amounts so the check persists across reloads
     const savedCounts={}; (rv.data||[]).forEach(r=>{ if(r.counted_amount!=null) savedCounts[r.date]=String(r.counted_amount); });
+    const savedNotes={}; (rv.data||[]).forEach(r=>{ if(r.count_note) savedNotes[r.date]=r.count_note; });
     setDays(map); setPickups(pks.data||[]); setCashExp(cexMap);
     setCounts(prev=>({...savedCounts, ...prev}));
+    setCnotes(prev=>({...savedNotes, ...prev}));
   },[corpId,y,m]);
   useEffect(()=>{ reload(); },[reload]);
 
@@ -1679,6 +1716,12 @@ function CashPage({corps, canEditIds, profile, isOwner}){
     await sb.from('daily_revenue').update({counted_amount:num})
       .eq('corporation_id',corpId).eq('channel_id',cashChId).eq('date',date);
   };
+  // note explaining a shortage (e.g. "bill stuck in register")
+  const saveNote = async(date, val)=>{
+    if(!cashChId) return;
+    await sb.from('daily_revenue').update({count_note: val||null})
+      .eq('corporation_id',corpId).eq('channel_id',cashChId).eq('date',date);
+  };
 
   const editPickup = (p)=>{    setEditingId(p.id);
     setPk({pickup_date:p.pickup_date, period_start:p.period_start, period_end:p.period_end,
@@ -1721,11 +1764,23 @@ function CashPage({corps, canEditIds, profile, isOwner}){
   const recordedFor = (s,e) => Object.values(days)
     .filter(r=>r.date>=s && r.date<=e).reduce((a,r)=>a+Number(r.amount),0);
 
+  // every cash day in the visible month (for the always-on counting list)
+  const monthEnvelopes = (()=>{
+    const out=[];
+    Object.keys(days).sort().forEach(date=>{
+      const sales=Number(days[date].amount)||0;
+      const spent=cashExp[date]?cashExp[date].total:0;
+      if(sales===0 && spent===0) return;
+      out.push({date, sales, spent, expected:sales-spent});
+    });
+    return out;
+  })();
+
   if(!stores.length) return <div className="card">No corporations available for your account.</div>;
   return <div>
     <div className="page-head">
       <div><div className="eyebrow">Cash</div><h2>Cash Verification</h2>
-        <div className="sub">When you record an envelope pickup, the covered period is marked verified in gold on the calendar.</div></div>
+        <div className="sub">Count each day's envelope; a ✓ shows when your count matches the expected cash.</div></div>
       <div style={{display:'flex',gap:14,alignItems:'center',flexWrap:'wrap'}}>
         <CorpTabs corps={stores} sel={corpId} onSel={setCorpId}/>
         <MonthPick y={y} m={m} onChange={(a,b)=>{setY(a);setM(b);}}/>
@@ -1735,7 +1790,6 @@ function CashPage({corps, canEditIds, profile, isOwner}){
       <button className="pickup-head" onClick={()=>{
         const opening=!pickupOpen;
         if(opening && !pk.period_start){
-          // default the period to the unverified cash days in view (start..today)
           const cashDates=Object.keys(days).filter(dt=>Number(days[dt].amount)>0 && !days[dt].verified).sort();
           if(cashDates.length){
             setPk({...pk, period_start:cashDates[0], period_end:cashDates[cashDates.length-1]});
@@ -1745,7 +1799,7 @@ function CashPage({corps, canEditIds, profile, isOwner}){
       }}>
         <div>
           <div className="pickup-title">{editingId?'Edit Pickup':'Record Envelope Pickup'}</div>
-          <div className="pickup-sub">Count each day's envelope and check it off. Marks the period verified (gold).</div>
+          <div className="pickup-sub">Mark a date range as picked up (verified gold on the calendar).</div>
         </div>
         <span className="pickup-chev">{pickupOpen?'▲':'▾'}</span>
       </button>
@@ -1758,30 +1812,8 @@ function CashPage({corps, canEditIds, profile, isOwner}){
           <div><label className="hint" style={{marginTop:0}}>Period end</label>
             <input type="date" value={pk.period_end} onChange={e=>setPk({...pk,period_end:e.target.value})}/></div>
         </div>
-        {envelopeDays.length>0 && <div style={{marginTop:6}}>
-          <div className="hint" style={{marginBottom:8}}>Open each envelope, enter the cash you counted, and it checks off (✓) when it matches. Expected = cash sales that day minus any cash spent from the drawer.</div>
-          <table className="t env-table"><thead><tr>
-            <th>Day</th><th className="num">Expected</th><th className="num">Counted</th><th className="num">Diff</th><th></th>
-          </tr></thead><tbody>
-            {envelopeDays.map(e=>{ const cnt=counts[e.date]; const has=cnt!==''&&cnt!=null; const diff=has?parseFloat(cnt||0)-e.expected:null; const ok=diff!==null&&Math.abs(diff)<0.01;
-              return <tr key={e.date} className={ok?'env-ok':''}>
-                <td className="mono">{e.date.slice(8)} {DOW[new Date(e.date+'T00:00').getDay()]}
-                  {e.spent>0 && <div className="faint" style={{fontSize:10}}>{fmt$(e.sales,0)} − {fmt$(e.spent,0)} spent</div>}</td>
-                <td className="num mono"><b>{fmt$(e.expected,0)}</b></td>
-                <td className="num" style={{width:88}}>
-                  <input type="number" step="0.01" className="env-input" placeholder={fmt$(e.expected,0)}
-                    value={cnt||''} onChange={ev=>setCounts({...counts,[e.date]:ev.target.value})}
-                    onBlur={ev=>saveCount(e.date, ev.target.value)}/></td>
-                <td className={'num mono '+(diff===null?'':ok?'pos':'neg')}>{diff===null?'-':fmt$(diff,0)}</td>
-                <td className="num" style={{width:26}}>{ok?<span className="env-check">✓</span>:has?<span className="env-x">✕</span>:''}</td>
-              </tr>; })}
-            <tr className="total"><td>Total</td>
-              <td className="num">{fmt$(envExpectedTotal,0)}</td>
-              <td className="num">{fmt$(envCountedTotal,0)}</td>
-              <td className={'num '+(Math.abs(envCountedTotal-envExpectedTotal)<0.01?'pos':'neg')}>{fmt$(envCountedTotal-envExpectedTotal,0)}</td>
-              <td></td></tr>
-          </tbody></table>
-        </div>}
+        {pk.period_start && pk.period_end && envelopeDays.length>0 &&
+          <div className="hint" style={{marginTop:6}}>{envelopeDays.length} cash day{envelopeDays.length===1?'':'s'} in this period · expected {fmt$(envExpectedTotal,0)}. Count each day above in "Count Envelopes".</div>}
         {pk.period_start && pk.period_end && envelopeDays.length===0 &&
           <div className="hint">No cash days in this period.</div>}
         <input placeholder="Memo (optional)" value={pk.note} onChange={e=>setPk({...pk,note:e.target.value})} style={{margin:'10px 0'}}/>
@@ -1805,22 +1837,27 @@ function CashPage({corps, canEditIds, profile, isOwner}){
             const expd = ce ? ce.total : 0;
             const envelope = sales - expd;   // what should physically be in the envelope
             const counted = r && r.counted_amount!=null ? Number(r.counted_amount) : null;
-            const countOk = counted!=null && Math.abs(counted-envelope)<0.01;
-            const countBad = counted!=null && !countOk;
-            return <div key={date} className={'day'+(r&&r.verified?' verified':'')+(ce?' has-cashexp':'')+(countOk?' count-ok':'')+(countBad?' count-bad':'')}>
+            // we always expect a little MORE than sales-minus-spent (coin change is
+            // kept as bills), so counted >= expected is good; short is the problem.
+            const countOk = counted!=null && counted >= envelope - 0.01;
+            const countBad = counted!=null && counted < envelope - 0.01;
+            const hasCash = sales!==0 || expd!==0;
+            return <div key={date} onClick={()=>{ if(hasCash && isOwner) setDayModal({date}); }}
+              className={'day'+(r&&r.verified?' verified':'')+(ce?' has-cashexp':'')+(countOk?' count-ok':'')+(countBad?' count-bad':'')+(hasCash&&isOwner?' tappable':'')}>
               <div className="d">{d}{countOk && <span className="day-check">✓</span>}{countBad && <span className="day-x">✕</span>}</div>
               {r && sales!==0 && <div className="amt">{fmt$(sales,0)}</div>}
               {ce && <div className="cashexp" title={ce.items.map(x=>x.memo).filter(Boolean).join(', ')}>-{fmt$(expd,0)}</div>}
               {ce && sales!==0 && <div className="envelope">={fmt$(envelope,0)}</div>}
               {counted!=null && <div className="counted-lbl">cnt {fmt$(counted,0)}</div>}
+              {countBad && cnotes[date] && <div className="note-dot" title={cnotes[date]}>✎</div>}
             </div>;
           })}
         </div>
         <div className="cal-legend">
           <span><span className="lg-dot gold"></span>Verified (picked up)</span>
-          <span><span className="lg-dot green"></span>Counted ✓ matches</span>
+          <span><span className="lg-dot green"></span>Counted ✓ (enough)</span>
           <span><span className="lg-dot red"></span>Cash expense day</span>
-          <span className="faint">Envelope = cash sales − cash spent</span>
+          <span className="faint">Tap a cash day to count it or fix a shortage.</span>
         </div>
       </div>
       <div>
@@ -1840,11 +1877,82 @@ function CashPage({corps, canEditIds, profile, isOwner}){
         </div>
       </div>
     </div>
+    {isOwner && <div className="card">
+      <h3>Count Envelopes · {MONTHS[m-1]} {y}</h3>
+      <div className="hint" style={{marginTop:0,marginBottom:12}}>Enter the cash you counted in each day's envelope. It saves automatically. The envelope should be at least the expected amount (cash sales minus any cash spent), and is usually a few dollars more because coin change is kept as bills. Green ✓ means you have enough; red ✕ means the envelope is short.</div>
+      {monthEnvelopes.length===0 ? <div className="faint">No cash days this month yet.</div> :
+      <table className="t env-table"><thead><tr>
+        <th>Day</th><th className="num">Sales</th><th className="num">Spent</th><th className="num">Expected</th><th className="num">Counted</th><th className="num">Diff</th><th></th>
+      </tr></thead><tbody>
+        {monthEnvelopes.map(e=>{ const cnt=counts[e.date]; const has=cnt!==''&&cnt!=null; const diff=has?parseFloat(cnt||0)-e.expected:null;
+          const ok=diff!==null && diff>=-0.01; const short=diff!==null && diff<-0.01;
+          const note=cnotes[e.date]||''; const showNote=short||note;
+          return <React.Fragment key={e.date}>
+            <tr className={ok?'env-ok':(short?'env-short':'')}>
+            <td className="mono">{e.date.slice(8)} {DOW[new Date(e.date+'T00:00').getDay()]}</td>
+            <td className="num mono">{fmt$(e.sales,0)}</td>
+            <td className="num mono" style={{color:e.spent?'var(--red)':'var(--text3)'}}>{e.spent?'-'+fmt$(e.spent,0):'-'}</td>
+            <td className="num mono"><b>{fmt$(e.expected,0)}</b></td>
+            <td className="num" style={{width:92}}>
+              <input type="number" step="0.01" className="env-input" placeholder={fmt$(e.expected,0)}
+                value={cnt||''} onChange={ev=>setCounts({...counts,[e.date]:ev.target.value})}
+                onBlur={ev=>saveCount(e.date, ev.target.value)}/></td>
+            <td className={'num mono '+(diff===null?'':ok?'pos':'neg')}>{diff===null?'-':(diff>0?'+':'')+fmt$(diff,0)}</td>
+            <td className="num" style={{width:30}}>{ok?<span className="env-check">✓</span>:short?<span className="env-x">✕</span>:''}</td>
+            </tr>
+            {showNote && <tr className="env-note-row">
+              <td colSpan={7}>
+                <input className="env-note" placeholder="Why was it short? (e.g. bill stuck in register, found next day)"
+                  value={note} onChange={ev=>setCnotes({...cnotes,[e.date]:ev.target.value})}
+                  onBlur={ev=>saveNote(e.date, ev.target.value)}/>
+              </td>
+            </tr>}
+          </React.Fragment>; })}
+        <tr className="total"><td>Total</td>
+          <td className="num"></td><td className="num"></td>
+          <td className="num mono">{fmt$(monthEnvelopes.reduce((a,e)=>a+e.expected,0),0)}</td>
+          <td className="num mono">{fmt$(monthEnvelopes.reduce((a,e)=>a+(counts[e.date]!==''&&counts[e.date]!=null?parseFloat(counts[e.date]||0):0),0),0)}</td>
+          <td className="num"></td><td></td></tr>
+      </tbody></table>}
+    </div>}
+    {dayModal && (()=>{
+      const date=dayModal.date;
+      const r=days[date]; const ce=cashExp[date];
+      const sales=r?Number(r.amount):0; const spent=ce?ce.total:0; const expected=sales-spent;
+      const cnt=counts[date]; const has=cnt!==''&&cnt!=null; const diff=has?parseFloat(cnt||0)-expected:null;
+      const ok=diff!==null&&diff>=-0.01; const short=diff!==null&&diff<-0.01;
+      return <div className="modal-overlay" onClick={()=>setDayModal(null)}>
+        <div className="modal" onClick={e=>e.stopPropagation()}>
+          <div className="modal-head">
+            <div><div className="modal-title">{fmtDateShort(date)}</div>
+              <div className="faint" style={{fontSize:12.5}}>Count this envelope</div></div>
+            <button className="modal-x" onClick={()=>setDayModal(null)}>✕</button>
+          </div>
+          <div className="modal-rows">
+            <div className="modal-row"><span>Cash sales</span><span className="mono">{fmt$(sales,0)}</span></div>
+            <div className="modal-row"><span>Cash spent</span><span className="mono" style={{color:spent?'var(--red)':'var(--text3)'}}>{spent?'-'+fmt$(spent,0):'-'}</span></div>
+            <div className="modal-row modal-exp"><span>Expected in envelope</span><span className="mono"><b>{fmt$(expected,0)}</b></span></div>
+          </div>
+          <label className="hint" style={{marginTop:8}}>Counted (what was actually in the envelope)</label>
+          <input type="number" step="0.01" className="env-input" style={{width:'100%',fontSize:16}} placeholder={fmt$(expected,0)}
+            value={cnt||''} onChange={ev=>setCounts({...counts,[date]:ev.target.value})}
+            onBlur={ev=>saveCount(date, ev.target.value)}/>
+          {diff!==null && <div className={'modal-diff '+(ok?'pos':'neg')}>
+            {ok ? <>✓ Envelope has enough{diff>0?` (+${fmt$(diff,0)} over)`:''}</> : <>✕ Short by {fmt$(Math.abs(diff),0)}</>}
+          </div>}
+          {(short||cnotes[date]) && <>
+            <label className="hint" style={{marginTop:10}}>Note (why was it short? update later if you find the cause)</label>
+            <input className="env-note" style={{width:'100%'}} placeholder="e.g. bill stuck in register, found next day"
+              value={cnotes[date]||''} onChange={ev=>setCnotes({...cnotes,[date]:ev.target.value})}
+              onBlur={ev=>saveNote(date, ev.target.value)}/>
+          </>}
+          <button className="btn btn-gold" style={{width:'100%',marginTop:14}} onClick={()=>{ setDayModal(null); showToast('Saved'); }}>Done</button>
+        </div>
+      </div>;
+    })()}
     {toast && <div className="toast">{toast}</div>}
   </div>;
 }
-
-// ================= RECURRING =================
 function Recurring({corps, canEditIds, profile, isOwner, embedded}){
   const editable = corps.filter(c=>canEditIds.has(c.id));
   const [corpId, setCorpId] = useState(editable[0] && editable[0].id);
@@ -3008,9 +3116,10 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose
             <span><span className={'dot'+(p.exp>0?' ok':'')}></span>{p.exp} expense{p.exp===1?'':'s'}</span>
             {p.pending>0 && <span><span className="dot warn"></span>{p.pending} pending</span>}
           </div>
-          <div className="progress"><div className="fill" style={{width:pct+'%'}}></div></div>
-          <div className="progress-lbl">{p.daysDone.size} of {dayOfMonth} days entered this month</div>
-          <button className="hc-enter" onClick={e=>{e.stopPropagation(); goEntry(c.id);}}>+ Enter today's numbers</button>
+          <div className="hc-actions">
+            <button className="hc-btn income" onClick={e=>{e.stopPropagation(); goEntry(c.id,'income');}}>+ Income</button>
+            <button className="hc-btn expense" onClick={e=>{e.stopPropagation(); goEntry(c.id,'expense');}}>− Expense</button>
+          </div>
         </div>;
       })}
     </div>
@@ -3173,11 +3282,12 @@ function App(){
   const [perms,setPerms] = useState([]);
   const [tab,setTab] = useState(localStorage.getItem('ft_tab')||'home');
   const [entryCorp,setEntryCorp] = useState(null);
+  const [entryMode,setEntryMode] = useState(null);
   const [insightsCorp,setInsightsCorp] = useState(null);
   const [closePreset,setClosePreset] = useState(null);
   const [moreOpen,setMoreOpen] = useState(false);
   const [pendingCount,setPendingCount] = useState(0);
-  const goEntry = (corpId)=>{ setEntryCorp(corpId); setTab('entry'); };
+  const goEntry = (corpId, mode)=>{ setEntryCorp(corpId); setEntryMode(mode?{mode,t:Date.now()}:null); setTab('entry'); };
   const goInsights = (corpId)=>{ setInsightsCorp({id:corpId, t:Date.now()}); setTab('insights'); };
   const goClose = (corpId,y,m)=>{ setClosePreset({corpId,y,m}); setTab('close'); };
   const goApprovals = ()=>setTab('approvals');
@@ -3250,7 +3360,7 @@ function App(){
   const page = {
     home:      <Home corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} goEntry={goEntry} goInsights={goInsights} goClose={goClose} goApprovals={goApprovals}/>,
     approvals: <Approvals corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner}/>,
-    entry:     <Entry corps={storeCorps} canEditIds={canEditIds} profile={profile} presetCorp={entryCorp}/>,
+    entry:     <Entry corps={storeCorps} canEditIds={canEditIds} profile={profile} presetCorp={entryCorp} presetMode={entryMode}/>,
     insights:  <Dashboard corps={storeCorps} canEditIds={canEditIds} presetCorp={insightsCorp}/>,
     cash:      <CashPage corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner}/>,
     close:     <ClosePage corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} preset={closePreset}/>,
