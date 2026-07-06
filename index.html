@@ -261,6 +261,9 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .modal-diff{margin-top:10px;padding:9px 12px;border-radius:8px;font-size:13.5px;font-weight:600;text-align:center}
 .modal-diff.pos{background:var(--green-dim,rgba(46,125,79,0.1));color:var(--green)}
 .modal-diff.neg{background:rgba(196,100,76,0.1);color:var(--red)}
+.install-steps{margin:0;padding-left:20px;font-size:13.5px;color:var(--text2);line-height:1.5}
+.install-steps li{margin-bottom:8px}
+.ios-ic{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 4px;border-radius:5px;background:var(--gold-dim);color:var(--gold-strong);font-size:12px;vertical-align:middle;margin:0 1px}
 .cal .day.count-ok{border-color:var(--green);background:rgba(46,125,79,0.06)}
 .cal .day.count-bad{border-color:var(--red)}
 .cal .day .day-check{color:var(--green);font-weight:700;margin-left:3px;font-size:11px}
@@ -2713,21 +2716,29 @@ function PwaCard({profile}){
         ? <div className="pos" style={{fontSize:14}}>✓ Running as an installed app</div>
         : installable
           ? <><div className="muted" style={{marginBottom:12,fontSize:13.5}}>Install Ugly Finance on this device for a full-screen app with its own icon.</div>
-              <button className="btn btn-gold" onClick={install}>Install</button></>
+              <button className="btn btn-gold" onClick={install}>Install app</button></>
           : isIOS()
-            ? <div className="muted" style={{fontSize:13.5}}>On iPhone/iPad: tap Share (⬆︎) in Safari, then <b>Add to Home Screen</b>.</div>
+            ? <div>
+                <div className="muted" style={{marginBottom:12,fontSize:13.5}}>To install on your iPhone or iPad (Safari):</div>
+                <ol className="install-steps">
+                  <li>Tap the <b>Share</b> button <span className="ios-ic">⬆︎</span> at the bottom of Safari.</li>
+                  <li>Scroll down and tap <b>Add to Home Screen</b> <span className="ios-ic">⊕</span>.</li>
+                  <li>Tap <b>Add</b>, then open <b>Ugly Finance</b> from your home screen.</li>
+                  <li>Come back here and turn on notifications.</li>
+                </ol>
+              </div>
             : <div className="muted" style={{fontSize:13.5}}>Open this site in Chrome (Android or desktop) to see an install option.</div>}
     </div>
     <div className="card">
       <h3>Notifications</h3>
       {notifState==='checking' && <div className="faint">Checking...</div>}
       {notifState==='unsupported' && <div className="muted" style={{fontSize:13.5}}>This browser does not support push notifications.</div>}
-      {notifState==='ios-needs-install' && <div className="muted" style={{fontSize:13.5}}>Install the app first (see left), then enable notifications from the installed app. Requires iOS 16.4 or later.</div>}
-      {notifState==='denied' && <div className="muted" style={{fontSize:13.5}}>Notifications are blocked. Enable them in your device settings for this app, then reload.</div>}
+      {notifState==='ios-needs-install' && <div className="muted" style={{fontSize:13.5}}>Install the app first (see left/above), then open Ugly Finance from your home screen and enable notifications from there. Requires iOS 16.4 or later.</div>}
+      {notifState==='denied' && <div className="muted" style={{fontSize:13.5}}>Notifications are blocked. Turn them on for Ugly Finance in your device Settings, then reload.</div>}
       {notifState==='off' && <><div className="muted" style={{marginBottom:12,fontSize:13.5}}>
-        {profile.role==='investor' ? 'Get notified when a new monthly report is published.' : 'Get notified when an expense needs approval.'}</div>
-        <button className="btn btn-gold" disabled={busy} onClick={enableNotif}>Enable notifications</button></>}
-      {notifState==='on' && <><div className="pos" style={{marginBottom:12,fontSize:14}}>✓ Notifications on</div>
+        {profile.role==='investor' ? 'Get notified when a new monthly report is published.' : 'Get notified when an expense needs approval or a cash count is off.'}</div>
+        <button className="btn btn-gold" disabled={busy} onClick={enableNotif}>{busy?'...':'Turn on notifications'}</button></>}
+      {notifState==='on' && <><div className="pos" style={{marginBottom:12,fontSize:14}}>✓ Notifications are on</div>
         <button className="btn" disabled={busy} onClick={disableNotif}>Turn off</button></>}
     </div>
     {toast && <div className="toast">{toast}</div>}
@@ -3274,7 +3285,7 @@ const NAV = [
   {id:'close',     label:'Close',   full:'Close & Publish', ic:'◆', roles:['owner']},
   {id:'investor',  label:'Reports', full:'Reports',         ic:'▦', roles:['owner','investor']},
   {id:'settings',  label:'Settings',full:'Settings',        ic:'⚙', roles:['owner']},
-  {id:'alerts',    label:'App',     full:'App & Alerts',    ic:'⚙', roles:['assistant','investor']},
+  {id:'alerts',    label:'Install', full:'Install App',     ic:'⬇', roles:['owner','assistant','investor']},
 ];
 
 function App(){
@@ -3368,7 +3379,7 @@ function App(){
     close:     <ClosePage corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} preset={closePreset}/>,
     investor:  <InvestorPortal corps={isOwner?storeCorps:viewCorps}/>,
     settings:  <Settings corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} session={session}/>,
-    alerts:    <div><div className="page-head"><div><div className="eyebrow">App & Alerts</div><h2>App & Alerts</h2></div></div><PwaCard profile={profile}/></div>,
+    alerts:    <div><div className="page-head"><div><div className="eyebrow">Install</div><h2>Install App & Notifications</h2></div></div><PwaCard profile={profile}/></div>,
   }[effTab];
 
   // core tabs shown in the mobile bottom bar; the rest go under "More"
