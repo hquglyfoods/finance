@@ -72,12 +72,27 @@ exports.handler = async () => {
     franchise.forEach(c => { text += `${nameOf(c)}: ${fmtMoney(totalByCorp[c.id])}\n`; });
   }
 
+  const channel = (process.env.FINANCIAL_CHANNEL_ID || '').trim();
+  const payload = { channel, text };
   const res = await fetch('https://slack.com/api/chat.postMessage', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json; charset=utf-8', Authorization: 'Bearer ' + process.env.SLACK_BOT_TOKEN },
-    body: JSON.stringify({ channel: process.env.FINANCIAL_CHANNEL_ID, text, mrkdwn: true }),
+    headers: { 'Content-Type': 'application/json; charset=utf-8', Authorization: 'Bearer ' + (process.env.SLACK_BOT_TOKEN || '').trim() },
+    body: JSON.stringify(payload),
   });
   const out = await res.json();
-  if (!out.ok) return { statusCode: 500, body: JSON.stringify({ error: out.error, date: iso }) };
+  if (!out.ok) return { statusCode: 500, body: JSON.stringify({
+    error: out.error,
+    slack_response: out,
+    debug: {
+      channel_sent: channel,
+      channel_len: channel.length,
+      token_present: !!process.env.SLACK_BOT_TOKEN,
+      token_prefix: (process.env.SLACK_BOT_TOKEN || '').slice(0, 5),
+      text_length: text.length,
+      text_preview: text.slice(0, 120),
+      store_corps: storeCorps.length,
+    },
+    date: iso,
+  }, null, 2) };
   return { statusCode: 200, body: JSON.stringify({ ok: true, date: iso, corporate: corporate.length, franchise: franchise.length }) };
 };
