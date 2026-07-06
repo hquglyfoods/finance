@@ -231,6 +231,12 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .env-table .env-input{width:100%;padding:6px 8px;font-family:var(--font-m);text-align:right;font-size:13px}
 .env-table th{font-size:11px}
 .env-table td{padding:6px 8px}
+.rev-entry td{padding:7px 4px;vertical-align:middle}
+.rev-entry td:first-child{font-size:14px;font-weight:500}
+.rev-entry input{padding:8px 10px}
+.env-check{color:var(--green);font-weight:700}
+.env-x{color:var(--red);font-weight:700}
+.env-table tr.env-ok td{background:var(--green-dim,rgba(46,125,79,0.08))}
 
 /* forms */
 .form-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
@@ -378,12 +384,13 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 
 /* ---------- home (today) ---------- */
 .home-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;margin-bottom:22px}
-.home-card{background:var(--panel);border:1px solid var(--border-soft);border-radius:12px;padding:20px;cursor:pointer;transition:border-color .15s, transform .1s;position:relative}
+.home-card{background:var(--panel);border:1px solid var(--border-soft);border-radius:12px;padding:20px;cursor:pointer;transition:border-color .15s, transform .1s;position:relative;display:flex;flex-direction:column}
 .home-card:hover{border-color:var(--gold-soft);transform:translateY(-1px)}
 .home-card.done{border-color:var(--gold-soft);background:linear-gradient(180deg, var(--gold-dim), var(--panel))}
 .home-card .hc-code{font-family:var(--font-m);font-size:11px;letter-spacing:.14em;color:var(--gold)}
 .home-card .hc-name{font-family:var(--font-d);font-size:17px;font-weight:700;letter-spacing:-0.01em;margin:4px 0 12px}
-.home-card .hc-enter{margin-top:14px;width:100%;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--gold-strong);font-weight:600;font-size:13px;cursor:pointer}
+.home-card .progress-lbl{margin-bottom:0}
+.home-card .hc-enter{margin-top:auto;width:100%;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--gold-strong);font-weight:600;font-size:13px;cursor:pointer}
 .home-card .hc-enter:hover{border-color:var(--gold-soft);background:var(--gold-dim)}
 .home-card .hc-amt{font-family:var(--font-m);font-size:24px;margin-bottom:12px}
 .home-card .hc-amt .cur{font-size:14px;color:var(--text3)}
@@ -592,28 +599,36 @@ function computePL(meta, raw){
   // board row use their live rows normally. This makes fully-historical months
   // board-only, while a partial month (e.g. board days 1-5, live days 6+) mixes
   // correctly with no double-counting.
+  // A month is BOARD-LOCKED when it has board data and is fully in the past
+  // (before the current calendar month). Board-locked months show exactly what was
+  // imported from Excel: only board rows count, no auto-rules, and any stray
+  // recurring/live rows are ignored so nothing is double-counted. The current month
+  // is transitional (per-date precedence + auto-rules) so board days 1-5 and live
+  // days 6+ coexist.
+  const now = new Date();
+  const curKey = `${now.getFullYear()}-${pad(now.getMonth()+1)}`;
+  const monthKey = raw.monthKey || '';
+  const hasBoardRevAny = raw.revenue.some(r => r.source === 'board');
+  const hasBoardExpAny = raw.expenses.some(e => e.source === 'board' && e.status === 'confirmed');
+  const boardLocked = (monthKey < curKey) && (hasBoardRevAny || hasBoardExpAny);
+
   const boardRevDates = new Set(raw.revenue.filter(r => r.source === 'board').map(r => r.date));
   let totalSales = 0;
   raw.revenue.forEach(r => {
-    if (r.source !== 'board' && boardRevDates.has(r.date)) return;
+    if (boardLocked && r.source !== 'board') return;                 // locked: board only
+    if (!boardLocked && r.source !== 'board' && boardRevDates.has(r.date)) return; // current: per-date
     const c = chByCode[r.channel_id]; if(!c) return;
     chSum[c.code] = (chSum[c.code]||0) + Number(r.amount);
     if (c.counts_in_total) totalSales += Number(r.amount) * Number(c.total_multiplier);
   });
   const catById = {}, catSum = {};
   meta.categories.forEach(c => { catById[c.id] = c; catSum[c.code] = 0; });
-  // "board" months: recorded straight from Excel. If any board-sourced expense
-  // exists, this month is historical -> use recorded values only, no auto-rules.
-  // Board precedence per-date (mirrors revenue). On dates with a board expense,
-  // only board expenses count; other dates use their live/manual rows. Auto-rules
-  // are disabled only for FULLY-historical months (every confirmed expense is
-  // board) so historical P&L stays exactly as recorded; a transition month that
-  // mixes board days and live days keeps auto-rules (royalty/marketing) active.
   const confExp = raw.expenses.filter(e => e.status === 'confirmed');
   const boardExpDates = new Set(confExp.filter(e => e.source === 'board').map(e => e.date));
-  const hasBoard = confExp.length > 0 && confExp.every(e => e.source === 'board');
+  const hasBoard = boardLocked;   // auto-rules off for locked months
   confExp.forEach(e => {
-    if (e.source !== 'board' && boardExpDates.has(e.date)) return; // board wins on that date
+    if (boardLocked && e.source !== 'board') return;                 // locked: board only
+    if (!boardLocked && e.source !== 'board' && boardExpDates.has(e.date)) return; // current: per-date
     const c = catById[e.category_id]; if(!c) return;
     catSum[c.code] = (catSum[c.code]||0) + Number(e.amount);
   });
@@ -849,14 +864,18 @@ function Dashboard({corps, canEditIds, presetCorp}){
         setPl(computePL(mt,raw));
         const chBy={}; mt.channels.forEach(c=>chBy[c.id]=c);
         const catBy={}; mt.categories.forEach(c=>catBy[c.id]=c);
+        const nowD=new Date(); const curK=`${nowD.getFullYear()}-${pad(nowD.getMonth()+1)}`;
         const buildDays=(rawX, yy)=>{
           const nD=lastDay(yy,m); const days={};
           for(let d=1;d<=nD;d++) days[d]={rev:0,exp:0,items:[]};
+          const mKey=`${yy}-${pad(m)}`;
+          const lockedR=(mKey<curK) && rawX.revenue.some(r=>r.source==='board');
+          const lockedE=(mKey<curK) && rawX.expenses.some(e=>e.source==='board'&&e.status==='confirmed');
           const boardRevDates=new Set(rawX.revenue.filter(r=>r.source==='board').map(r=>r.date));
-          rawX.revenue.forEach(r=>{ if(r.source!=='board'&&boardRevDates.has(r.date))return; const ch=chBy[r.channel_id]; if(!ch||!ch.counts_in_total)return;
+          rawX.revenue.forEach(r=>{ if(lockedR&&r.source!=='board')return; if(!lockedR&&r.source!=='board'&&boardRevDates.has(r.date))return; const ch=chBy[r.channel_id]; if(!ch||!ch.counts_in_total)return;
             const d=parseInt(r.date.slice(8)); if(days[d]) days[d].rev+=Number(r.amount)*Number(ch.total_multiplier||1); });
           const boardExpDates=new Set(rawX.expenses.filter(e=>e.source==='board'&&e.status==='confirmed').map(e=>e.date));
-          rawX.expenses.forEach(e=>{ if(e.status!=='confirmed')return; if(e.source!=='board'&&boardExpDates.has(e.date))return;
+          rawX.expenses.forEach(e=>{ if(e.status!=='confirmed')return; if(lockedE&&e.source!=='board')return; if(!lockedE&&e.source!=='board'&&boardExpDates.has(e.date))return;
             const d=parseInt(e.date.slice(8)); if(days[d]){ days[d].exp+=Number(e.amount);
               days[d].items.push({cat:(catBy[e.category_id]||{}).name||'?', amount:Number(e.amount), payee:e.payee, memo:e.memo, source:e.source, by:e.entered_by, slack_user:e.slack_user}); } });
           return days;
@@ -1470,7 +1489,7 @@ function Entry({corps, canEditIds, profile, presetCorp}){
     {mode==='income' &&
       <div className="card">
         <h3>Revenue <span className="faint" style={{fontWeight:400}}>{date}</span></h3>
-        <table className="t"><tbody>
+        <table className="t rev-entry"><tbody>
           {(meta?meta.channels.filter(c=>c.active):[]).map(c=>{
             const row = dayRev[c.id];
             const auto = row && row.source!=='manual' && row.source!=='import';
@@ -1482,7 +1501,7 @@ function Entry({corps, canEditIds, profile, presetCorp}){
             return <tr key={c.id}>
               <td>{c.name} {auto && <span className={'badge '+(row.source==='toast_live'?'gold':'green')}>{badgeLabel}</span>}
                 {row && row.verified && <span className="badge gold">Verified</span>}</td>
-              <td className="num" style={{width:150}}>
+              <td className="num" style={{width:130}}>
                 <input type="number" step="0.01" defaultValue={row?Number(row.amount):''} placeholder="0.00"
                   key={c.id+date+(row?row.amount:'')}
                   onBlur={e=>saveRev(c,e.target.value)} style={{textAlign:'right'}}/>
@@ -1564,6 +1583,7 @@ function CashPage({corps, canEditIds, profile, isOwner}){
   const [cashExp, setCashExp] = useState({});
   const [pickupOpen, setPickupOpen] = useState(false);
   const [counts, setCounts] = useState({});   // date -> actual counted amount string
+  const [editingId, setEditingId] = useState(null);
 
   const reload = useCallback(async()=>{
     if(!corpId) return;
@@ -1592,20 +1612,48 @@ function CashPage({corps, canEditIds, profile, isOwner}){
     const noteBits = [];
     if(pk.note) noteBits.push(pk.note);
     if(envDates.length) noteBits.push('Counted per envelope: '+envDates.sort().map(d=>`${d.slice(8)}=$${parseFloat(counts[d]).toFixed(0)}`).join(', '));
-    const { data, error } = await sb.from('cash_pickups').insert({
-      corporation_id:corpId, pickup_date:pk.pickup_date, period_start:pk.period_start,
-      period_end:pk.period_end, counted_amount: countedTotal, note:noteBits.join(' | ')||null,
-      created_by:profile.id }).select().single();
-    if(error){ showToast('Save failed: '+error.message); return; }
+    let pickupId = editingId;
+    if(editingId){
+      // editing: clear the old verified flags for this pickup, then update the row
+      await sb.from('daily_revenue').update({verified:false, pickup_id:null, verified_by:null, verified_at:null}).eq('pickup_id',editingId);
+      const { error } = await sb.from('cash_pickups').update({
+        pickup_date:pk.pickup_date, period_start:pk.period_start, period_end:pk.period_end,
+        counted_amount:countedTotal, note:noteBits.join(' | ')||null }).eq('id',editingId);
+      if(error){ showToast('Update failed: '+error.message); return; }
+    } else {
+      const { data, error } = await sb.from('cash_pickups').insert({
+        corporation_id:corpId, pickup_date:pk.pickup_date, period_start:pk.period_start,
+        period_end:pk.period_end, counted_amount: countedTotal, note:noteBits.join(' | ')||null,
+        created_by:profile.id }).select().single();
+      if(error){ showToast('Save failed: '+error.message); return; }
+      pickupId = data.id;
+    }
     const { error: e2 } = await sb.from('daily_revenue').update({
-      verified:true, pickup_id:data.id, verified_by:profile.id, verified_at:new Date().toISOString() })
+      verified:true, pickup_id:pickupId, verified_by:profile.id, verified_at:new Date().toISOString() })
       .eq('corporation_id',corpId).eq('channel_id',cashChId)
       .gte('date',pk.period_start).lte('date',pk.period_end);
     if(e2){ showToast('Verification failed: '+e2.message); return; }
-    showToast('Pickup recorded, period verified');
+    showToast(editingId?'Pickup updated':'Pickup recorded, period verified');
     setPk({pickup_date:todayStr(), period_start:'', period_end:'', counted_amount:'', note:''});
-    setCounts({}); setPickupOpen(false);
+    setCounts({}); setPickupOpen(false); setEditingId(null);
     reload();
+  };
+
+  const editPickup = (p)=>{
+    setEditingId(p.id);
+    setPk({pickup_date:p.pickup_date, period_start:p.period_start, period_end:p.period_end,
+      counted_amount:p.counted_amount!=null?String(p.counted_amount):'', note:''});
+    // move the calendar to the pickup's month so its cash days load
+    const [py,pm]=p.period_start.split('-'); setY(parseInt(py)); setM(parseInt(pm));
+    setCounts({}); setPickupOpen(true);
+    window.scrollTo({top:0, behavior:'smooth'});
+  };
+  const deletePickup = async (p)=>{
+    if(!confirm(`Delete this pickup (${p.period_start} ~ ${p.period_end})? The days will no longer show as verified.`)) return;
+    await sb.from('daily_revenue').update({verified:false, pickup_id:null, verified_by:null, verified_at:null}).eq('pickup_id',p.id);
+    await sb.from('cash_pickups').delete().eq('id',p.id);
+    if(editingId===p.id){ setEditingId(null); setPk({pickup_date:todayStr(), period_start:'', period_end:'', counted_amount:'', note:''}); }
+    showToast('Pickup deleted'); reload();
   };
 
   // per-day envelopes within the chosen pickup period: expected = cash sales - cash spent
@@ -1644,10 +1692,20 @@ function CashPage({corps, canEditIds, profile, isOwner}){
       </div>
     </div>
     {isOwner && <div className="card pickup-card">
-      <button className="pickup-head" onClick={()=>setPickupOpen(o=>!o)}>
+      <button className="pickup-head" onClick={()=>{
+        const opening=!pickupOpen;
+        if(opening && !pk.period_start){
+          // default the period to the unverified cash days in view (start..today)
+          const cashDates=Object.keys(days).filter(dt=>Number(days[dt].amount)>0 && !days[dt].verified).sort();
+          if(cashDates.length){
+            setPk({...pk, period_start:cashDates[0], period_end:cashDates[cashDates.length-1]});
+          }
+        }
+        setPickupOpen(opening);
+      }}>
         <div>
-          <div className="pickup-title">Record Envelope Pickup</div>
-          <div className="pickup-sub">Log a pickup and count each day's envelope. Marks the period verified (gold).</div>
+          <div className="pickup-title">{editingId?'Edit Pickup':'Record Envelope Pickup'}</div>
+          <div className="pickup-sub">Count each day's envelope and check it off. Marks the period verified (gold).</div>
         </div>
         <span className="pickup-chev">{pickupOpen?'▲':'▾'}</span>
       </button>
@@ -1661,32 +1719,35 @@ function CashPage({corps, canEditIds, profile, isOwner}){
             <input type="date" value={pk.period_end} onChange={e=>setPk({...pk,period_end:e.target.value})}/></div>
         </div>
         {envelopeDays.length>0 && <div style={{marginTop:6}}>
-          <div className="hint" style={{marginBottom:8}}>Open each envelope and enter the actual cash counted. Expected = cash sales that day minus any cash spent from the drawer.</div>
+          <div className="hint" style={{marginBottom:8}}>Open each envelope, enter the cash you counted, and it checks off (✓) when it matches. Expected = cash sales that day minus any cash spent from the drawer.</div>
           <table className="t env-table"><thead><tr>
-            <th>Day</th><th className="num">Sales</th><th className="num">Spent</th><th className="num">Expected</th><th className="num">Counted</th><th className="num">Diff</th>
+            <th>Day</th><th className="num">Expected</th><th className="num">Counted</th><th className="num">Diff</th><th></th>
           </tr></thead><tbody>
-            {envelopeDays.map(e=>{ const cnt=counts[e.date]; const has=cnt!==''&&cnt!=null; const diff=has?parseFloat(cnt||0)-e.expected:null;
-              return <tr key={e.date}>
-                <td className="mono">{e.date.slice(8)} {DOW[new Date(e.date+'T00:00').getDay()]}</td>
-                <td className="num mono">{fmt$(e.sales,0)}</td>
-                <td className="num mono" style={{color:e.spent?'var(--red)':'var(--text3)'}}>{e.spent?'-'+fmt$(e.spent,0):'-'}</td>
+            {envelopeDays.map(e=>{ const cnt=counts[e.date]; const has=cnt!==''&&cnt!=null; const diff=has?parseFloat(cnt||0)-e.expected:null; const ok=diff!==null&&Math.abs(diff)<0.01;
+              return <tr key={e.date} className={ok?'env-ok':''}>
+                <td className="mono">{e.date.slice(8)} {DOW[new Date(e.date+'T00:00').getDay()]}
+                  {e.spent>0 && <div className="faint" style={{fontSize:10}}>{fmt$(e.sales,0)} − {fmt$(e.spent,0)} spent</div>}</td>
                 <td className="num mono"><b>{fmt$(e.expected,0)}</b></td>
-                <td className="num" style={{width:92}}>
+                <td className="num" style={{width:88}}>
                   <input type="number" step="0.01" className="env-input" placeholder={fmt$(e.expected,0)}
                     value={cnt||''} onChange={ev=>setCounts({...counts,[e.date]:ev.target.value})}/></td>
-                <td className={'num mono '+(diff===null?'':Math.abs(diff)<0.01?'pos':'neg')}>{diff===null?'-':fmt$(diff,0)}</td>
+                <td className={'num mono '+(diff===null?'':ok?'pos':'neg')}>{diff===null?'-':fmt$(diff,0)}</td>
+                <td className="num" style={{width:26}}>{ok?<span className="env-check">✓</span>:has?<span className="env-x">✕</span>:''}</td>
               </tr>; })}
             <tr className="total"><td>Total</td>
-              <td className="num"></td><td className="num"></td>
               <td className="num">{fmt$(envExpectedTotal,0)}</td>
               <td className="num">{fmt$(envCountedTotal,0)}</td>
-              <td className={'num '+(Math.abs(envCountedTotal-envExpectedTotal)<0.01?'pos':'neg')}>{fmt$(envCountedTotal-envExpectedTotal,0)}</td></tr>
+              <td className={'num '+(Math.abs(envCountedTotal-envExpectedTotal)<0.01?'pos':'neg')}>{fmt$(envCountedTotal-envExpectedTotal,0)}</td>
+              <td></td></tr>
           </tbody></table>
         </div>}
         {pk.period_start && pk.period_end && envelopeDays.length===0 &&
           <div className="hint">No cash days in this period.</div>}
         <input placeholder="Memo (optional)" value={pk.note} onChange={e=>setPk({...pk,note:e.target.value})} style={{margin:'10px 0'}}/>
-        <button className="btn btn-gold" onClick={savePickup}>Save Pickup + Verify Period</button>
+        <div style={{display:'flex',gap:8}}>
+          <button className="btn btn-gold" onClick={savePickup}>{editingId?'Update Pickup':'Save Pickup + Verify Period'}</button>
+          {editingId && <button className="btn" onClick={()=>{ setEditingId(null); setPk({pickup_date:todayStr(),period_start:'',period_end:'',counted_amount:'',note:''}); setCounts({}); }}>Cancel edit</button>}
+        </div>
       </div>}
     </div>}
     <div className="grid2">
@@ -1720,11 +1781,15 @@ function CashPage({corps, canEditIds, profile, isOwner}){
         <div className="card">
           <h3>Recent Pickups</h3>
           {pickups.length===0 ? <div className="faint">No records</div> :
-          <table className="t"><thead><tr><th>Pickup</th><th>Period</th><th className="num">Counted</th></tr></thead><tbody>
+          <table className="t"><thead><tr><th>Pickup</th><th>Period</th><th className="num">Counted</th><th></th></tr></thead><tbody>
             {pickups.map(p=><tr key={p.id}>
               <td className="mono">{p.pickup_date}</td>
               <td className="mono" style={{fontSize:12}}>{p.period_start} ~ {p.period_end}</td>
-              <td className="num">{p.counted_amount!=null?fmt$(Number(p.counted_amount)):'-'}</td></tr>)}
+              <td className="num">{p.counted_amount!=null?fmt$(Number(p.counted_amount)):'-'}</td>
+              <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+                {isOwner && <button className="btn btn-sm" onClick={()=>editPickup(p)}>Edit</button>}
+                {isOwner && <button className="btn btn-sm btn-danger" style={{marginLeft:6}} onClick={()=>deletePickup(p)}>✕</button>}
+              </td></tr>)}
           </tbody></table>}
         </div>
       </div>
