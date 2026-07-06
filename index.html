@@ -36,13 +36,14 @@ input[type=number]{font-family:var(--font-m)}
 ::placeholder{color:var(--text3)}
 a{color:var(--gold);text-decoration:none}
 
-.btn{border:1px solid var(--border);background:var(--panel2);color:var(--text);border-radius:6px;padding:9px 16px;font-weight:500;font-size:13.5px;transition:border-color .15s, background .15s}
-.btn:hover{border-color:var(--gold-soft)}
-.btn:disabled{opacity:.45;cursor:default}
-.btn-gold{background:var(--gold);border-color:var(--gold);color:#FFFFFF;font-weight:600}
+.btn{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:8px;padding:9px 16px;font-weight:600;font-size:13.5px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,0.04);transition:border-color .15s, background .15s, box-shadow .15s}
+.btn:hover{border-color:var(--gold-soft);box-shadow:0 2px 6px rgba(0,0,0,0.08)}
+.btn:active{box-shadow:0 1px 1px rgba(0,0,0,0.06)}
+.btn:disabled{opacity:.45;cursor:default;box-shadow:none}
+.btn-gold{background:var(--gold);border-color:var(--gold);color:#FFFFFF;font-weight:600;box-shadow:0 1px 3px rgba(176,138,30,0.25)}
 .btn-gold:hover{background:var(--gold-strong);border-color:var(--gold-strong)}
-.btn-ghost{background:transparent}
-.btn-sm{padding:5px 10px;font-size:12.5px;border-radius:5px}
+.btn-ghost{background:transparent;box-shadow:none}
+.btn-sm{padding:6px 12px;font-size:12.5px;border-radius:6px}
 .btn-danger{color:var(--red);border-color:rgba(196,100,76,.4)}
 
 .eyebrow{font-family:var(--font-m);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold)}
@@ -131,7 +132,7 @@ a{color:var(--gold);text-decoration:none}
 .settings-tabs::-webkit-scrollbar{display:none}
 .settings-tab{flex:0 0 auto;white-space:nowrap;padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text2);font-weight:600;font-size:13px;cursor:pointer}
 .settings-tab.on{background:var(--gold-dim);border-color:var(--gold-soft);color:var(--gold-strong)}
-.corp-tab{padding:7px 14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text2);font-weight:500;font-size:13px}
+.corp-tab{padding:7px 14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text2);font-weight:500;font-size:13px;cursor:pointer}
 .corp-tab.on{border-color:var(--gold-soft);color:var(--gold-strong);background:var(--gold-dim)}
 .viewbar{display:flex;gap:4px;margin-bottom:22px;background:var(--panel2);border-radius:10px;padding:4px;width:fit-content}
 .viewtab{padding:8px 18px;border-radius:7px;border:none;background:transparent;color:var(--text2);font-weight:600;font-size:13px;cursor:pointer}
@@ -221,12 +222,12 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .cal-legend .lg-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}
 .cal-legend .lg-dot.gold{background:var(--gold)}
 .cal-legend .lg-dot.red{background:var(--red)}
-.pickup-card{padding:0;overflow:hidden}
-.pickup-head{display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:none;padding:16px 20px;cursor:pointer;text-align:left}
-.pickup-head:hover{background:var(--panel2)}
-.pickup-title{font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text)}
-.pickup-sub{font-size:12.5px;color:var(--text3);margin-top:2px}
-.pickup-chev{color:var(--gold-strong);font-size:14px}
+.pickup-card{padding:0;overflow:hidden;border:1px solid var(--gold-soft)}
+.pickup-head{display:flex;align-items:center;justify-content:space-between;width:100%;background:var(--gold-dim);border:none;padding:16px 20px;cursor:pointer;text-align:left}
+.pickup-head:hover{background:var(--gold-dim);filter:brightness(0.98)}
+.pickup-title{font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--gold-strong)}
+.pickup-sub{font-size:12.5px;color:var(--text2);margin-top:2px}
+.pickup-chev{color:var(--gold-strong);font-size:16px;background:var(--panel);width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 2px rgba(0,0,0,0.08)}
 .pickup-body{padding:0 20px 20px;border-top:1px solid var(--border-soft)}
 .env-table .env-input{width:100%;padding:6px 8px;font-family:var(--font-m);text-align:right;font-size:13px}
 .env-table th{font-size:11px}
@@ -237,6 +238,12 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .env-check{color:var(--green);font-weight:700}
 .env-x{color:var(--red);font-weight:700}
 .env-table tr.env-ok td{background:var(--green-dim,rgba(46,125,79,0.08))}
+.cal .day.count-ok{border-color:var(--green);background:rgba(46,125,79,0.06)}
+.cal .day.count-bad{border-color:var(--red)}
+.cal .day .day-check{color:var(--green);font-weight:700;margin-left:3px;font-size:11px}
+.cal .day .day-x{color:var(--red);font-weight:700;margin-left:3px;font-size:11px}
+.cal .day .counted-lbl{font-family:var(--font-m);font-size:9.5px;color:var(--green);margin-top:1px}
+.cal-legend .lg-dot.green{background:var(--green)}
 
 /* forms */
 .form-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
@@ -364,7 +371,7 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   .home-grid{grid-template-columns:1fr 1fr;gap:10px}
   .home-card{padding:14px 13px;border-radius:12px}
   .home-card .hc-code{font-size:10px;letter-spacing:.12em}
-  .home-card .hc-name{font-size:14px;margin:3px 0 8px;line-height:1.25}
+  .home-card .hc-name{font-size:14px;margin:3px 0 8px;line-height:1.2;min-height:2.4em;-webkit-line-clamp:2}
   .home-card .hc-amt{font-size:20px;margin-bottom:8px}
   .home-card .hc-amt .cur{font-size:12px}
   .home-card .hc-status{flex-direction:column;gap:4px;font-size:11.5px;margin-bottom:10px}
@@ -388,10 +395,11 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .home-card:hover{border-color:var(--gold-soft);transform:translateY(-1px)}
 .home-card.done{border-color:var(--gold-soft);background:linear-gradient(180deg, var(--gold-dim), var(--panel))}
 .home-card .hc-code{font-family:var(--font-m);font-size:11px;letter-spacing:.14em;color:var(--gold)}
-.home-card .hc-name{font-family:var(--font-d);font-size:17px;font-weight:700;letter-spacing:-0.01em;margin:4px 0 12px}
+.home-card .hc-name{font-family:var(--font-d);font-size:16px;font-weight:700;letter-spacing:-0.01em;margin:4px 0 12px;line-height:1.25;
+  min-height:2.5em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .home-card .progress-lbl{margin-bottom:0}
-.home-card .hc-enter{margin-top:auto;width:100%;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--gold-strong);font-weight:600;font-size:13px;cursor:pointer}
-.home-card .hc-enter:hover{border-color:var(--gold-soft);background:var(--gold-dim)}
+.home-card .hc-enter{margin-top:auto;width:100%;padding:10px;border-radius:8px;border:1px solid var(--gold-soft);background:var(--panel);color:var(--gold-strong);font-weight:600;font-size:13px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,0.04);transition:background .15s, box-shadow .15s}
+.home-card .hc-enter:hover{background:var(--gold-dim);box-shadow:0 2px 6px rgba(0,0,0,0.08)}
 .home-card .hc-amt{font-family:var(--font-m);font-size:24px;margin-bottom:12px}
 .home-card .hc-amt .cur{font-size:14px;color:var(--text3)}
 .home-card .hc-status{display:flex;gap:14px;font-size:12.5px;color:var(--text2);margin-bottom:14px}
@@ -1599,7 +1607,10 @@ function CashPage({corps, canEditIds, profile, isOwner}){
     const map={}; (rv.data||[]).forEach(r=>map[r.date]=r);
     // cash expenses grouped by day
     const cexMap={}; (cex.data||[]).forEach(e=>{ (cexMap[e.date]=cexMap[e.date]||{total:0,items:[]}); cexMap[e.date].total+=Number(e.amount); cexMap[e.date].items.push(e); });
+    // load any previously-counted amounts so the check persists across reloads
+    const savedCounts={}; (rv.data||[]).forEach(r=>{ if(r.counted_amount!=null) savedCounts[r.date]=String(r.counted_amount); });
     setDays(map); setPickups(pks.data||[]); setCashExp(cexMap);
+    setCounts(prev=>({...savedCounts, ...prev}));
   },[corpId,y,m]);
   useEffect(()=>{ reload(); },[reload]);
 
@@ -1639,8 +1650,15 @@ function CashPage({corps, canEditIds, profile, isOwner}){
     reload();
   };
 
-  const editPickup = (p)=>{
-    setEditingId(p.id);
+  // persist a single day's counted cash immediately (so the check survives reloads)
+  const saveCount = async(date, val)=>{
+    if(!cashChId) return;
+    const num = (val===''||val==null) ? null : parseFloat(val);
+    await sb.from('daily_revenue').update({counted_amount:num})
+      .eq('corporation_id',corpId).eq('channel_id',cashChId).eq('date',date);
+  };
+
+  const editPickup = (p)=>{    setEditingId(p.id);
     setPk({pickup_date:p.pickup_date, period_start:p.period_start, period_end:p.period_end,
       counted_amount:p.counted_amount!=null?String(p.counted_amount):'', note:''});
     // move the calendar to the pickup's month so its cash days load
@@ -1730,7 +1748,8 @@ function CashPage({corps, canEditIds, profile, isOwner}){
                 <td className="num mono"><b>{fmt$(e.expected,0)}</b></td>
                 <td className="num" style={{width:88}}>
                   <input type="number" step="0.01" className="env-input" placeholder={fmt$(e.expected,0)}
-                    value={cnt||''} onChange={ev=>setCounts({...counts,[e.date]:ev.target.value})}/></td>
+                    value={cnt||''} onChange={ev=>setCounts({...counts,[e.date]:ev.target.value})}
+                    onBlur={ev=>saveCount(e.date, ev.target.value)}/></td>
                 <td className={'num mono '+(diff===null?'':ok?'pos':'neg')}>{diff===null?'-':fmt$(diff,0)}</td>
                 <td className="num" style={{width:26}}>{ok?<span className="env-check">✓</span>:has?<span className="env-x">✕</span>:''}</td>
               </tr>; })}
@@ -1763,16 +1782,21 @@ function CashPage({corps, canEditIds, profile, isOwner}){
             const sales = r ? Number(r.amount) : 0;
             const expd = ce ? ce.total : 0;
             const envelope = sales - expd;   // what should physically be in the envelope
-            return <div key={date} className={'day'+(r&&r.verified?' verified':'')+(ce?' has-cashexp':'')}>
-              <div className="d">{d}</div>
+            const counted = r && r.counted_amount!=null ? Number(r.counted_amount) : null;
+            const countOk = counted!=null && Math.abs(counted-envelope)<0.01;
+            const countBad = counted!=null && !countOk;
+            return <div key={date} className={'day'+(r&&r.verified?' verified':'')+(ce?' has-cashexp':'')+(countOk?' count-ok':'')+(countBad?' count-bad':'')}>
+              <div className="d">{d}{countOk && <span className="day-check">✓</span>}{countBad && <span className="day-x">✕</span>}</div>
               {r && sales!==0 && <div className="amt">{fmt$(sales,0)}</div>}
               {ce && <div className="cashexp" title={ce.items.map(x=>x.memo).filter(Boolean).join(', ')}>-{fmt$(expd,0)}</div>}
               {ce && sales!==0 && <div className="envelope">={fmt$(envelope,0)}</div>}
+              {counted!=null && <div className="counted-lbl">cnt {fmt$(counted,0)}</div>}
             </div>;
           })}
         </div>
         <div className="cal-legend">
           <span><span className="lg-dot gold"></span>Verified (picked up)</span>
+          <span><span className="lg-dot green"></span>Counted ✓ matches</span>
           <span><span className="lg-dot red"></span>Cash expense day</span>
           <span className="faint">Envelope = cash sales − cash spent</span>
         </div>

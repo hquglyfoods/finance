@@ -1,24 +1,12 @@
-# Ugly Finance Tool - history audit + UMMA fee + pickup edit
+# Ugly Finance Tool - card alignment + buttons look like buttons
 
-AUDIT (all months, not just June):
-- With board-locked months, a FULL audit of every past month 2023-12..2026-06
-  (174 months x 5 stores) matches the Excel board exactly: 0 sales, 0 expense
-  mismatches. Any month that looked off was the same stray-row issue as June and is
-  now correct.
-- To SEE what stray rows existed in the DB: run audit_stray_sources.sql and
-  audit_stray_expenses.sql (read-only).
-- OPTIONAL: 25_cleanup_stray_past.sql deletes those leftover non-board rows in past
-  months (the app already ignores them; this just tidies the DB). Does not touch
-  July 2026+.
-
-UMMA card fee (run 24_umma_card_fee.sql):
-- The website payment company keeps 3% and deposits 97%. inventory-sync records the
-  full invoice as revenue, so a 3% "Card Processing Fee" is now auto-booked as an
-  expense each live month. Past (board) months already include the fee from Excel.
-
-Cash pickup edit:
-- Recent Pickups now has Edit and delete. Edit reloads the pickup into the form
-  (jumps to its month), lets you change the period / re-count envelopes, and
-  re-verifies. Delete un-verifies those days and removes the record.
-
-SQL this round: 24_umma_card_fee.sql (required), 25_cleanup_stray_past.sql (optional).
+- Home store cards: the name is now a fixed 2-line height (smaller font, clamped to
+  2 lines), so a 1-line name like "Ugly HQ" reserves the same space as a 3-line name
+  like "Ugly AD (American Dream)". Everything below (revenue/expenses, progress,
+  Enter button) lines up at the same height across all cards. Verified: all names
+  40px tall, Enter buttons aligned per row.
+- Buttons now read as buttons everywhere: clearer panel background, rounded corners,
+  a subtle shadow, cursor pointer, and hover lift. Applies to .btn, the Home "Enter"
+  button, and the tabs.
+- Cash "Record Envelope Pickup" card: the header now has a gold-tinted background and
+  a round chevron so it clearly looks tappable, not like plain text.
