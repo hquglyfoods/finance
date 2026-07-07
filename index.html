@@ -240,6 +240,9 @@ a{color:var(--gold);text-decoration:none}
 .insight-ic.pos{color:var(--green)}
 .insight-ic.neg{color:var(--red)}
 .insight-ic.faint{color:var(--text3)}
+.day-star{margin-left:6px;font-size:11px;vertical-align:middle}
+.day-star.best{color:var(--gold-strong)}
+.day-star.slow{color:var(--text3)}
 
 .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px 22px;margin-bottom:18px;box-shadow:var(--shadow)}
 .card h3{font-size:14px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px}
@@ -773,7 +776,11 @@ async function loadAllTimePL(corpId, meta){
       months.push({ m, pl: computePL(meta, raw) });
     }
     const totals=months.reduce((a,x)=>({s:a.s+x.pl.totalSales,e:a.e+x.pl.totalExpenses,n:a.n+x.pl.net}),{s:0,e:0,n:0});
-    years.push({ y, months, totals });
+    // count distinct days that had any sales, so a partial first year (opened in Dec)
+    // can be compared on a per-operating-day basis instead of full-year totals.
+    const yPref=`${y}-`;
+    const activeDays=new Set(rev.filter(r=>r.date.startsWith(yPref)&&Number(r.amount)>0).map(r=>r.date)).size;
+    years.push({ y, months, totals, activeDays });
   }
   return { years, firstYear, lastYear };
 }
@@ -978,8 +985,10 @@ function TrendChart({points}){
       <polyline fill="none" stroke="#2E7D4F" strokeWidth="2" pointerEvents="none"
         points={points.map((p,i)=>`${cx(i)},${netY(p.net)}`).join(' ')}/>
       {points.map((p,i)=><circle key={i} cx={cx(i)} cy={netY(p.net)} r={sel===i?4.5:3} fill={p.net>=0?'#2E7D4F':'#C0392B'} pointerEvents="none"/>)}
-      {/* always-on high/low sales markers so the peak and trough read without tapping */}
-      {(()=>{ const withData=points.map((p,i)=>({p,i})).filter(o=>o.p.sales>0); if(withData.length<2) return null;
+      {/* always-on high/low sales markers so the peak and trough read without tapping.
+          The in-progress period (current month/year, flagged p.inProgress) is excluded
+          so a month that just started can't show up as the "lowest". */}
+      {(()=>{ const withData=points.map((p,i)=>({p,i})).filter(o=>o.p.sales>0 && !o.p.inProgress); if(withData.length<2) return null;
         let hi=withData[0], lo=withData[0];
         withData.forEach(o=>{ if(o.p.sales>hi.p.sales)hi=o; if(o.p.sales<lo.p.sales)lo=o; });
         const tag=(o,txt,color)=> sel===o.i ? null : <text key={txt} x={cx(o.i)} y={barY(o.p.sales)-5} fontSize="9" fontWeight="700"
@@ -1032,12 +1041,18 @@ function RatioChart({points}){
       {line('suppliesPct','#3A6EA5')}
       {dots('payrollPct','#B08A1E')}
       {dots('suppliesPct','#3A6EA5')}
-      {/* label the peak (worst) of each ratio so highs read without tapping */}
-      {(()=>{ const peak=(key)=>{ let best=null; pts.forEach((p,i)=>{ if(p[key]!=null && (best===null||p[key]>pts[best][key])) best=i; }); return best; };
-        const lab=(key,color)=>{ const i=peak(key); if(i===null||sel===i) return null;
-          return <text key={key} x={cx(i)} y={yOf(pts[i][key])-6} fontSize="9" fontWeight="700" fill={color}
+      {/* label the highest AND lowest of each ratio (payroll, supplies) so both read
+          without tapping. The in-progress period (p.inProgress) is excluded. */}
+      {(()=>{ const hilo=(key)=>{ let hi=null,lo=null; pts.forEach((p,i)=>{ if(p[key]==null||p.inProgress) return;
+            if(hi===null||p[key]>pts[hi][key]) hi=i; if(lo===null||p[key]<pts[lo][key]) lo=i; }); return {hi,lo}; };
+        const tag=(i,key,color,above)=>{ if(i===null||sel===i) return null;
+          return <text key={key+(above?'h':'l')} x={cx(i)} y={yOf(pts[i][key])+(above?-6:12)} fontSize="9" fontWeight="700" fill={color}
             textAnchor="middle" fontFamily="IBM Plex Mono" pointerEvents="none">{fmtPct(pts[i][key])}</text>; };
-        return <g>{lab('payrollPct','#B08A1E')}{lab('suppliesPct','#3A6EA5')}</g>;
+        const P=hilo('payrollPct'), S=hilo('suppliesPct');
+        return <g>
+          {tag(P.hi,'payrollPct','#B08A1E',true)}{P.hi!==P.lo && tag(P.lo,'payrollPct','#C9A94E',false)}
+          {tag(S.hi,'suppliesPct','#3A6EA5',true)}{S.hi!==S.lo && tag(S.lo,'suppliesPct','#7AA0C8',false)}
+        </g>;
       })()}
       {pts.map((p,i)=><g key={i} onPointerDown={()=>setSel(i)} onMouseEnter={()=>setSel(i)} style={{cursor:'pointer'}}>
         <rect x={cx(i)-gap/2} y={padT} width={gap} height={H-padB-padT} fill={sel===i?'rgba(176,138,30,0.05)':'transparent'}/>
@@ -1091,18 +1106,16 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
   const loadingRef = React.useRef(true);
   React.useEffect(()=>{ loadingRef.current = loading; },[loading]);
   const [refresh, setRefresh] = useState(0);   // bump to reload after edit/delete
-  // Auto-refresh when the user returns to the app (switched tabs/apps, e.g. came back
-  // from checking Slack), and periodically while it stays open, so new data (payroll,
-  // expenses booked elsewhere) shows without a manual reload. Throttled, and it never
-  // interrupts an in-progress load (which previously could leave it stuck loading).
+  // Refresh data only when the user RETURNS to the app after leaving (tab/app switch),
+  // so new data (payroll, expenses booked elsewhere) shows up. We do NOT refresh on a
+  // timer while the user is looking at the screen, because that caused a distracting
+  // flicker. Only a real visibility change from hidden->visible triggers a refresh.
   useEffect(()=>{
-    let last=Date.now();   // start the clock now so the initial focus doesn't refetch
-    const bump=()=>{ if(document.visibilityState!=='visible') return; if(loadingRef.current) return;
+    let last=Date.now();
+    const onVisible=()=>{ if(document.visibilityState!=='visible') return; if(loadingRef.current) return;
       const now=Date.now(); if(now-last<15000) return; last=now; setRefresh(x=>x+1); };
-    window.addEventListener('focus', bump);
-    document.addEventListener('visibilitychange', bump);
-    const iv=setInterval(bump, 90000);
-    return ()=>{ window.removeEventListener('focus', bump); document.removeEventListener('visibilitychange', bump); clearInterval(iv); };
+    document.addEventListener('visibilitychange', onVisible);
+    return ()=>{ document.removeEventListener('visibilitychange', onVisible); };
   },[]);
   // when navigated from a Home store card, focus that store's daily detail
   useEffect(()=>{ if(presetCorp && presetCorp.id){ setCorpId(presetCorp.id); setView('daily'); } },[presetCorp]);
@@ -1121,7 +1134,15 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
   const [cmpData, setCmpData] = useState(null);
   const [cmpDate, setCmpDate] = useState(()=>todayStr());
 
-  useEffect(()=>{ if(!corpId) return; let dead=false; setLoading(true);
+  const _loadKeyRef = React.useRef('');
+  useEffect(()=>{ if(!corpId) return; let dead=false;
+    // Only show the loading spinner when the actual view changed (store, month, year,
+    // view mode). A background refresh (returning to the app) reloads silently so the
+    // screen doesn't flicker while the user is looking at it.
+    const key = [corpId,y,m,view,yearMode].join('|');
+    const silent = (key === _loadKeyRef.current);
+    _loadKeyRef.current = key;
+    if(!silent) setLoading(true);
     // Safety net: whatever happens (thrown error, dropped promise, slow network, a
     // superseded run), never leave the page stuck on "Loading..." forever. If loading
     // hasn't cleared in 4s, clear it so whatever data arrived is shown.
@@ -1134,8 +1155,17 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
         const [raw, rawLY] = await Promise.all([loadMonthRaw(corpId,y,m), loadMonthRaw(corpId,y-1,m)]);
         if(dead) return;
         setPl(computePL(mt,raw));
-        const ply=computePL(mt,rawLY);
-        setYoy((ply.totalSales!==0||ply.totalExpenses!==0)?ply:null);
+        // If this is the current month in progress, compare last year only through the
+        // same day-of-month (fair same-period YoY), not last year's whole month.
+        const _nm=new Date();
+        const curMonth=(y===_nm.getFullYear() && m===_nm.getMonth()+1);
+        let rawLYcmp=rawLY;
+        if(curMonth){
+          const cut=`${y-1}-${pad(m)}-${pad(_nm.getDate())}`;
+          rawLYcmp={...rawLY, revenue:rawLY.revenue.filter(r=>r.date<=cut), expenses:rawLY.expenses.filter(e=>e.date<=cut)};
+        }
+        const ply=computePL(mt,rawLYcmp);
+        setYoy((ply.totalSales!==0||ply.totalExpenses!==0)?{...ply, samePeriod:curMonth, throughDay:_nm.getDate()}:null);
         // 12-month trend ending this month
         const endD=`${y}-${pad(m)}-${pad(lastDay(y,m))}`; let sy=y,sm=m-11; while(sm<1){sm+=12;sy--;}
         const startD=`${sy}-${pad(sm)}-01`;
@@ -1146,10 +1176,12 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
         ]);
         if(dead) return;
         const pts=[]; let cy=sy,cm=sm;
+        const _n=new Date(), curY=_n.getFullYear(), curM=_n.getMonth()+1;
         for(let i=0;i<12;i++){ const pref=`${cy}-${pad(cm)}`;
           const raw2={revenue:rvT.filter(r=>r.date.startsWith(pref)),expenses:exT.filter(r=>r.date.startsWith(pref)),inputs:[],rates:(rt.data||[]),monthKey:pref};
           const p=computePL(mt,raw2);
-          if(p.totalSales!==0||p.totalExpenses!==0) pts.push({label:pad(cm),sales:p.totalSales,net:p.net,payrollPct:p.payrollPct,suppliesPct:p.suppliesPct});
+          const inProgress=(cy===curY&&cm===curM);
+          if(p.totalSales!==0||p.totalExpenses!==0) pts.push({label:pad(cm),sales:p.totalSales,net:p.net,payrollPct:p.payrollPct,suppliesPct:p.suppliesPct,inProgress});
           cm++; if(cm>12){cm=1;cy++;} }
         setTrend(pts);
       }
@@ -1202,8 +1234,17 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
   // load side-by-side comparison for the selected stores + chosen period
   // (period is the shared top tab: daily->day, month, year, alltime)
   const cmpPeriod = view==='daily' ? 'day' : view;
-  useEffect(()=>{ if(!compareStores) return; let dead=false; setCmpData(null);
+  const _cmpKeyRef = React.useRef('');
+  useEffect(()=>{ if(!compareStores) return; let dead=false;
+    const key = [cmpIds.join(','),y,m,cmpPeriod,cmpDate].join('|');
+    const silent = (key === _cmpKeyRef.current);
+    _cmpKeyRef.current = key;
+    if(!silent) setCmpData(null);
+    // Same protections as the main loader: never leave "Loading..." stuck if a query
+    // throws, and clear after 4s no matter what.
+    const safety = setTimeout(()=>{ if(!dead) setCmpData(prev=>prev||[]); }, 4000);
     (async()=>{
+     try{
       const ids = cmpIds.slice(0,3);
       // combine an array of monthly PLs into one pl-like object (dollars summed,
       // ratios recomputed from combined catSum so different-sized months are fair)
@@ -1247,9 +1288,11 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
         return { id, code:corp.code, name:corp.name, pl, lySales };
       }));
       if(!dead) setCmpData(out);
+     }catch(e){ if(!dead){ console.error('Compare load failed', e); setCmpData([]); } }
+     finally{ clearTimeout(safety); }
     })();
-    return ()=>{dead=true};
-  },[compareStores, cmpIds, y, m, cmpPeriod, cmpDate]);
+    return ()=>{dead=true; clearTimeout(safety);};
+  },[compareStores, cmpIds, y, m, cmpPeriod, cmpDate, refresh]);
 
   if(!editable.length) return <div className="card">No corporations available for your account.</div>;
 
@@ -1407,6 +1450,7 @@ function StoreCompareView({editable, cmpIds, toggleCmp, data, y, m, period, cmpD
 
     {cmpIds.length===0 ? <div className="card faint">Select at least one store above.</div> :
      data===null ? <Spinner/> :
+     sel.length===0 ? <div className="card faint">Couldn't load comparison data. Try again or reselect stores.</div> :
      <>
       {/* headline cards, one per store */}
       <div className={'cmp-cards cmp-n'+sel.length}>
@@ -1488,7 +1532,7 @@ function MonthView({pl, yoy, trend, y, m}){
       <div className="grid2">
         <div className="card"><h3>Cost Ratios · 12 Months</h3><RatioChart points={trend}/>
           <div className="hint">Payroll and supplies as a share of sales. Rising lines mean costs are growing faster than sales.</div></div>
-        <div className="card"><h3>vs. {MONTHS[m-1]} {y-1}</h3>
+        <div className="card"><h3>vs. {MONTHS[m-1]} {y-1}{yoy&&yoy.samePeriod?<span className="faint" style={{fontWeight:400,fontSize:13}}> · through the {ordinal(yoy.throughDay)}</span>:null}</h3>
           {!yoy ? <div className="faint">No data for {MONTHS[m-1]} {y-1}.</div> :
           <table className="t">
             <thead><tr><th></th><th className="num">{y}</th><th className="num">{y-1}</th><th className="num">Change</th></tr></thead>
@@ -1611,33 +1655,22 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
   // ---- Rule-based insights for the month shown -----------------------------
   // Uses only this month's daily rows (each has rev/exp/items). Kept simple and
   // deterministic: no AI, no extra queries.
+  const active = rows.filter(r=> r.d<=throughDay && (r.rev!==0||r.exp!==0));
+  const withSales = active.filter(r=>r.rev>0);
+  // Best / slowest sales days: marked with a star in the day-by-day list below,
+  // not shown as a text line (a big one-off cost on a day is not a real "loss").
+  const bestDay = withSales.length>=2 ? withSales.reduce((a,b)=> b.rev>a.rev?b:a).d : null;
+  const slowDay = withSales.length>=2 ? withSales.reduce((a,b)=> b.rev<a.rev?b:a).d : null;
   const findings = (()=>{
     const F=[];
-    const active = rows.filter(r=> r.d<=throughDay && (r.rev!==0||r.exp!==0));
     if(!active.length) return F;
     const daysElapsed = active.length;
     const daysInMonth = lastDay(y,m);
 
-    // 1) Highest / lowest sales day
-    const withSales = active.filter(r=>r.rev>0);
-    if(withSales.length>=2){
-      const hi = withSales.reduce((a,b)=> b.rev>a.rev?b:a);
-      const lo = withSales.reduce((a,b)=> b.rev<a.rev?b:a);
-      F.push({kind:'info', text:`Best day was the ${ordinal(hi.d)} at ${fmt$(hi.rev,0)}; slowest was the ${ordinal(lo.d)} at ${fmt$(lo.rev,0)}.`});
-    }
-
-    // 2) Loss days
-    const lossDays = active.filter(r=> (r.rev-r.exp) < 0);
-    if(lossDays.length){
-      F.push({kind:'bad', text:`${lossDays.length} day${lossDays.length>1?'s':''} ran at a loss this month (${lossDays.map(r=>ordinal(r.d)).join(', ')}).`});
-    }
-
-    // 3) Cost anomaly: a category whose single-day charge is well above its own
-    //    average day (>= 2x average and material size), or a day's total expense
-    //    that spikes. Aggregate per category across the month's items.
+    // Cost anomaly: the single largest expense line, flagged only if it's big AND well
+    // above that category's typical line (so regular fixed costs like rent don't trip).
     const catTotals={}, catDays={};
     active.forEach(r=> (r.items||[]).forEach(it=>{ const k=it.cat||'?'; catTotals[k]=(catTotals[k]||0)+it.amount; catDays[k]=(catDays[k]||0)+1; }));
-    // find the single largest one-off line and flag if it dwarfs that category's typical line
     let bigLine=null;
     active.forEach(r=> (r.items||[]).forEach(it=>{ if(!bigLine||it.amount>bigLine.amount) bigLine={...it, d:r.d}; }));
     if(bigLine){
@@ -1647,11 +1680,12 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
       }
     }
 
-    // 4) Month-end projection (only meaningful mid-month)
+    // Month-end SALES projection (only mid-current-month). Net is intentionally not
+    // projected: expenses don't accrue evenly across the month (rent, payroll, etc.),
+    // so a straight-line net projection would be misleading.
     if(isCurMonth && daysElapsed>=3 && daysElapsed<daysInMonth){
       const projRev = tot.rev / daysElapsed * daysInMonth;
-      const projNet = net / daysElapsed * daysInMonth;
-      F.push({kind:'info', text:`On this pace, ${MONTHS[m-1]} projects to about ${fmt$(projRev,0)} sales and ${fmt$(projNet,0)} net by month end.`});
+      F.push({kind:'info', text:`On this pace, ${MONTHS[m-1]} sales project to about ${fmt$(projRev,0)} by month end.`});
     }
     return F;
   })();
@@ -1681,7 +1715,10 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
           {rows.map(r=>{ const dnet=r.rev-r.exp; const has=r.rev!==0||r.exp!==0; const isOpen=open===r.d;
             return <React.Fragment key={r.d}>
               <tr className={(()=>{const wd=new Date(r.date+'T00:00').getDay();return wd===0||wd===6?'is-weekend':'';})()} style={{opacity:has?1:0.35}}>
-                <td className="mono">{pad(r.d)} {DOW[new Date(r.date+'T00:00').getDay()]}</td>
+                <td className="mono">{pad(r.d)} {DOW[new Date(r.date+'T00:00').getDay()]}
+                  {r.d===bestDay && <span className="day-star best" title="Best sales day">★</span>}
+                  {r.d===slowDay && r.d!==bestDay && <span className="day-star slow" title="Slowest sales day">★</span>}
+                </td>
                 <td className="num mono">{r.rev?fmt$(r.rev):'-'}</td>
                 <td className="num mono faint">{r.lyRev?fmt$(r.lyRev,0):'-'}</td>
                 <td className="num mono">{r.exp?fmt$(r.exp):'-'}</td>
@@ -1731,7 +1768,7 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
             <td className={'num '+(net>=0?'pos':'neg')}>{fmt$(net)}</td><td></td></tr>
         </tbody>
       </table>
-      <div className="hint">Tap the arrow on a day to see every expense (category, note, payee, source){isOwner?'; Edit or ✕ a line to fix or remove it':''}.</div>
+      <div className="hint"><span className="day-star best">★</span> best sales day · <span className="day-star slow">★</span> slowest. Tap the arrow on a day to see every expense (category, note, payee, source){isOwner?'; Edit or ✕ a line to fix or remove it':''}.</div>
     </div>
     {toast && <div className="toast">{toast}</div>}
   </>;
@@ -1745,8 +1782,9 @@ function YearView({months, y, yearMode, onYearMode, prev, prev2}){
   </div>;
   if(yearMode==='3y') return <>{toggle}<CompareView cur={months} prev={prev} prev2={prev2} y={y}/></>;
   const tot=months.reduce((a,x)=>({s:a.s+x.pl.totalSales,e:a.e+x.pl.totalExpenses,n:a.n+x.pl.net}),{s:0,e:0,n:0});
+  const _nYr=new Date();
   const trendPts=months.filter(x=>x.pl.totalSales!==0||x.pl.totalExpenses!==0)
-    .map(x=>({label:pad(x.m),sales:x.pl.totalSales,net:x.pl.net,payrollPct:x.pl.payrollPct,suppliesPct:x.pl.suppliesPct}));
+    .map(x=>({label:pad(x.m),sales:x.pl.totalSales,net:x.pl.net,payrollPct:x.pl.payrollPct,suppliesPct:x.pl.suppliesPct,inProgress:(y===_nYr.getFullYear()&&x.m===_nYr.getMonth()+1)}));
   return <>
     {toggle}
     <div className="kpis kpis-3">
@@ -1895,9 +1933,10 @@ function AllTimeView({data}){
   const insights=allTimeInsights(active);
   // monthly series across all time for the trend line
   const monthlySeries=[];
+  const _nAt=new Date(), _curY=_nAt.getFullYear(), _curM=_nAt.getMonth()+1;
   years.forEach(yr=>yr.months.forEach(mo=>{
     if(mo.pl.totalSales!==0||mo.pl.totalExpenses!==0)
-      monthlySeries.push({label:`${String(yr.y).slice(2)}/${pad(mo.m)}`, sales:mo.pl.totalSales, net:mo.pl.net});
+      monthlySeries.push({label:`${String(yr.y).slice(2)}/${pad(mo.m)}`, sales:mo.pl.totalSales, net:mo.pl.net, inProgress:(yr.y===_curY&&mo.m===_curM)});
   }));
 
   return <>
@@ -1952,29 +1991,41 @@ function allTimeInsights(active){
   const out=[];
   if(active.length<2) return out;
   const first=active[0], last=active[active.length-1];
-  // overall sales trajectory first->last
-  if(first.totals.s>0){
-    const mult=last.totals.s/first.totals.s;
-    if(mult>=1.15) out.push({kind:'good', text:`Sales have grown ${mult.toFixed(1)}x since ${first.y} (${fmt$(first.totals.s,0)} → ${fmt$(last.totals.s,0)}).`});
-    else if(mult<=0.85) out.push({kind:'bad', text:`Sales are down since ${first.y} (${fmt$(first.totals.s,0)} → ${fmt$(last.totals.s,0)}).`});
-    else out.push({kind:'info', text:`Sales have held roughly steady since ${first.y} (${fmt$(first.totals.s,0)} → ${fmt$(last.totals.s,0)}).`});
+  // Compare on a PER-OPERATING-DAY basis so a partial first year (e.g. opened in
+  // December, ~20 days) isn't unfairly compared to a full year. Falls back to totals
+  // only if day counts are missing.
+  const perDay = yr => (yr.activeDays && yr.activeDays>0) ? yr.totals.s/yr.activeDays : null;
+  const fd=perDay(first), ld=perDay(last);
+  if(fd && ld && fd>0){
+    const mult=ld/fd;
+    const detail=`${fmt$(fd,0)}/day → ${fmt$(ld,0)}/day`;
+    if(mult>=1.15) out.push({kind:'good', text:`Average daily sales have grown ${mult.toFixed(1)}x since ${first.y} (${detail}).`});
+    else if(mult<=0.85) out.push({kind:'bad', text:`Average daily sales are down since ${first.y} (${detail}).`});
+    else out.push({kind:'info', text:`Average daily sales have held roughly steady since ${first.y} (${detail}).`});
   }
-  // consecutive growth streak (by sales)
+  // Exclude the current (in-progress) year from year-total comparisons below, since a
+  // partial year would break a streak or look like the "worst" year unfairly.
+  const curYr=new Date().getFullYear();
+  const complete=active.filter(yr=>yr.y!==curYr);
+  // consecutive growth streak (by sales), completed years only
   let streak=0;
-  for(let i=active.length-1;i>0;i--){ if(active[i].totals.s>active[i-1].totals.s) streak++; else break; }
+  for(let i=complete.length-1;i>0;i--){ if(complete[i].totals.s>complete[i-1].totals.s) streak++; else break; }
   if(streak>=2) out.push({kind:'good', text:`Sales have grown ${streak} years in a row.`});
-  // margin trend: compare avg margin of first half vs second half
+  // margin trend: compare avg margin of first half vs second half (completed years)
   const marg=yr=>yr.totals.s?yr.totals.n/yr.totals.s:0;
-  const half=Math.floor(active.length/2);
+  const half=Math.floor(complete.length/2);
   if(half>=1){
-    const early=active.slice(0,half), late=active.slice(half);
-    const am=arr=>arr.reduce((a,x)=>a+marg(x),0)/arr.length;
+    const early=complete.slice(0,half), late=complete.slice(half);
+    const am=arr=>arr.length?arr.reduce((a,x)=>a+marg(x),0)/arr.length:0;
     const dd=(am(late)-am(early))*100;
     if(Math.abs(dd)>=1.5) out.push({kind:dd>0?'good':'bad', text:`Net margin is trending ${dd>0?'up':'down'} over time (${Math.abs(dd).toFixed(1)} points ${dd>0?'higher':'lower'} in recent years).`});
   }
   // best and worst single years
-  const best=active.reduce((a,b)=>b.totals.n>a.totals.n?b:a,active[0]);
-  const worst=active.reduce((a,b)=>b.totals.n<a.totals.n?b:a,active[0]);
+  // best and worst single years (completed years only, so a partial current year can't
+  // be flagged as the weakest)
+  const pool = complete.length>=2 ? complete : active;
+  const best=pool.reduce((a,b)=>b.totals.n>a.totals.n?b:a,pool[0]);
+  const worst=pool.reduce((a,b)=>b.totals.n<a.totals.n?b:a,pool[0]);
   if(best.y!==worst.y){
     out.push({kind:'info', text:`Most profitable year was ${best.y} (${fmt$(best.totals.n,0)}); weakest was ${worst.y} (${fmt$(worst.totals.n,0)}).`});
   }
@@ -2090,7 +2141,8 @@ function Entry({corps, canEditIds, profile, presetCorp, presetMode}){
       <div className="card">
         <h3 style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>Revenue
           <label className="date-chip">{fmtDateShort(date)}
-            <input type="date" value={date} onChange={e=>setDate(e.target.value)}/>
+            <input type="date" value={date} onChange={e=>setDate(e.target.value)}
+              onClick={e=>{ try{ e.target.showPicker&&e.target.showPicker(); }catch(_){} }}/>
           </label>
         </h3>
         <table className="t rev-entry"><tbody>
@@ -2123,7 +2175,8 @@ function Entry({corps, canEditIds, profile, presetCorp, presetMode}){
       <div className="card">
         <h3 style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>Add Expense
           <label className="date-chip">{fmtDateShort(date)}
-            <input type="date" value={date} onChange={e=>setDate(e.target.value)}/>
+            <input type="date" value={date} onChange={e=>setDate(e.target.value)}
+              onClick={e=>{ try{ e.target.showPicker&&e.target.showPicker(); }catch(_){} }}/>
           </label>
         </h3>
         <label className="hint" style={{marginTop:0}}>Category</label>

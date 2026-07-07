@@ -18,13 +18,21 @@ exports.handler = async () => {
     .from('recurring_expenses').select('*').eq('active', true);
   if (rerr) return { statusCode: 500, body: JSON.stringify({ error: rerr.message }) };
 
-  // catch-up window: today and the previous 6 days
+  // catch-up window: today and the previous 6 days, PLUS always include the 1st of the
+  // current month so a monthly recurring due on the 1st (e.g. Lease) is never missed if
+  // the cron had a gap earlier in the month.
   const days = [];
+  const seen = new Set();
+  const push = (d) => { const s = dstr(d); if (!seen.has(s)) { seen.add(s); days.push(d); } };
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    days.push(d);
+    push(d);
   }
+  const first = new Date();
+  first.setDate(1);
+  push(first);
+  days.sort((a, b) => a - b);
   const winStart = dstr(days[0]);
   const winEnd = dstr(days[days.length - 1]);
 
