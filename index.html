@@ -386,12 +386,13 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .stmt-yoy{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
 .syoy-item{background:var(--panel2);border:1px solid var(--border-soft);border-radius:10px;padding:13px 15px}
 .syoy-lbl{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px}
-.syoy-row{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
-.syoy-now{font-family:var(--font-d);font-size:20px;font-weight:700;letter-spacing:-0.01em}
-.syoy-prev{font-size:12px;color:var(--text3);font-family:var(--font-m)}
+.syoy-now{font-family:var(--font-d);font-size:22px;font-weight:700;letter-spacing:-0.01em;display:block}
+.syoy-cmp{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap}
+.syoy-prev{font-size:12.5px;color:var(--text2)}
+.syoy-prev b{color:var(--text);font-weight:600}
 .stmt-ytd{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--border-soft);border-radius:10px;overflow:hidden;margin-bottom:18px}
-.sytd-item{background:var(--panel);padding:13px 16px;text-align:center}
-.sytd-lbl{font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+.sytd-item{background:var(--panel);padding:13px 12px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:space-between}
+.sytd-lbl{font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;min-height:2.4em;display:flex;align-items:center;justify-content:center;line-height:1.2}
 .sytd-val{font-family:var(--font-d);font-size:18px;font-weight:700}
 .stmt-trend{margin-top:6px}
 .stmt-quarters{margin:4px 0 18px}
@@ -3080,8 +3081,8 @@ function ClosePage({corps, canEditIds, profile, isOwner, preset}){
       <div><div className="eyebrow">{mode==='annual'?'Annual Close':'Monthly Close'}</div><h2>{mode==='annual'?'Annual Close & Publish':'Monthly Close & Publish'}</h2></div>
       <div style={{display:'flex',gap:14,alignItems:'center',flexWrap:'wrap'}}>
         <div className="method-seg" style={{margin:0}}>
-          <button className={mode==='monthly'?'on':''} onClick={()=>{setMode('monthly');setPreview(false);}}>Monthly</button>
-          <button className={mode==='annual'?'on':''} onClick={()=>{setMode('annual');setPreview(false);}}>Annual</button>
+          <button className={'method-opt'+(mode==='monthly'?' on':'')} onClick={()=>{setMode('monthly');setPreview(false);}}>Monthly</button>
+          <button className={'method-opt'+(mode==='annual'?' on':'')} onClick={()=>{setMode('annual');setPreview(false);}}>Annual</button>
         </div>
         <CorpTabs corps={editable} sel={corpId} onSel={setCorpId}/>
         {mode==='monthly' ? <MonthPick y={y} m={m} onChange={(a,b)=>{setY(a);setM(b);}}/>
@@ -3335,16 +3336,16 @@ function AnnualStatementView({corpName, year, summary, notes, publishedAt, previ
     <div className="stmt-bigpic">
       {yoy && <div className="stmt-yoy">
         <div className="syoy-item">
-          <div className="syoy-lbl">Revenue vs {year-1}</div>
-          <div className="syoy-row"><span className="syoy-now">{fmt$(s.total_sales,0)}</span>
-            <span className="syoy-prev">was {fmt$(yoy.total_sales,0)}</span>
-            <YoYDelta cur={s.total_sales} prev={yoy.total_sales} bare/></div>
+          <div className="syoy-lbl">Revenue · {year}</div>
+          <span className="syoy-now">{fmt$(s.total_sales,0)}</span>
+          <div className="syoy-cmp"><YoYDelta cur={s.total_sales} prev={yoy.total_sales} bare/>
+            <span className="syoy-prev">vs <b>{fmt$(yoy.total_sales,0)}</b> in {year-1}</span></div>
         </div>
         <div className="syoy-item">
-          <div className="syoy-lbl">Net profit vs {year-1}</div>
-          <div className="syoy-row"><span className="syoy-now">{fmt$(s.net_profit,0)}</span>
-            <span className="syoy-prev">was {fmt$(yoy.net_profit,0)}</span>
-            <YoYDelta cur={s.net_profit} prev={yoy.net_profit} bare/></div>
+          <div className="syoy-lbl">Net profit · {year}</div>
+          <span className="syoy-now">{fmt$(s.net_profit,0)}</span>
+          <div className="syoy-cmp"><YoYDelta cur={s.net_profit} prev={yoy.net_profit} bare/>
+            <span className="syoy-prev">vs <b>{fmt$(yoy.net_profit,0)}</b> in {year-1}</span></div>
         </div>
       </div>}
       {trend && trend.length>=1 && (()=>{
@@ -3419,16 +3420,16 @@ function StatementView({corpName, year, month, summary, notes, files, publishedA
     {showBigPicture && (trend||yoy||ytd) && <div className="stmt-bigpic">
       {yoy && <div className="stmt-yoy">
         <div className="syoy-item">
-          <div className="syoy-lbl">Revenue vs {MONTHS[month-1]} {year-1}</div>
-          <div className="syoy-row"><span className="syoy-now">{fmt$(summary.total_sales,0)}</span>
-            <span className="syoy-prev">was {fmt$(yoy.total_sales,0)}</span>
-            <YoYDelta cur={summary.total_sales} prev={yoy.total_sales} bare/></div>
+          <div className="syoy-lbl">Revenue · {MONTHS[month-1]} {year}</div>
+          <span className="syoy-now">{fmt$(summary.total_sales,0)}</span>
+          <div className="syoy-cmp"><YoYDelta cur={summary.total_sales} prev={yoy.total_sales} bare/>
+            <span className="syoy-prev">vs <b>{fmt$(yoy.total_sales,0)}</b> in {MONTHS[month-1]} {year-1}{yoy.samePeriod?` (through the ${ordinal(yoy.throughDay)})`:''}</span></div>
         </div>
         <div className="syoy-item">
-          <div className="syoy-lbl">Net profit vs {MONTHS[month-1]} {year-1}</div>
-          <div className="syoy-row"><span className="syoy-now">{fmt$(summary.net_profit,0)}</span>
-            <span className="syoy-prev">was {fmt$(yoy.net_profit,0)}</span>
-            <YoYDelta cur={summary.net_profit} prev={yoy.net_profit} bare/></div>
+          <div className="syoy-lbl">Net profit · {MONTHS[month-1]} {year}</div>
+          <span className="syoy-now">{fmt$(summary.net_profit,0)}</span>
+          <div className="syoy-cmp"><YoYDelta cur={summary.net_profit} prev={yoy.net_profit} bare/>
+            <span className="syoy-prev">vs <b>{fmt$(yoy.net_profit,0)}</b> in {MONTHS[month-1]} {year-1}{yoy.samePeriod?` (through the ${ordinal(yoy.throughDay)})`:''}</span></div>
         </div>
       </div>}
       {ytd && <div className="stmt-ytd">

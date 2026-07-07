@@ -82,11 +82,16 @@ function matchesLearning(summary, categoryCode, categoryName, learnings) {
 
 async function downloadImage(url) {
   const res = await fetch(url, { headers: { Authorization: 'Bearer ' + process.env.SLACK_BOT_TOKEN } });
-  if (!res.ok) return null;
+  if (!res.ok) { console.log('SLACK_IMG_HTTP', res.status); return null; }
   const ct = res.headers.get('content-type') || 'image/jpeg';
-  if (!ct.startsWith('image/')) return null;
+  if (!ct.startsWith('image/')) {
+    // Slack returns an HTML page (not an image) when the bot token lacks files:read
+    // or isn't in the channel. Surface that instead of silently dropping the photo.
+    console.log('SLACK_IMG_NOT_IMAGE', ct);
+    return null;
+  }
   const buf = Buffer.from(await res.arrayBuffer());
-  if (buf.length > 4_500_000) return null; // keep request small
+  if (buf.length > 4_500_000) { console.log('SLACK_IMG_TOO_BIG', buf.length); return null; }
   return { media_type: ct.split(';')[0], data: buf.toString('base64') };
 }
 
@@ -156,6 +161,19 @@ exports.handler = async (event) => {
 
   // ACK fast; Slack retries if we take too long. We do the work inline but keep it lean.
   let ev = body.event || {};
+  // TEMP DIAGNOSTIC: log what Slack actually sends so we can see why photo-only posts
+  // aren't recognized. Visible in Netlify function logs. Safe to remove later.
+  try {
+    console.log('SLACK_EVENT', JSON.stringify({
+      type: ev.type, subtype: ev.subtype, channel: ev.channel,
+      has_text: !!(ev.text && ev.text.trim()),
+      files: Array.isArray(ev.files) ? ev.files.map(f => ({
+        mimetype: f.mimetype, filetype: f.filetype,
+        has_dl: !!f.url_private_download, has_priv: !!f.url_private,
+      })) : null,
+      top_level_type: body.event && body.event.type,
+    }));
+  } catch (_) {}
   if (ev.type !== 'message' || ev.bot_id) return { statusCode: 200, body: 'ignored' };
 
   // Handle EDITS: when an employee edits an earlier message (e.g. adds the amount they
@@ -212,9 +230,11 @@ exports.handler = async (event) => {
     if (isImg && url) {
       const img = await downloadImage(url);
       if (img) images.push(img);
+      else console.log('SLACK_IMG_DOWNLOAD_FAILED', JSON.stringify({ mimetype: f.mimetype, filetype: f.filetype }));
     }
   }
   const text = (ev.text || '').trim();
+  console.log('SLACK_PARSE_INPUT', JSON.stringify({ has_text: !!text, image_count: images.length, file_count: (ev.files || []).length }));
   if (!text && !images.length) return { statusCode: 200, body: 'nothing to parse' };
 
   let parsed;

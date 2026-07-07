@@ -1,38 +1,23 @@
-# Ugly Finance Tool - Slack photo/dedup/coin-change, new app icon, Annual report
+# Ugly Finance Tool - Slack photo diagnostic logging
 
-Three areas in this build.
+Text expenses work but photo-only posts don't get recognized, and files:read is present,
+so this build adds temporary diagnostic logging to slack-expense.js to pinpoint the cause.
+After deploying, post a receipt photo in an expense channel and check the Netlify function
+logs for slack-expense (or slack-events). You'll see one or more of:
 
-## 1) Slack expense capture (expense-* channels)
-- PHOTO-ONLY posts are now recognized. A receipt photo with no text is processed
-  (subtype handling relaxed; falls back to url_private when url_private_download is
-  absent).
-- DUPLICATE PROTECTION for "photo now, text a few minutes later" (either order): if a
-  Slack expense with the EXACT same amount already exists for that store on the same
-  local day, the second one is skipped.
-- MESSAGE EDITS are caught: if an employee edits an earlier message (e.g. adds the amount
-  they forgot, or corrects it), the existing expense is updated in place instead of a new
-  one being created.
-- COIN CHANGE is now booked as a cash expense (buying rolls of coins for the register).
-  Because it legitimately repeats at the same amount several times a day, coin change is
-  EXEMPT from the same-amount dedup. A coin box / cash COUNT report is still not an
-  expense. Note: there's no dedicated "Coin Change" category yet, so it will file under
-  the closest category (likely Others) until you add one in Settings.
+- SLACK_EVENT {...}         -> what Slack actually sent (subtype, whether files are
+                               attached, and whether each file has a download URL).
+- SLACK_IMG_HTTP <status>   -> the image download returned a non-200 (e.g. 403).
+- SLACK_IMG_NOT_IMAGE <ct>  -> Slack returned HTML instead of an image (usually the bot
+                               isn't in that channel, or a token/scope issue).
+- SLACK_PARSE_INPUT {...}   -> how many images were successfully downloaded.
 
-## 2) New mobile app icon
-Replaced icon-192, icon-512, and apple-touch-icon with the new navy/gold ledger icon,
-and added favicon links. Installed PWAs may need to be removed and re-added for the OS to
-refresh the home-screen icon.
+What the logs will tell us:
+- If there's NO SLACK_EVENT line when you post a photo -> Slack isn't sending the event
+  (event subscription / the bot isn't receiving file_share in that channel).
+- If SLACK_EVENT shows files but SLACK_IMG_NOT_IMAGE / SLACK_IMG_HTTP appears -> the event
+  arrives but the download fails (bot not in channel, or private-channel file access).
+- If SLACK_PARSE_INPUT shows image_count > 0 -> images downloaded fine and the issue is
+  downstream (parsing), which we can then look at.
 
-## 3) Annual (year-end) report
-- Close & Publish now has a Monthly / Annual toggle. Annual builds full-year figures from
-  live ledger data; you can Preview, Save draft, Publish, and Unpublish (stored as
-  month=0 in monthly_close).
-- Investors see an "Annual Reports" section above the monthly ones, showing: full-year
-  revenue / expenses / net / margin, vs last year (YoY), a by-quarter Q1-Q4 strip, and
-  the 12-month revenue-and-net trend chart. All the big-picture context is live.
-
-Verified: photo-only booked; same-amount second post deduped; edit updates in place;
-coin change books and repeats; coin box report skipped; annual report shows 2025 totals,
-Q1-Q4, vs 2024, and 12 monthly bars.
-
-No SQL this round.
+Send me the log lines and I'll fix the exact cause. These logs are safe to remove after.
