@@ -1,21 +1,24 @@
-# Ugly Finance Tool - Insights restructured: period vs. store-compare are now separate
+# Ugly Finance Tool - mobile fixes: home cards, cash envelopes, entry forms
 
-Cleaner layout, especially on mobile. "When" (period) and "what" (single store vs.
-store comparison) are now independent controls instead of both living in the tab bar.
+1) HOME CARDS were oversized on mobile. The recent equal-height work pushed the base
+   (desktop) sizing to win over the mobile rules due to CSS source order. Moved the
+   mobile card-tightening into the late-cascade mobile block so it applies: card
+   height on a 390px phone drops from 256px to ~176px. Desktop is unchanged.
 
-- Top period tabs are now just: Daily / Month / Year / All-Time (was six tabs).
-- 3-Year moved INTO Year: the Year view has a 1 Year / 3 Years switch. "3 Years" shows
-  the multi-year "Sales by Month" comparison chart.
-- Compare Stores is now a toggle button next to the store tabs ("Compare stores").
-  Turn it on and the current period (Daily/Month/Year/All-Time) is compared across up
-  to 3 stores. Turn it off to go back to a single store.
-- Because period and compare are independent, you can now do things like Compare +
-  Daily to compare a specific date (July 4th, a snow day) across stores, or Compare +
-  Year for full-year store-vs-store.
-- The redundant in-panel period tabs inside Compare Stores were removed (the period is
-  driven by the shared top tabs now).
+2) CASH tab - Count Envelopes:
+   - Removed the long description paragraph under the heading.
+   - The table now fits the screen width with no horizontal scroll: lower-priority
+     columns (Sales, Spent, Diff) are hidden on mobile, leaving Day / Expected /
+     Counted / check. The full columns still show on desktop. table-layout:fixed keeps
+     it inside the card.
 
-Verified: top tabs = 4; Year has 1y/3y with the 3-year chart; Compare toggle switches
-in/out; Compare + Daily shows a date picker and per-day store comparison. No errors.
+3) ENTRY tab - income and expense forms no longer scroll sideways on mobile:
+   - The expense Amount/Payee pair used inline flex:1 which overrode the mobile
+     stacking rule; switched to a class so they stack full-width on phones.
+   - The income (Revenue) table is now table-layout:fixed with a wrapping name column
+     and a fixed narrow amount column, so long channel names no longer force a scroll.
+
+Verified at 390px: no page or in-card horizontal scroll on Home, Cash, or Entry; home
+card height reduced; desktop layout unchanged.
 
 No SQL this round.
