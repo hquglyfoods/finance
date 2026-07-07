@@ -101,6 +101,11 @@ async function parseWithClaude(text, images, categories, learnings) {
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method not allowed' };
 
+  // Ignore Slack retries (same event re-sent when our slow work delays the ack) so we
+  // don't process/reply to the same message more than once.
+  const h = event.headers || {};
+  if (h['x-slack-retry-num'] || h['X-Slack-Retry-Num']) return { statusCode: 200, body: 'ignored retry' };
+
   let body;
   try { body = JSON.parse(event.body || '{}'); } catch { return { statusCode: 400, body: 'Bad JSON' }; }
   if (body.type === 'url_verification') return { statusCode: 200, body: body.challenge };

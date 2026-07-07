@@ -108,14 +108,23 @@ async function parsePayroll(images, storeCodes) {
     `Excel spreadsheets, or attendance sheets. These are supporting documents, NOT ` +
     `payroll, and their numbers must never be extracted or added. If an image is not ` +
     `clearly an ADP payroll screen, skip it entirely.\n\n` +
-    `On an ADP screen, the "Gross Pay" total equals Payroll (wages) PLUS Payroll Tax. ` +
-    `For each store you can identify FROM AN ADP SCREEN, extract:\n` +
-    `  - payroll: the wages amount (Gross Pay total minus payroll tax), and\n` +
-    `  - payroll_tax: the employer payroll tax amount.\n` +
-    `If a screen shows Gross Pay total and a separate tax figure, compute payroll = gross_total - payroll_tax. ` +
-    `If only a single wages figure is shown with no tax, set payroll to that and payroll_tax to 0.\n\n` +
-    `Match each ADP screen to a store using any store name, address, or label visible. ` +
-    `If you cannot tell which store, use "UNKNOWN".\n\n` +
+    `HOW TO READ AN ADP PAYROLL SCREEN:\n` +
+    `The screen has a table of employees with these columns: Employee name, Type, ` +
+    `Total hours, Gross pay, Taxes, Deductions, Net pay, Employer taxes. ` +
+    `Use ONLY the bottom "Totals" row, not individual employees.\n` +
+    `From the Totals row take exactly two numbers:\n` +
+    `  - payroll     = the "Gross pay" total (the employees' full wages; bonuses are ` +
+    `already included here).\n` +
+    `  - payroll_tax = the "Employer taxes" total (the RIGHTMOST column, the employer's ` +
+    `own tax cost). This is NOT the "Taxes" column (that one is employee-withheld and ` +
+    `must be ignored).\n` +
+    `Do NOT subtract anything. payroll is the Gross pay total as shown; payroll_tax is ` +
+    `the Employer taxes total as shown. Also read "gross" = the same Gross pay total ` +
+    `(for reference). If a store's payroll spans multiple pages, use the Totals row ` +
+    `that reflects the whole run.\n\n` +
+    `Match each ADP screen to a store using the store name shown at the top left of the ` +
+    `screen (e.g. "American Dream Store" = AD, "Bushwick Store" = BW, "Forest Hills ` +
+    `Store" = FH) or any address. If you cannot tell which store, use "UNKNOWN".\n\n` +
     `Respond with ONLY a JSON array, no markdown, no prose. Include ONE object per ADP ` +
     `payroll screen only (no objects for bonus/attendance/Excel images):\n` +
     `[{"store":"AD","payroll":<number>,"payroll_tax":<number>,"gross":<number>,"confident":<true|false>}]\n` +
@@ -137,6 +146,10 @@ async function parsePayroll(images, storeCodes) {
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method not allowed' };
+  // Slack retries the same event if we don't answer fast enough (our work takes a few
+  // seconds: download images + call Claude). Ignore retries so we don't reply 2-3 times.
+  const h = event.headers || {};
+  if (h['x-slack-retry-num'] || h['X-Slack-Retry-Num']) return { statusCode: 200, body: 'ignored retry' };
   let body;
   try { body = JSON.parse(event.body || '{}'); } catch { return { statusCode: 400, body: 'Bad JSON' }; }
   if (body.type === 'url_verification') return { statusCode: 200, body: body.challenge };

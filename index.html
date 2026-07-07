@@ -3887,7 +3887,6 @@ function AccountMenu({profile, pendingCount, onNotifications}){
       <span className="acct-av">{initial}</span>
       <span className="acct-name">{name}</span>
       <span className="acct-dots">⋮</span>
-      {pendingCount>0 && <span className="acct-badge">{pendingCount>9?'9+':pendingCount}</span>}
     </button>
     {open && <div className="acct-menu">
       <div className="acct-head">
@@ -3896,7 +3895,6 @@ function AccountMenu({profile, pendingCount, onNotifications}){
       </div>
       <button className="acct-item" onClick={()=>{ onNotifications(); setOpen(false); }}>
         <span>Notifications</span>
-        {pendingCount>0 && <span className="acct-item-badge">{pendingCount}</span>}
       </button>
       {notif==='off' && <button className="acct-item" onClick={enableNotif}><span>Enable push alerts</span></button>}
       {notif==='on' && <div className="acct-item static"><span>Push alerts on</span><span className="acct-ok">●</span></div>}
