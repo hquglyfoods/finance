@@ -1,18 +1,24 @@
-# Ugly Finance Tool - Entry date picker opens + recurring lease safety
+# Ugly Finance Tool - manual & recurring expenses show even on board (Excel) days
 
-Two things:
+You entered Lease, Loans, and Other Obligations manually on Jul 1, but Insights didn't
+show them. Cause: Jul 1 also has the Excel "board" final import (Others, Supplies), and
+the rule "a board day replaces non-board rows" was hiding ALL of them, including your
+manual entries. That was too broad.
 
-1) ENTRY DATE PICKER. Tapping the date chip in the Entry tab (Revenue and Add Expense)
-   didn't reliably open the calendar popup. It now calls the browser's date picker
-   directly on click, so the calendar opens every time.
+Fix: the board import now supersedes ONLY the auto-estimated sources it's meant to
+replace - the Slack expense bot, Toast POS, and inventory sync. It no longer hides:
+- manual entries (what you typed in Daily Entry),
+- recurring bills,
+- payroll (ADP bot).
+These are never part of the Excel import, so they always count and always show, even on
+a day that has board data.
 
-2) MALL COMMISSION / LEASE. Your commission formula is already correct:
-   max(0, total_sales * 0.15 - cat_lease). It looked wrong this month only because the
-   month's Lease hadn't been entered yet, so cat_lease was 0 and the full 15% showed.
-   Since Lease is a monthly recurring booked on the 1st, this normally self-corrects.
-   To make sure a monthly recurring due on the 1st is never missed (e.g. if the cron had
-   a gap), the recurring job now always includes the 1st of the current month in its
-   catch-up window, not just the last 7 days. Once this month's Lease is booked, the
-   commission recalculates correctly on its own.
+Applied in all three places that use the rule: the P&L math (month/year/all-time), the
+Daily day-by-day list, and Compare Stores. Verified on a Jul 1 with board Others/Supplies
++ manual Lease $25,000 + Loan $3,775 + a duplicate Slack line: the manual and board rows
+all show and sum correctly, and only the duplicate Slack line is hidden.
 
-No SQL this round. (No change to the commission rule - it was already right.)
+Once deployed, your Jul 1 manual expenses (incl. Lease $25,000) will appear, and the Mall
+Commission will recalculate correctly against the now-present Lease.
+
+No SQL this round.

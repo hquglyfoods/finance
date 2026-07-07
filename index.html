@@ -692,6 +692,14 @@ async function loadCorpMeta(corpId, force){
   return meta;
 }
 
+// When a day has the Excel "board" final import, that import supersedes the
+// AUTO-ESTIMATED sources for that day (Slack expense bot, Toast POS, inventory sync),
+// because those are rough real-time captures the Excel figures replace. It must NOT
+// hide things that are never in the Excel: payroll (ADP bot), recurring bills, and
+// manual entries. isBoardSuperseded returns true only for the auto sources.
+const AUTO_SOURCES = new Set(['slack','toast','inventory']);
+function isBoardSuperseded(e){ return AUTO_SOURCES.has(e.source); }
+
 // Compute a single day's P&L (sales/expenses/net + payroll/supplies dollars) for one
 // corp, so specific dates (July 4th, a snow day, Christmas) can be compared across
 // stores. Board-per-date precedence: if a date has board rows, only those count.
@@ -709,7 +717,7 @@ async function loadDayPL(corpId, meta, date){
   revRows.forEach(r=>{ if(hasBoardRev && r.source!=='board') return; const ch=chBy[r.channel_id];
     if(ch && ch.counts_in_total) totalSales += Number(r.amount)*Number(ch.total_multiplier||1); });
   const catSum={};
-  expRows.forEach(e=>{ if(hasBoardExp && e.source!=='board' && e.source!=='payroll_bot') return; const c=catBy[e.category_id]; if(!c) return;
+  expRows.forEach(e=>{ if(hasBoardExp && e.source!=='board' && isBoardSuperseded(e)) return; const c=catBy[e.category_id]; if(!c) return;
     catSum[c.code]=(catSum[c.code]||0)+Number(e.amount); });
   const totalExpenses=Object.values(catSum).reduce((a,b)=>a+b,0);
   const net=totalSales-totalExpenses;
@@ -841,11 +849,11 @@ function computePL(meta, raw){
   const boardExpDates = new Set(confExp.filter(e => e.source === 'board').map(e => e.date));
   const hasBoard = boardLocked;   // auto-rules off for locked months
   confExp.forEach(e => {
-    // Payroll comes from the ADP payroll bot and is never part of the Excel board
-    // import, so it must always count even on days that have board data.
-    const isPayrollBot = e.source === 'payroll_bot';
-    if (boardLocked && e.source !== 'board' && !isPayrollBot) return;                 // locked: board only (plus payroll)
-    if (!boardLocked && e.source !== 'board' && !isPayrollBot && boardExpDates.has(e.date)) return; // current: per-date
+    // The Excel board import supersedes only the auto-estimated sources (Slack/Toast/
+    // inventory). Payroll (ADP bot), recurring bills, and manual entries are never in
+    // the Excel, so they must always count - even in a locked past month.
+    if (boardLocked && e.source !== 'board' && isBoardSuperseded(e)) return;                 // locked: board replaces auto sources only
+    if (!boardLocked && e.source !== 'board' && isBoardSuperseded(e) && boardExpDates.has(e.date)) return; // current: per-date
     const c = catById[e.category_id]; if(!c) return;
     catSum[c.code] = (catSum[c.code]||0) + Number(e.amount);
   });
@@ -1202,7 +1210,7 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
           rawX.revenue.forEach(r=>{ if(lockedR&&r.source!=='board')return; if(!lockedR&&r.source!=='board'&&boardRevDates.has(r.date))return; const ch=chBy[r.channel_id]; if(!ch||!ch.counts_in_total)return;
             const d=parseInt(r.date.slice(8)); if(days[d]) days[d].rev+=Number(r.amount)*Number(ch.total_multiplier||1); });
           const boardExpDates=new Set(rawX.expenses.filter(e=>e.source==='board'&&e.status==='confirmed').map(e=>e.date));
-          rawX.expenses.forEach(e=>{ if(e.status!=='confirmed')return; const isPayrollBot=e.source==='payroll_bot'; if(lockedE&&e.source!=='board'&&!isPayrollBot)return; if(!lockedE&&e.source!=='board'&&!isPayrollBot&&boardExpDates.has(e.date))return;
+          rawX.expenses.forEach(e=>{ if(e.status!=='confirmed')return; if(lockedE&&e.source!=='board'&&isBoardSuperseded(e))return; if(!lockedE&&e.source!=='board'&&isBoardSuperseded(e)&&boardExpDates.has(e.date))return;
             const d=parseInt(e.date.slice(8)); if(days[d]){ days[d].exp+=Number(e.amount);
               days[d].items.push({id:e.id, category_id:e.category_id, date:e.date, cat:(catBy[e.category_id]||{}).name||'?', amount:Number(e.amount), payee:e.payee, memo:e.memo, source:e.source, by:e.entered_by, slack_user:e.slack_user}); } });
           return days;
