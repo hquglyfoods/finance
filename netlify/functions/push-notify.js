@@ -68,8 +68,9 @@ exports.handler = async (event) => {
              && (!old_record || old_record.status !== 'published')) {
     targetRoles = ['investor'];
     corpId = record.corporation_id;
-    title = 'New monthly report';
-    body = 'A new monthly report has been published.';
+    const isAnnual = record.month === 0;
+    title = isAnnual ? 'New annual report' : 'New monthly report';
+    body = isAnnual ? 'A new annual report has been published.' : 'A new monthly report has been published.';
   } else {
     // Explain why nothing was sent so the reason is visible in logs and the response.
     const reason =
