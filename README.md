@@ -1,32 +1,25 @@
-# Ugly Finance Tool - semi-auto approvals
+# Ugly Finance Tool - payroll books to the ADP pay-period end date
 
-You approve new/unfamiliar things manually (which is what trains the system); once an
-expense type is familiar it auto-approves.
+Payroll was booking to a server-computed "prior week Sunday" (6/28), which didn't match
+the actual ADP work week. Now the bot reads the ADP "Payroll dates" range (e.g.
+"Jun 29, 2026 -> Jul 5, 2026") and books to the END of that range (7/5), so payroll
+lands on the Sunday that actually closes the work week it covers.
 
-EXPENSES (slack-expense.js):
-- Auto-confirm ONLY when BOTH are true:
-  1) Claude is confident about the reading, AND
-  2) it's familiar - a past approval used the SAME category for a matching description
-     (exact signal match, one contains the other, or 2+ shared distinctive words;
-     common words like "from/store/cash" are ignored so they can't trigger a false
-     auto-approval).
-- Otherwise it stays PENDING for manual approval, exactly as before. Manual approvals
-  keep teaching the system (they write the learning that later enables auto-approve).
-- No amount cap: if it's familiar it auto-approves regardless of amount (as you chose).
-- Auto-approved items are tagged in the memo "[auto-approved: matches a past approval]"
-  and show with the Slack badge in the Daily view, where you can still edit or delete
-  them.
+Details (slack-payroll.js):
+- The image reader now also returns "period_end" (YYYY-MM-DD) from the ADP Payroll
+  dates range.
+- Each store books to its own period_end, validated (correct format, within ~60 days
+  back / 14 days forward). If ADP didn't show a usable range, it falls back to the old
+  prior-week-Sunday so nothing breaks.
+- The Slack reply and push now show the real week-ending date(s), and each store line
+  includes its week-ending date.
 
-PAYROLL (slack-payroll.js):
-- Now books as CONFIRMED (not pending), since Chi already confirms it in Slack before
-  you see it. The Slack reply wording changed to "Payroll booked... recorded in the
-  finance app. Edit them there if anything looks off."
+CLEANUP: the earlier run booked payroll to 2026-06-28 (wrong week). Delete those
+6/28 payroll + payroll tax entries in the app (Daily view, June, the 28th). The
+corrected run will book to 2026-07-05. Re-confirming creates new rows (different slack
+timestamp), it does NOT overwrite the 6/28 ones, so remove the 6/28 ones manually.
 
-Also in this build (from the prior fix): Slack retry guard so one confirmation makes
-one reply, and the corrected ADP reading (payroll = Gross pay total, payroll_tax =
-Employer taxes total, no subtraction).
+Still included from prior builds: semi-auto approvals, Slack retry guard, correct ADP
+column reading (Gross pay / Employer taxes).
 
-Behavior note: because familiar expenses skip Approvals now, the Approvals list will be
-shorter - it only holds new/uncertain items. That is expected.
-
-No SQL this round (uses existing slack_learnings, expenses.status).
+No SQL this round.

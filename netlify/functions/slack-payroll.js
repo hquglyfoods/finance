@@ -125,9 +125,13 @@ async function parsePayroll(images, storeCodes) {
     `Match each ADP screen to a store using the store name shown at the top left of the ` +
     `screen (e.g. "American Dream Store" = AD, "Bushwick Store" = BW, "Forest Hills ` +
     `Store" = FH) or any address. If you cannot tell which store, use "UNKNOWN".\n\n` +
+    `Also read the pay period. ADP shows "Payroll dates" as a range like ` +
+    `"Jun 29, 2026 -> Jul 5, 2026". Return "period_end" = the END date of that range in ` +
+    `YYYY-MM-DD format (e.g. "2026-07-05"). If you cannot find the range, set ` +
+    `period_end to null.\n\n` +
     `Respond with ONLY a JSON array, no markdown, no prose. Include ONE object per ADP ` +
     `payroll screen only (no objects for bonus/attendance/Excel images):\n` +
-    `[{"store":"AD","payroll":<number>,"payroll_tax":<number>,"gross":<number>,"confident":<true|false>}]\n` +
+    `[{"store":"AD","payroll":<number>,"payroll_tax":<number>,"gross":<number>,"period_end":"YYYY-MM-DD"|null,"confident":<true|false>}]\n` +
     `Numbers only, no currency symbols or commas. If no ADP payroll screen is present, return [].`
   });
   for (const img of images) content.push({ type: 'image', source: { type: 'base64', media_type: img.media_type, data: img.data } });
@@ -199,7 +203,17 @@ exports.handler = async (event) => {
   catch (e) { await postSlack(channel, ':warning: I could not read the payroll screenshots automatically. Please enter payroll manually this week.'); return { statusCode: 200, body: 'parse failed' }; }
   if (!Array.isArray(parsed)) parsed = [];
 
-  const date = priorWeekSunday(new Date());
+  const fallbackDate = priorWeekSunday(new Date());
+  // Accept a valid YYYY-MM-DD within a sane recent window; otherwise fall back.
+  const validPeriodEnd = (s) => {
+    if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+    const t = Date.parse(s + 'T00:00:00Z');
+    if (isNaN(t)) return null;
+    const now = Date.now();
+    // must be within ~60 days back and not more than ~14 days in the future
+    if (t < now - 60 * 864e5 || t > now + 14 * 864e5) return null;
+    return s;
+  };
 
   // resolve corp + category ids
   const { data: corps } = await admin.from('corporations').select('id,code').in('code', storeCodes);
@@ -211,11 +225,16 @@ exports.handler = async (event) => {
 
   const rows = [];
   const summary = [];
+  const datesUsed = new Set();
   for (const p of parsed) {
     const corpId = corpByCode[p.store];
     if (!corpId) continue;
     const payroll = Number(p.payroll) || 0;
     const tax = Number(p.payroll_tax) || 0;
+    // Book to the ADP pay-period END date (the Sunday that closes the work week the
+    // payroll covers). Fall back to the computed prior-week Sunday if ADP didn't show it.
+    const date = validPeriodEnd(p.period_end) || fallbackDate;
+    datesUsed.add(date);
     if (payroll > 0 && catBy[corpId + '|payroll']) {
       rows.push({ corporation_id: corpId, category_id: catBy[corpId + '|payroll'], date, amount: payroll,
         memo: `Payroll (ADP, confirmed) wk ending ${date}`, source: 'payroll_bot', status: 'confirmed', slack_ts: `pr_${confirmTs}_${p.store}_p` });
@@ -224,7 +243,7 @@ exports.handler = async (event) => {
       rows.push({ corporation_id: corpId, category_id: catBy[corpId + '|payroll_tax'], date, amount: tax,
         memo: `Payroll tax (ADP, confirmed) wk ending ${date}`, source: 'payroll_bot', status: 'confirmed', slack_ts: `pr_${confirmTs}_${p.store}_t` });
     }
-    summary.push(`${p.store}: payroll $${payroll.toLocaleString()} · tax $${tax.toLocaleString()}`);
+    summary.push(`${p.store}: payroll $${payroll.toLocaleString()} · tax $${tax.toLocaleString()} (wk ending ${date})`);
   }
 
   if (!rows.length) {
@@ -248,8 +267,9 @@ exports.handler = async (event) => {
     return { statusCode: 200, body: 'insert error' };
   }
 
+  const dateLabel = Array.from(datesUsed).sort().join(', ');
   await postSlack(channel,
-    `:white_check_mark: Payroll booked for week ending *${date}*:\n` +
+    `:white_check_mark: Payroll booked for week ending *${dateLabel}*:\n` +
     summary.map(s => '• ' + s).join('\n') +
     `\nThese are recorded in the finance app. Edit them there if anything looks off.`);
 
@@ -257,9 +277,9 @@ exports.handler = async (event) => {
   try {
     await fetch(`${process.env.URL || ''}/.netlify/functions/push-notify`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ role: 'owner', title: 'Payroll ready to approve', body: `Week ending ${date} · ${summary.length} store(s)` }),
+      body: JSON.stringify({ role: 'owner', title: 'Payroll booked', body: `Week ending ${dateLabel} · ${summary.length} store(s)` }),
     });
   } catch {}
 
-  return { statusCode: 200, body: JSON.stringify({ ok: true, date, stores: summary.length, rows: rows.length }) };
+  return { statusCode: 200, body: JSON.stringify({ ok: true, date: dateLabel, stores: summary.length, rows: rows.length }) };
 };
