@@ -1,20 +1,21 @@
-# Ugly Finance Tool - notification list auto-cleanup
+# Ugly Finance Tool - Insights restructured: period vs. store-compare are now separate
 
-The bell notification list no longer grows forever.
+Cleaner layout, especially on mobile. "When" (period) and "what" (single store vs.
+store comparison) are now independent controls instead of both living in the tab bar.
 
-Rule (runs inside the existing daily recurring-cron, no new schedule):
-- A notification is deleted only if it is older than 30 days AND at least one person
-  has read it.
-- Anything still UNREAD is kept indefinitely, no matter how old, so a missed alert
-  never disappears.
-- Read records are deleted first, then the notifications, so no orphan rows are left.
-- The cron response now includes notifCleaned (how many were removed).
+- Top period tabs are now just: Daily / Month / Year / All-Time (was six tabs).
+- 3-Year moved INTO Year: the Year view has a 1 Year / 3 Years switch. "3 Years" shows
+  the multi-year "Sales by Month" comparison chart.
+- Compare Stores is now a toggle button next to the store tabs ("Compare stores").
+  Turn it on and the current period (Daily/Month/Year/All-Time) is compared across up
+  to 3 stores. Turn it off to go back to a single store.
+- Because period and compare are independent, you can now do things like Compare +
+  Daily to compare a specific date (July 4th, a snow day) across stores, or Compare +
+  Year for full-year store-vs-store.
+- The redundant in-panel period tabs inside Compare Stores were removed (the period is
+  driven by the shared top tabs now).
 
-UI: the bell still shows the most recent notifications (cap raised 30 -> 50 for
-headroom) with unread ones highlighted and "Mark all read". Because seen items age
-out after a month, the list stays short on its own.
+Verified: top tabs = 4; Year has 1y/3y with the 3-year chart; Compare toggle switches
+in/out; Compare + Daily shows a date picker and per-day store comparison. No errors.
 
-Verified: cleanup keeps unread and recent items, removes only read items older than
-30 days.
-
-No SQL this round (uses existing notifications / notification_reads tables).
+No SQL this round.

@@ -186,6 +186,12 @@ a{color:var(--gold);text-decoration:none}
 .kpis.kpis-3{grid-template-columns:repeat(3,1fr)}
 /* store comparison */
 .cmp-chips{display:flex;gap:8px;flex-wrap:wrap}
+.cmp-period{display:inline-flex;gap:2px;background:var(--panel2);border-radius:9px;padding:3px;margin-bottom:12px}
+.cmp-per-tab{background:none;border:none;border-radius:7px;padding:6px 16px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer}
+.cmp-per-tab.on{background:var(--panel);color:var(--gold-strong);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.cmp-toggle{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:7px 14px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;white-space:nowrap}
+.cmp-toggle:hover{background:var(--panel2)}
+.cmp-toggle.on{background:var(--gold-dim);border-color:var(--gold);color:var(--gold-strong)}
 .cmp-chip{font-family:var(--font-m);font-weight:700;font-size:14px;letter-spacing:.04em;padding:9px 16px;border-radius:9px;border:1.5px solid var(--border);background:var(--panel);color:var(--text2);cursor:pointer;transition:all .12s}
 .cmp-chip.on{background:var(--gold-dim);border-color:var(--gold);color:var(--gold-strong)}
 .cmp-chip.disabled{opacity:.4;cursor:not-allowed}
@@ -619,6 +625,35 @@ async function loadCorpMeta(corpId){
   return { channels: ch.data||[], categories: cat.data||[], rules: rules.data||[], ownership: own.data||[] };
 }
 
+// Compute a single day's P&L (sales/expenses/net + payroll/supplies dollars) for one
+// corp, so specific dates (July 4th, a snow day, Christmas) can be compared across
+// stores. Board-per-date precedence: if a date has board rows, only those count.
+async function loadDayPL(corpId, meta, date){
+  const [rev, exp] = await Promise.all([
+    sb.from('daily_revenue').select('amount,channel_id,source').eq('corporation_id',corpId).eq('date',date),
+    sb.from('expenses').select('amount,category_id,status,source').eq('corporation_id',corpId).eq('date',date),
+  ]);
+  const chBy={}; meta.channels.forEach(c=>chBy[c.id]=c);
+  const catBy={}; meta.categories.forEach(c=>catBy[c.id]=c);
+  const revRows=rev.data||[], expRows=(exp.data||[]).filter(e=>e.status==='confirmed');
+  const hasBoardRev=revRows.some(r=>r.source==='board');
+  const hasBoardExp=expRows.some(e=>e.source==='board');
+  let totalSales=0;
+  revRows.forEach(r=>{ if(hasBoardRev && r.source!=='board') return; const ch=chBy[r.channel_id];
+    if(ch && ch.counts_in_total) totalSales += Number(r.amount)*Number(ch.total_multiplier||1); });
+  const catSum={};
+  expRows.forEach(e=>{ if(hasBoardExp && e.source!=='board') return; const c=catBy[e.category_id]; if(!c) return;
+    catSum[c.code]=(catSum[c.code]||0)+Number(e.amount); });
+  const totalExpenses=Object.values(catSum).reduce((a,b)=>a+b,0);
+  const net=totalSales-totalExpenses;
+  const pay=catSum['payroll']||0;
+  const sup=(catSum['supplies']||0)+(catSum['supplies_food']||0)+(catSum['supplies_material']||0)+(catSum['hq_supplies']||0);
+  return { totalSales, totalExpenses, net, catSum,
+    margin: totalSales? net/totalSales : null,
+    payrollPct: totalSales? pay/totalSales : null,
+    suppliesPct: totalSales? sup/totalSales : null };
+}
+
 async function loadMonthRaw(corpId, y, m){
   const start = `${y}-${pad(m)}-01`, end = `${y}-${pad(m)}-${pad(lastDay(y,m))}`;
   const [rev, exp, inp, rates] = await Promise.all([
@@ -965,7 +1000,9 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
   const now = new Date();
   const [y, setY] = useState(now.getFullYear());
   const [m, setM] = useState(now.getMonth()+1);
-  const [view, setView] = useState('daily');   // daily | month | year | compare | alltime
+  const [view, setView] = useState('daily');   // daily | month | year | alltime
+  const [yearMode, setYearMode] = useState('1y'); // 1y | 3y  (only used when view==='year')
+  const [compareStores, setCompareStores] = useState(false);
   const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refresh, setRefresh] = useState(0);   // bump to reload after edit/delete
@@ -984,6 +1021,7 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
   // store comparison: pick up to 3 stores, compare the selected month side by side
   const [cmpIds, setCmpIds] = useState(()=>editable.slice(0,3).map(c=>c.id));
   const [cmpData, setCmpData] = useState(null);
+  const [cmpDate, setCmpDate] = useState(()=>todayStr());
 
   useEffect(()=>{ if(!corpId) return; let dead=false; setLoading(true);
     (async()=>{
@@ -1042,11 +1080,12 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
         setDayRows(out);
       }
       else if(view==='year'){
-        const yr = await loadYearPL(corpId,mt,y); if(dead) return; setYearMonths(yr);
-      }
-      else if(view==='compare'){
-        const [a,b,c] = await Promise.all([loadYearPL(corpId,mt,y), loadYearPL(corpId,mt,y-1), loadYearPL(corpId,mt,y-2)]);
-        if(dead) return; setYearMonths(a); setYearMonthsPrev(b); setYearMonthsPrev2(c);
+        if(yearMode==='3y'){
+          const [a,b,c] = await Promise.all([loadYearPL(corpId,mt,y), loadYearPL(corpId,mt,y-1), loadYearPL(corpId,mt,y-2)]);
+          if(dead) return; setYearMonths(a); setYearMonthsPrev(b); setYearMonthsPrev2(c);
+        } else {
+          const yr = await loadYearPL(corpId,mt,y); if(dead) return; setYearMonths(yr);
+        }
       }
       else if(view==='alltime'){
         const at = await loadAllTimePL(corpId,mt); if(dead) return; setAllTime(at);
@@ -1054,55 +1093,103 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
       setLoading(false);
     })();
     return ()=>{dead=true};
-  },[corpId,y,m,view,refresh]);
+  },[corpId,y,m,view,yearMode,refresh]);
 
-  // load side-by-side comparison for the selected stores + month
-  useEffect(()=>{ if(view!=='stores') return; let dead=false; setCmpData(null);
+  // load side-by-side comparison for the selected stores + chosen period
+  // (period is the shared top tab: daily->day, month, year, alltime)
+  const cmpPeriod = view==='daily' ? 'day' : view;
+  useEffect(()=>{ if(!compareStores) return; let dead=false; setCmpData(null);
     (async()=>{
       const ids = cmpIds.slice(0,3);
+      // combine an array of monthly PLs into one pl-like object (dollars summed,
+      // ratios recomputed from combined catSum so different-sized months are fair)
+      const combinePLs = (pls)=>{
+        const totalSales = pls.reduce((a,p)=>a+p.totalSales,0);
+        const totalExpenses = pls.reduce((a,p)=>a+p.totalExpenses,0);
+        const net = pls.reduce((a,p)=>a+p.net,0);
+        const catSum = {};
+        pls.forEach(p=>{ Object.entries(p.catSum||{}).forEach(([k,v])=>{ catSum[k]=(catSum[k]||0)+v; }); });
+        const pay = catSum['payroll']||0;
+        const sup = (catSum['supplies']||0)+(catSum['supplies_food']||0)+(catSum['supplies_material']||0)+(catSum['hq_supplies']||0);
+        return { totalSales, totalExpenses, net, catSum,
+          margin: totalSales? net/totalSales : null,
+          payrollPct: totalSales? pay/totalSales : null,
+          suppliesPct: totalSales? sup/totalSales : null };
+      };
       const out = await Promise.all(ids.map(async id=>{
         const mt = await loadCorpMeta(id);
-        const [raw, rawLY] = await Promise.all([loadMonthRaw(id,y,m), loadMonthRaw(id,y-1,m)]);
-        const p = computePL(mt,raw); const ply = computePL(mt,rawLY);
         const corp = editable.find(c=>c.id===id) || {};
-        return { id, code:corp.code, name:corp.name, pl:p,
-          lySales:(ply.totalSales!==0||ply.totalExpenses!==0)?ply.totalSales:null };
+        let pl, lySales=null;
+        if(cmpPeriod==='day'){
+          pl = await loadDayPL(id, mt, cmpDate);
+          // same day last year for context
+          const lyDate = (parseInt(cmpDate.slice(0,4))-1)+cmpDate.slice(4);
+          const plyD = await loadDayPL(id, mt, lyDate);
+          lySales = (plyD.totalSales!==0||plyD.totalExpenses!==0)?plyD.totalSales:null;
+        } else if(cmpPeriod==='year'){
+          const [cur, prev] = await Promise.all([loadYearPL(id,mt,y), loadYearPL(id,mt,y-1)]);
+          pl = combinePLs(cur.map(x=>x.pl));
+          const ply = combinePLs(prev.map(x=>x.pl));
+          lySales = (ply.totalSales!==0)?ply.totalSales:null;
+        } else if(cmpPeriod==='alltime'){
+          const at = await loadAllTimePL(id,mt);
+          const allMonths = (at.years||[]).flatMap(yr=>yr.months.map(x=>x.pl));
+          pl = combinePLs(allMonths);
+        } else { // month
+          const [raw, rawLY] = await Promise.all([loadMonthRaw(id,y,m), loadMonthRaw(id,y-1,m)]);
+          pl = computePL(mt,raw); const ply = computePL(mt,rawLY);
+          lySales = (ply.totalSales!==0||ply.totalExpenses!==0)?ply.totalSales:null;
+        }
+        return { id, code:corp.code, name:corp.name, pl, lySales };
       }));
       if(!dead) setCmpData(out);
     })();
     return ()=>{dead=true};
-  },[view, cmpIds, y, m]);
+  },[compareStores, cmpIds, y, m, cmpPeriod, cmpDate]);
 
   if(!editable.length) return <div className="card">No corporations available for your account.</div>;
 
-  const VIEWS=[['daily','Daily'],['month','Month'],['year','Year'],['compare','3-Year'],['alltime','All-Time'],['stores','Compare Stores']];
+  const VIEWS=[['daily','Daily'],['month','Month'],['year','Year'],['alltime','All-Time']];
   const showPicker = view!=='alltime';
   const toggleCmp = (id)=>{
     setCmpData(null);
     setCmpIds(prev=> prev.includes(id) ? prev.filter(x=>x!==id) : (prev.length>=3 ? prev : [...prev,id]));
   };
+  // the shared period picker (month picker / year picker / date input), driven by view
+  const periodPicker = !showPicker ? null
+    : view==='daily' ? <input type="date" value={cmpDate} onChange={e=>setCmpDate(e.target.value)} style={{padding:'7px 10px',fontSize:14,border:'1px solid var(--border)',borderRadius:8,fontFamily:'inherit'}}/>
+    : view==='year' ? <YearPick y={y} onChange={setY}/>
+    : <MonthPick y={y} m={m} onChange={(a,b)=>{setY(a);setM(b);}}/>;
+  // in single-store daily we use the month picker; in compare-daily we use a date.
+  const singlePicker = view==='daily' ? <MonthPick y={y} m={m} onChange={(a,b)=>{setY(a);setM(b);}}/>
+    : view==='year' ? <YearPick y={y} onChange={setY}/>
+    : view==='alltime' ? null
+    : <MonthPick y={y} m={m} onChange={(a,b)=>{setY(a);setM(b);}}/>;
+  const title = compareStores ? 'Compare Stores'
+    : view==='daily'?'Daily Breakdown':view==='year'?(yearMode==='3y'?'Three-Year Comparison':'Yearly P&L'):view==='alltime'?'All-Time':'Monthly P&L';
   return <div>
     <div className="page-head">
-      <div><div className="eyebrow">Insights</div><h2>{view==='daily'?'Daily Breakdown':view==='year'?'Yearly P&L':view==='compare'?'Three-Year Comparison':view==='alltime'?'All-Time':view==='stores'?'Compare Stores':'Monthly P&L'}</h2></div>
+      <div><div className="eyebrow">Insights</div><h2>{title}</h2></div>
       <div style={{display:'flex',gap:14,alignItems:'center',flexWrap:'wrap'}}>
-        {view!=='stores' && <CorpTabs corps={editable} sel={corpId} onSel={setCorpId}/>}
-        {showPicker && (view==='year'||view==='compare'
-          ? <YearPick y={y} onChange={setY}/>
-          : <MonthPick y={y} m={m} onChange={(a,b)=>{setY(a);setM(b);}}/>)}
+        {!compareStores && <CorpTabs corps={editable} sel={corpId} onSel={setCorpId}/>}
+        <button className={'cmp-toggle'+(compareStores?' on':'')} onClick={()=>setCompareStores(v=>!v)}>
+          {compareStores?'✓ Comparing stores':'Compare stores'}</button>
+        {compareStores ? periodPicker : singlePicker}
       </div>
     </div>
     <div className="viewbar">
       {VIEWS.map(([id,label])=>
         <button key={id} className={'viewtab'+(view===id?' on':'')} onClick={()=>setView(id)}>{label}</button>)}
     </div>
-    {view==='stores' ?
-      <StoreCompareView editable={editable} cmpIds={cmpIds} toggleCmp={toggleCmp} data={cmpData} y={y} m={m}/> :
+    {compareStores ?
+      <StoreCompareView editable={editable} cmpIds={cmpIds} toggleCmp={toggleCmp} data={cmpData} y={y} m={m} period={cmpPeriod} cmpDate={cmpDate}/> :
       loading ? <Spinner/> :
       view==='month'   ? <MonthView pl={pl} yoy={yoy} trend={trend} y={y} m={m}/> :
       view==='daily'   ? <DailyView rows={dayRows} pl={pl} y={y} m={m} isOwner={isOwner} categories={(meta&&meta.categories)||[]} onChanged={()=>setRefresh(x=>x+1)}/> :
-      view==='year'    ? <YearView months={yearMonths} y={y}/> :
+      view==='year'    ? <YearView months={yearMonths} y={y} yearMode={yearMode} onYearMode={setYearMode}
+                           prev={yearMonthsPrev} prev2={yearMonthsPrev2}/> :
       view==='alltime' ? <AllTimeView data={allTime}/> :
-                         <CompareView cur={yearMonths} prev={yearMonthsPrev} prev2={yearMonthsPrev2} y={y}/>}
+                         <MonthView pl={pl} yoy={yoy} trend={trend} y={y} m={m}/>}
   </div>;
 }
 
@@ -1171,7 +1258,7 @@ function analyzeChange(pl, yoy){
   return out;
 }
 
-function StoreCompareView({editable, cmpIds, toggleCmp, data, y, m}){
+function StoreCompareView({editable, cmpIds, toggleCmp, data, y, m, period, cmpDate}){
   const selectable = editable;
   const sel = (data||[]).filter(Boolean);
   const bestHigh = (vals)=>{ const nums=vals.filter(v=>v!=null); return nums.length?Math.max(...nums):null; };
@@ -1202,10 +1289,11 @@ function StoreCompareView({editable, cmpIds, toggleCmp, data, y, m}){
     {key:'supplies',label:'Supplies %',    get:s=>s.pl.suppliesPct,   cget:c=>c.suppliesPct, fmt:v=>v==null?'-':fmtPct(v), best:'low'},
   ];
 
+  const periodLabel = period==='day' ? fmtDateShort(cmpDate) : period==='year' ? `${y}` : period==='alltime' ? 'All-time' : `${MONTHS[m-1]} ${y}`;
   return <div>
     <div className="card">
       <h3>Pick up to 3 stores to compare</h3>
-      <div className="hint" style={{marginTop:0,marginBottom:12}}>Comparing {MONTHS[m-1]} {y}. Tap a store to add or remove it (max 3).</div>
+      <div className="hint" style={{marginTop:0,marginBottom:12}}>Comparing {periodLabel}. Tap a store to add or remove it (max 3). Change the period with the tabs above.</div>
       <div className="cmp-chips">
         {selectable.map(c=>{ const on=cmpIds.includes(c.id); const full=cmpIds.length>=3 && !on;
           return <button key={c.id} className={'cmp-chip'+(on?' on':'')+(full?' disabled':'')}
@@ -1483,11 +1571,17 @@ function DailyView({rows, pl, y, m, isOwner, categories, onChanged}){
 }
 
 // ---- YEAR VIEW (12 months across) ----
-function YearView({months, y}){
+function YearView({months, y, yearMode, onYearMode, prev, prev2}){
+  const toggle = <div className="cmp-period" style={{marginBottom:16}}>
+    <button className={'cmp-per-tab'+(yearMode==='1y'?' on':'')} onClick={()=>onYearMode&&onYearMode('1y')}>1 Year</button>
+    <button className={'cmp-per-tab'+(yearMode==='3y'?' on':'')} onClick={()=>onYearMode&&onYearMode('3y')}>3 Years</button>
+  </div>;
+  if(yearMode==='3y') return <>{toggle}<CompareView cur={months} prev={prev} prev2={prev2} y={y}/></>;
   const tot=months.reduce((a,x)=>({s:a.s+x.pl.totalSales,e:a.e+x.pl.totalExpenses,n:a.n+x.pl.net}),{s:0,e:0,n:0});
   const trendPts=months.filter(x=>x.pl.totalSales!==0||x.pl.totalExpenses!==0)
     .map(x=>({label:pad(x.m),sales:x.pl.totalSales,net:x.pl.net,payrollPct:x.pl.payrollPct,suppliesPct:x.pl.suppliesPct}));
   return <>
+    {toggle}
     <div className="kpis kpis-3">
       <div className="kpi"><div className="k-lbl">{y} Sales</div><div className="k-val">{fmt$k(tot.s)}</div></div>
       <div className="kpi"><div className="k-lbl">{y} Expenses</div><div className="k-val">{fmt$k(tot.e)}</div></div>
