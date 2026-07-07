@@ -253,9 +253,9 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .badge.blue{color:var(--blue);border-color:rgba(122,156,198,.4)}
 
 /* cash calendar */
-.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:96px;gap:6px}
 .cal .dow{font-family:var(--font-m);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);text-align:center;padding:4px 0}
-.cal .day{min-height:74px;border:1px solid var(--border-soft);border-radius:8px;padding:7px 8px;background:var(--panel2);position:relative}
+.cal .day{height:96px;border:1px solid var(--border-soft);border-radius:8px;padding:7px 8px;background:var(--panel2);position:relative;overflow:hidden;box-sizing:border-box}
 .cal .day.empty{background:transparent;border-color:transparent}
 .cal .day .d{font-family:var(--font-m);font-size:11px;color:var(--text3)}
 .cal .day .amt{font-family:var(--font-m);font-size:12.5px;margin-top:6px}
@@ -512,8 +512,8 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   .env-table .env-input{padding:5px 5px;font-size:13px}
   .env-diff{font-size:9.5px;font-weight:700;text-align:right;margin-top:2px;line-height:1.1}
   /* cash calendar tighter */
-  .cal{gap:3px}
-  .cal .day{min-height:52px;padding:5px 5px}
+  .cal{gap:3px;grid-auto-rows:88px}
+  .cal .day{height:88px;padding:5px 5px}
   .cal .day .amt{font-size:11px}
   .toast{bottom:92px}
 }
