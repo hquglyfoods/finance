@@ -122,9 +122,33 @@ function bizDates(offsetHours) {
   return list;
 }
 
-exports.handler = async () => {
+// business dates for an explicit inclusive range [start,end] (YYYY-MM-DD). Used for
+// manual backfill; none of these are "provisional".
+function rangeDates(startIso, endIso) {
+  const list = [];
+  const s = new Date(startIso + 'T12:00:00Z'), e = new Date(endIso + 'T12:00:00Z');
+  for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+    list.push({
+      ymd: `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}`,
+      iso: `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`,
+      provisional: false,
+    });
+  }
+  return list;
+}
+
+exports.handler = async (event) => {
   const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY,
     { auth: { persistSession: false } });
+
+  // Optional manual backfill: /.netlify/functions/toast-sync?start=2025-07-01&end=2025-07-06
+  // re-pulls that exact date range from Toast (tips included). Without params it runs the
+  // normal rolling 3-day sync.
+  const qp = (event && event.queryStringParameters) || {};
+  const backfill = qp.start && qp.end ? { start: qp.start, end: qp.end } : null;
+  // When backfilling, default to TIPS ONLY so we don't overwrite revenue that may have
+  // been finalized from the Excel board. Pass &tips_only=0 to also refresh revenue.
+  const tipsOnly = backfill && qp.tips_only !== '0';
 
   const map = {};
   (process.env.TOAST_RESTAURANTS || '').split(',').map(s => s.trim()).filter(Boolean)
@@ -150,7 +174,8 @@ exports.handler = async () => {
     try { dn = await diningNameMap(token, guid); } catch (e) {}
 
     const offset = CENTRAL.has(code) ? -5 : -4;
-    for (const d of bizDates(offset)) {
+    const dates = backfill ? rangeDates(backfill.start, backfill.end) : bizDates(offset);
+    for (const d of dates) {
       let orders;
       try { orders = await fetchOrders(token, guid, d.ymd); }
       catch (e) { log.push(`${code} ${d.ymd}: ${e.message}`); continue; }
@@ -158,8 +183,9 @@ exports.handler = async () => {
 
       // upsert each channel (skip 'manual' rows). Provisional (today) rows are
       // marked source 'toast_live' so the app can show them as in progress.
+      // In a tips-only backfill, don't touch revenue at all.
       const src = d.provisional ? 'toast_live' : 'toast';
-      for (const chCode of ['cash', 'card', 'uber', 'grubhub', 'doordash']) {
+      if (!tipsOnly) for (const chCode of ['cash', 'card', 'uber', 'grubhub', 'doordash']) {
         if (!chId[chCode]) continue;
         const amount = sums[chCode] || 0;
         const { data: ex } = await admin.from('daily_revenue').select('id,source')

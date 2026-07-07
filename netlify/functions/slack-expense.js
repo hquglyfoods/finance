@@ -82,16 +82,11 @@ function matchesLearning(summary, categoryCode, categoryName, learnings) {
 
 async function downloadImage(url) {
   const res = await fetch(url, { headers: { Authorization: 'Bearer ' + process.env.SLACK_BOT_TOKEN } });
-  if (!res.ok) { console.log('SLACK_IMG_HTTP', res.status); return null; }
+  if (!res.ok) return null;
   const ct = res.headers.get('content-type') || 'image/jpeg';
-  if (!ct.startsWith('image/')) {
-    // Slack returns an HTML page (not an image) when the bot token lacks files:read
-    // or isn't in the channel. Surface that instead of silently dropping the photo.
-    console.log('SLACK_IMG_NOT_IMAGE', ct);
-    return null;
-  }
+  if (!ct.startsWith('image/')) return null;
   const buf = Buffer.from(await res.arrayBuffer());
-  if (buf.length > 4_500_000) { console.log('SLACK_IMG_TOO_BIG', buf.length); return null; }
+  if (buf.length > 4_500_000) return null; // keep request small
   return { media_type: ct.split(';')[0], data: buf.toString('base64') };
 }
 
@@ -108,16 +103,11 @@ async function parseWithClaude(text, images, categories, learnings) {
     `These represent ONE expense. Do NOT add them twice. Use the single purchase total.\n\n` +
     `Also ignore lines that are just a cashier signature or name (e.g. "Closing Cashier ~Mariana", "(Victor)").\n\n` +
     `NOT EVERY MESSAGE IS AN EXPENSE. Some messages are cash-handling or bookkeeping reports, NOT money spent. ` +
-    `In particular, a "Coin Box Report" / cash drawer or register COUNT (listing counts of ` +
+    `In particular, a "Coin Box Report" / "Coin exchange" / cash drawer or register count (listing counts of ` +
     `Singles, Fives, Quarters, Dimes, Nickels, Pennies, Dollar bills, etc. with a TOTAL) is just reporting cash on ` +
     `hand, not a purchase. Sales reports, deposit reports, tip declarations, and attendance notes are also not expenses. ` +
-    `For any message like these, set "not_an_expense" to true and amount to 0.\n\n` +
-    `HOWEVER, a "coin change" / "coin exchange" / "change for the register" where the store BUYS or exchanges bills for ` +
-    `rolls of coins (cash actually leaves the store to get change) IS an expense: set not_an_expense to false, use the ` +
-    `amount exchanged, and category "Coin Change" if it exists (otherwise the closest cash/others category). Do not confuse ` +
-    `this with a coin box COUNT report. If the message clearly says money was exchanged/bought for change, it is an expense.\n\n` +
-    `Only treat a message as an expense when it clearly records money the store SPENT (a purchase, bill, cash paid out, ` +
-    `or coin change bought).\n\n` +
+    `For any message like these, set "not_an_expense" to true and amount to 0. Only treat a message as an expense when ` +
+    `it clearly records money the store SPENT (a purchase, bill, or cash paid out with a receipt or vendor).\n\n` +
     `Available expense categories: ${catList}.\n\n` +
     (examples ? `Here is how this store's expenses were categorized by staff in the past. Follow these patterns when they apply:\n${examples}\n\n` : '') +
     (text ? `Message text:\n"""${text}"""\n\n` : `The message has no text, only image(s).\n\n`) +
@@ -160,42 +150,9 @@ exports.handler = async (event) => {
   if (body.type !== 'event_callback') return { statusCode: 200, body: 'ignored' };
 
   // ACK fast; Slack retries if we take too long. We do the work inline but keep it lean.
-  let ev = body.event || {};
-  // TEMP DIAGNOSTIC: log what Slack actually sends so we can see why photo-only posts
-  // aren't recognized. Visible in Netlify function logs. Safe to remove later.
-  try {
-    console.log('SLACK_EVENT', JSON.stringify({
-      type: ev.type, subtype: ev.subtype, channel: ev.channel,
-      has_text: !!(ev.text && ev.text.trim()),
-      files: Array.isArray(ev.files) ? ev.files.map(f => ({
-        mimetype: f.mimetype, filetype: f.filetype,
-        has_dl: !!f.url_private_download, has_priv: !!f.url_private,
-      })) : null,
-      top_level_type: body.event && body.event.type,
-    }));
-  } catch (_) {}
+  const ev = body.event || {};
   if (ev.type !== 'message' || ev.bot_id) return { statusCode: 200, body: 'ignored' };
-
-  // Handle EDITS: when an employee edits an earlier message (e.g. adds the amount they
-  // forgot yesterday, or corrects it), Slack sends subtype 'message_changed' with the
-  // real content in ev.message and the ORIGINAL timestamp in ev.message.ts. We re-parse
-  // and UPDATE the existing expense for that ts instead of creating a new one.
-  const isEdit = ev.subtype === 'message_changed';
-  if (isEdit) {
-    const inner = ev.message || {};
-    if (inner.bot_id) return { statusCode: 200, body: 'ignored bot edit' };
-    // rebuild an ev-like object from the edited message, keeping the channel
-    ev = { ...inner, channel: ev.channel, type: 'message', subtype: inner.subtype };
-  }
-  // A deletion arrives as message_deleted; nothing to add, leave existing record as-is.
-  if (ev.subtype === 'message_deleted') return { statusCode: 200, body: 'ignored deletion' };
-
-  // Accept a normal message, OR any message that carries files (a photo-only upload
-  // arrives as subtype 'file_share', but be lenient: if files are attached we handle it
-  // regardless of subtype). Ignore joins/leaves/etc that carry no files.
-  const hasFiles = Array.isArray(ev.files) && ev.files.length > 0;
-  const okSubtype = !ev.subtype || ev.subtype === 'file_share';
-  if (!okSubtype && !hasFiles) return { statusCode: 200, body: 'ignored' };
+  if (ev.subtype && ev.subtype !== 'file_share') return { statusCode: 200, body: 'ignored' };
 
   const map = channelMap();
   const corpCode = map[ev.channel];
@@ -203,12 +160,9 @@ exports.handler = async (event) => {
 
   const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY, { auth: { persistSession: false } });
 
-  // On an ORIGINAL post, dedupe by slack ts (also enforced by a unique index).
-  // On an EDIT, we WANT to find the existing row (by its original ts) and update it.
-  const existingByTs = ev.ts
-    ? (await admin.from('expenses').select('id,status,category_id').eq('slack_ts', ev.ts).maybeSingle()).data
-    : null;
-  if (existingByTs && !isEdit) return { statusCode: 200, body: 'duplicate' };
+  // dedupe by slack ts (unique index also enforces this)
+  const { data: dupe } = await admin.from('expenses').select('id').eq('slack_ts', ev.ts).maybeSingle();
+  if (dupe) return { statusCode: 200, body: 'duplicate' };
 
   const { data: corp } = await admin.from('corporations').select('id').eq('code', corpCode).maybeSingle();
   if (!corp) return { statusCode: 200, body: 'unknown corp' };
@@ -220,27 +174,15 @@ exports.handler = async (event) => {
     .select('signal, category_name, category_code').eq('corporation_id', corp.id)
     .order('created_at', { ascending: false }).limit(40);
 
-  // collect up to 3 images. Modern phone photos are often 5-10MB, which is too big for
-  // us AND for the vision model. Slack auto-generates smaller thumbnails; prefer a
-  // reasonably-sized thumbnail (still very readable for a receipt) and only fall back to
-  // the full-resolution file when no thumbnail is available.
+  // collect up to 3 images
   const images = [];
   for (const f of (ev.files || []).slice(0, 3)) {
-    const isImg = (f.mimetype && f.mimetype.startsWith('image/'))
-      || (f.filetype && ['jpg','jpeg','png','heic','webp','gif'].includes(String(f.filetype).toLowerCase()));
-    if (!isImg) continue;
-    // Candidate URLs, largest-readable thumbnail first, full file last.
-    const candidates = [f.thumb_1024, f.thumb_960, f.thumb_800, f.thumb_720, f.url_private_download, f.url_private].filter(Boolean);
-    let got = null;
-    for (const url of candidates) {
-      got = await downloadImage(url);
-      if (got) break;   // first one that downloads and fits wins
+    if (f.mimetype && f.mimetype.startsWith('image/') && f.url_private_download) {
+      const img = await downloadImage(f.url_private_download);
+      if (img) images.push(img);
     }
-    if (got) images.push(got);
-    else console.log('SLACK_IMG_DOWNLOAD_FAILED', JSON.stringify({ mimetype: f.mimetype, filetype: f.filetype, tried: candidates.length }));
   }
   const text = (ev.text || '').trim();
-  console.log('SLACK_PARSE_INPUT', JSON.stringify({ has_text: !!text, image_count: images.length, file_count: (ev.files || []).length }));
   if (!text && !images.length) return { statusCode: 200, body: 'nothing to parse' };
 
   let parsed;
@@ -279,39 +221,10 @@ exports.handler = async (event) => {
     && matchesLearning(parsed.summary, cat.code, cat.name, learnings || []);
   const status = familiar ? 'confirmed' : 'pending';
   if (familiar) memoBits.push('[auto-approved: matches a past approval]');
-  const memo = memoBits.join(' ').slice(0, 300);
-
-  // EDIT: the employee edited an earlier message. Update that same expense in place
-  // (amount / category / memo) rather than creating a second one.
-  if (isEdit && existingByTs) {
-    await admin.from('expenses').update({
-      category_id: cat.id, date: iso, amount: +amount.toFixed(2), memo,
-    }).eq('id', existingByTs.id);
-    return { statusCode: 200, body: 'edited existing expense' };
-  }
-
-  // SAME-DAY, SAME-AMOUNT DEDUP: an employee may post a receipt photo and, separately,
-  // type the same expense (photo first or text first). If a Slack expense with the
-  // EXACT same amount already exists for this store on the same local date, treat this
-  // as the same purchase and skip it.
-  // EXCEPTION: coin change (buying rolls of coins for the register) legitimately repeats
-  // at the same amount several times a day, so it is never deduped by amount.
-  const isCoinChange = /coin\s*change|coin\s*exchange|change for (the )?register|rolls? of coins/i.test(
-    (parsed.summary || '') + ' ' + (cat.name || '') + ' ' + (cat.code || '')
-  );
-  if (!isCoinChange) {
-    const { data: sameDay } = await admin.from('expenses')
-      .select('id,amount')
-      .eq('corporation_id', corp.id).eq('date', iso).eq('source', 'slack')
-      .eq('amount', +amount.toFixed(2));
-    if (sameDay && sameDay.length) {
-      return { statusCode: 200, body: 'duplicate (same day, same amount)' };
-    }
-  }
 
   await admin.from('expenses').insert({
     corporation_id: corp.id, category_id: cat.id, date: iso,
-    amount: +amount.toFixed(2), memo,
+    amount: +amount.toFixed(2), memo: memoBits.join(' ').slice(0, 300),
     source: 'slack', status, method: 'cash',
     slack_ts: ev.ts, slack_user: ev.user || null,
   });

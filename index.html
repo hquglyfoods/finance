@@ -308,13 +308,6 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .cal .day.tappable:hover{border-color:var(--gold);box-shadow:0 2px 6px rgba(0,0,0,0.08)}
 .cal .day .note-dot{position:absolute;bottom:3px;right:4px;font-size:10px;color:var(--red)}
 .modal-overlay{position:fixed;inset:0;background:rgba(30,26,20,0.45);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px}
-.notif-prompt-overlay{position:fixed;inset:0;background:rgba(30,26,20,0.5);display:flex;align-items:center;justify-content:center;z-index:400;padding:24px;animation:fadein .15s}
-.notif-prompt{background:var(--panel);border:1px solid var(--border);border-radius:18px;box-shadow:var(--shadow-lg);max-width:340px;width:100%;padding:26px 24px 20px;text-align:center}
-.np-bell{font-size:40px;line-height:1;margin-bottom:12px}
-.np-title{font-family:var(--font-d);font-size:20px;font-weight:700;letter-spacing:-0.01em;margin-bottom:8px}
-.np-body{font-size:14px;color:var(--text2);line-height:1.45;margin-bottom:20px}
-.np-primary{width:100%;padding:13px;font-size:15px;border-radius:10px}
-.np-later{display:block;width:100%;margin-top:10px;background:none;border:none;color:var(--text3);font-size:13.5px;font-weight:600;cursor:pointer;padding:8px}
 .modal{background:var(--panel);border-radius:16px;padding:20px;width:min(400px,100%);box-shadow:0 20px 60px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto}
 .modal-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
 .modal-title{font-family:var(--font-d);font-size:19px;font-weight:700}
@@ -389,30 +382,6 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .ss-margin{font-size:12px;color:var(--gold-strong);margin-top:3px;font-weight:600}
 .stmt-notes{margin:18px 26px 0;background:var(--panel2);border-left:3px solid var(--gold);border-radius:0 8px 8px 0;padding:14px 16px;font-size:13.5px;color:var(--text2);white-space:pre-wrap}
 .stmt-notes-lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--gold-strong);font-weight:700;margin-bottom:5px}
-.stmt-bigpic{padding:20px 26px 4px}
-.stmt-yoy{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
-.syoy-item{background:var(--panel2);border:1px solid var(--border-soft);border-radius:10px;padding:13px 15px}
-.syoy-lbl{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px}
-.syoy-now{font-family:var(--font-d);font-size:22px;font-weight:700;letter-spacing:-0.01em;display:block}
-.syoy-cmp{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap}
-.syoy-prev{font-size:12.5px;color:var(--text2)}
-.syoy-prev b{color:var(--text);font-weight:600}
-.stmt-ytd{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--border-soft);border-radius:10px;overflow:hidden;margin-bottom:18px}
-.sytd-item{background:var(--panel);padding:13px 12px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:space-between}
-.sytd-lbl{font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;min-height:2.4em;display:flex;align-items:center;justify-content:center;line-height:1.2}
-.sytd-val{font-family:var(--font-d);font-size:18px;font-weight:700}
-.stmt-trend{margin-top:6px}
-.stmt-quarters{margin:4px 0 18px}
-.sq-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border-soft);border-radius:10px;overflow:hidden}
-.sq-item{background:var(--panel);padding:12px 10px;text-align:center}
-.sq-item.empty{background:var(--panel3)}
-.sq-q{font-size:11px;color:var(--gold-strong);font-weight:700;letter-spacing:.05em;margin-bottom:6px}
-.sq-sales{font-family:var(--font-d);font-size:16px;font-weight:700;letter-spacing:-0.01em}
-.sq-net{font-size:11.5px;font-family:var(--font-m);margin-top:3px}
-.sq-empty{color:var(--text3);font-size:15px}
-@media(max-width:640px){ .sq-sales{font-size:14px} .sq-item{padding:10px 6px} }
-.stmt-trend-h{font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;font-weight:600}
-@media(max-width:640px){ .stmt-yoy{grid-template-columns:1fr} .stmt-bigpic{padding:16px 18px 4px} }
 .stmt-cols{display:grid;grid-template-columns:1fr 1fr;gap:26px;padding:22px 26px 8px}
 .stmt-block-h{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--text2);font-weight:700;padding-bottom:8px;border-bottom:1px solid var(--border);margin-bottom:4px}
 .stmt-table{width:100%;border-collapse:collapse}
@@ -626,8 +595,6 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Ugly Finance">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-<link rel="icon" type="image/png" href="/icons/icon-192.png">
-<link rel="shortcut icon" href="/icons/icon-192.png">
 <script>
 window.__VAPID_PUBLIC__ = "BDrfs4O7uc24B0CNFpqQf-4R2VYn2mW8e0qf2PiG5hinj6CQ5NqmfZrZ6VAI-J7OZOwFR16OTM5PTcCLu3EUL_A";
 // capture install prompt
@@ -2961,66 +2928,21 @@ function ClosePage({corps, canEditIds, profile, isOwner, preset}){
   const [toast,showToast] = useToast();
   const [busy,setBusy] = useState(false);
   const [preview,setPreview] = useState(false);
-  const [bigpic,setBigpic] = useState(null);
-  const [mode,setMode] = useState('monthly');   // monthly | annual
-  const [annual,setAnnual] = useState(null);     // {summary, trend, yoy, close}
   const fileRef = useRef();
 
   const reload = useCallback(async()=>{
     if(!corpId) return;
     const mt = await loadCorpMeta(corpId);
     const raw = await loadMonthRaw(corpId,y,m);
-    const livePl = computePL(mt,raw);
-    setMeta(mt); setPl(livePl);
+    setMeta(mt); setPl(computePL(mt,raw));
     const mc = await sb.from('monthly_close').select('*').eq('corporation_id',corpId).eq('year',y).eq('month',m).maybeSingle();
     setClose(mc.data||null); setNotes(mc.data?(mc.data.notes||''):'');
     if(mc.data){
       const fl = await sb.from('report_files').select('*').eq('monthly_close_id',mc.data.id);
       setFiles(fl.data||[]);
     } else setFiles([]);
-    // Build the same "big picture" investors will see, from LIVE ledger data so it's
-    // populated even before past months are published.
-    try{
-      const bp = await loadBigPicture(corpId, mt, y, m);
-      setBigpic(bp);
-    }catch(_){ setBigpic(null); }
   },[corpId,y,m]);
   useEffect(()=>{ reload(); },[reload]);
-
-  // Annual: load the full-year figures, 12-month trend, and prior-year YoY (live data),
-  // plus any existing published/draft annual close (stored as month=0).
-  const reloadAnnual = useCallback(async()=>{
-    if(!corpId || mode!=='annual') return;
-    setAnnual(null);
-    const mt = await loadCorpMeta(corpId);
-    const bp = await loadAnnualBigPicture(corpId, mt, y);
-    const summary = buildAnnualSummary(bp.months);
-    const mc = await sb.from('monthly_close').select('*').eq('corporation_id',corpId).eq('year',y).eq('month',0).maybeSingle();
-    setAnnual({ summary, trend:bp.trend, yoy:bp.yoy, close:mc.data||null });
-    setNotes(mc.data?(mc.data.notes||''):'');
-  },[corpId,y,mode]);
-  useEffect(()=>{ reloadAnnual(); },[reloadAnnual]);
-
-  const saveAnnual = async (publish)=>{
-    if(!annual) return;
-    setBusy(true);
-    const payload = {
-      corporation_id:corpId, year:y, month:0,
-      summary: annual.summary, notes: notes||null, updated_at:new Date().toISOString(),
-      status: publish?'published':(annual.close?annual.close.status:'draft'),
-    };
-    if(publish){ payload.published_at=new Date().toISOString(); payload.published_by=profile.id; }
-    const { error } = await sb.from('monthly_close').upsert(payload,{onConflict:'corporation_id,year,month'});
-    setBusy(false);
-    if(error){ showToast('Failed: '+error.message); return; }
-    showToast(publish?'Annual report published. Now visible to investors.':'Draft saved'); reloadAnnual();
-  };
-  const unpublishAnnual = async()=>{
-    if(!annual||!annual.close) return;
-    if(!confirm('Unpublish this annual report? Investors will no longer see it.')) return;
-    await sb.from('monthly_close').update({status:'draft'}).eq('id',annual.close.id);
-    showToast('Unpublished'); reloadAnnual();
-  };
 
   const addAdjustment = async()=>{
     if(!adj.category_id||!adj.amount){ showToast('Select a category and enter an amount'); return; }
@@ -3085,48 +3007,13 @@ function ClosePage({corps, canEditIds, profile, isOwner, preset}){
   if(!editable.length) return <div className="card">No corporations available for your account.</div>;
   return <div>
     <div className="page-head">
-      <div><div className="eyebrow">{mode==='annual'?'Annual Close':'Monthly Close'}</div><h2>{mode==='annual'?'Annual Close & Publish':'Monthly Close & Publish'}</h2></div>
+      <div><div className="eyebrow">Monthly Close</div><h2>Monthly Close & Publish</h2></div>
       <div style={{display:'flex',gap:14,alignItems:'center',flexWrap:'wrap'}}>
-        <div className="method-seg" style={{margin:0}}>
-          <button className={'method-opt'+(mode==='monthly'?' on':'')} onClick={()=>{setMode('monthly');setPreview(false);}}>Monthly</button>
-          <button className={'method-opt'+(mode==='annual'?' on':'')} onClick={()=>{setMode('annual');setPreview(false);}}>Annual</button>
-        </div>
         <CorpTabs corps={editable} sel={corpId} onSel={setCorpId}/>
-        {mode==='monthly' ? <MonthPick y={y} m={m} onChange={(a,b)=>{setY(a);setM(b);}}/>
-          : <YearPick y={y} onChange={setY}/>}
+        <MonthPick y={y} m={m} onChange={(a,b)=>{setY(a);setM(b);}}/>
       </div>
     </div>
-    {mode==='annual' ? (
-      !annual ? <Spinner/> : <div className="grid2">
-        <div>
-          <div className="card">
-            <h3>{y} Annual P&L (live)
-              {annual.close && <span className={'badge '+(annual.close.status==='published'?'green':'')}>{annual.close.status==='published'?'Published':'Draft'}</span>}</h3>
-            <table className="t"><tbody>
-              <tr><td>Total Revenue</td><td className="num">{fmt$(annual.summary.total_sales)}</td></tr>
-              <tr><td>Total Expenses</td><td className="num">{fmt$(annual.summary.total_expenses)}</td></tr>
-              <tr className="stmt-tot"><td>Net Profit</td><td className={'num '+((annual.summary.net_profit||0)>=0?'pos':'neg')}>{fmt$(annual.summary.net_profit)}</td></tr>
-              <tr><td>Net Margin</td><td className="num">{fmtPct(annual.summary.net_margin)}</td></tr>
-            </tbody></table>
-            <div className="hint" style={{marginTop:10}}>Full-year figures from live ledger data. Publishing makes this annual report visible to investors alongside the monthly reports.</div>
-          </div>
-        </div>
-        <div>
-          <div className="card">
-            <h3>Notes for Investors</h3>
-            <textarea rows="5" placeholder="Summary notes for the year. Shown to investors exactly as written when published." value={notes} onChange={e=>setNotes(e.target.value)}/>
-            <hr className="divider"/>
-            {isOwner ? <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
-              <button className="btn" disabled={busy} onClick={()=>setPreview(p=>!p)}>{preview?'Hide Preview':'Preview Report'}</button>
-              <button className="btn" disabled={busy} onClick={()=>saveAnnual(false)}>Save Draft</button>
-              <button className="btn btn-gold" disabled={busy} onClick={()=>saveAnnual(true)}>Publish</button>
-              {annual.close && annual.close.status==='published' && <button className="btn btn-danger" onClick={unpublishAnnual}>Unpublish</button>}
-            </div> : <div className="hint">Only the Owner can publish.</div>}
-          </div>
-        </div>
-      </div>
-    ) : (
-    !pl ? <Spinner/> : <div className="grid2">
+    {!pl ? <Spinner/> : <div className="grid2">
       <div>
         <div className="card">
           <h3>{monthLabel(y,m)} P&L (live)
@@ -3178,25 +3065,15 @@ function ClosePage({corps, canEditIds, profile, isOwner, preset}){
           </div> : <div className="hint">Only the Owner can publish.</div>}
         </div>
       </div>
-    </div>
-    )}
-    {preview && mode==='monthly' && pl && <div style={{marginTop:20}}>
+    </div>}
+    {preview && pl && <div style={{marginTop:20}}>
       <div className="hint" style={{marginBottom:10}}>This is exactly how investors will see the report when published. It uses the current live numbers and notes; distribution and ownership are never included.</div>
       <StatementView
         corpName={(editable.find(c=>c.id===corpId)||{}).name||''}
         year={y} month={m}
         summary={buildSummary(pl)} notes={notes}
         files={files.map(f=>({id:f.id, name:f.name}))}
-        trend={bigpic&&bigpic.trend} yoy={bigpic&&bigpic.yoy} ytd={bigpic&&bigpic.ytd} showBigPicture={true}
         previewLabel={close && close.status==='published' ? 'Preview · already published' : 'Preview · not yet published'}/>
-    </div>}
-    {preview && mode==='annual' && annual && <div style={{marginTop:20}}>
-      <div className="hint" style={{marginBottom:10}}>This is exactly how investors will see the annual report when published.</div>
-      <AnnualStatementView
-        corpName={(editable.find(c=>c.id===corpId)||{}).name||''}
-        year={y} summary={annual.summary} notes={notes}
-        trend={annual.trend} yoy={annual.yoy}
-        previewLabel={annual.close && annual.close.status==='published' ? 'Preview · already published' : 'Preview · not yet published'}/>
     </div>}
     {toast && <div className="toast">{toast}</div>}
   </div>;
@@ -3206,205 +3083,7 @@ function ClosePage({corps, canEditIds, profile, isOwner, preset}){
 // Renders one monthly statement in the exact layout investors see. Used by the
 // investor portal and by the Close & Publish preview so the owner sees precisely
 // what will be published.
-// Build the investor "big picture" (trailing-12 trend, same-month-last-year, YTD) from
-// LIVE ledger data (not just published snapshots), so it's populated even for months
-// that haven't been formally published yet. Newest month is (y,m).
-async function loadBigPicture(corpId, meta, y, m){
-  // Pull a wide date range once: from Jan of last year through end of the newest month.
-  const startY = y-1;
-  const start = `${startY}-01-01`;
-  const end = `${y}-${pad(m)}-${pad(lastDay(y,m))}`;
-  const [rv, ex, rt] = await Promise.all([
-    fetchAllRows(()=>sb.from('daily_revenue').select('date,amount,channel_id,source').eq('corporation_id',corpId).gte('date',start).lte('date',end)),
-    fetchAllRows(()=>sb.from('expenses').select('date,amount,category_id,status,source').eq('corporation_id',corpId).gte('date',start).lte('date',end)),
-    sb.from('rate_schedule').select('rate_type,rate,effective_from').eq('corporation_id',corpId),
-  ]);
-  const rates = rt.data||[];
-  const plFor=(yy,mm)=>{ const pref=`${yy}-${pad(mm)}`;
-    const raw={revenue:rv.filter(r=>r.date.startsWith(pref)),expenses:ex.filter(e=>e.date.startsWith(pref)),inputs:[],rates,monthKey:pref};
-    return computePL(meta,raw); };
-  // trailing 12 months, oldest->newest
-  const trend=[]; let ty=y,tm=m;
-  for(let i=0;i<12;i++){ const p=plFor(ty,tm);
-    if(p.totalSales!==0||p.totalExpenses!==0) trend.unshift({label:`${String(ty).slice(2)}/${pad(tm)}`, sales:p.totalSales, net:p.net});
-    tm--; if(tm<1){tm=12;ty--;} }
-  // same month last year
-  const ly=plFor(y-1,m);
-  const yoy=(ly.totalSales!==0||ly.totalExpenses!==0)?{total_sales:ly.totalSales, net_profit:ly.net}:null;
-  // YTD this year through month m
-  let ytdS=0,ytdN=0,ytdAny=false;
-  for(let mm=1; mm<=m; mm++){ const p=plFor(y,mm); if(p.totalSales!==0||p.totalExpenses!==0){ ytdS+=p.totalSales; ytdN+=p.net; ytdAny=true; } }
-  return { trend, yoy, ytd: ytdAny?{sales:ytdS, net:ytdN}:null };
-}
-
-// Annual big picture: the 12 months of `year` as the trend, plus the prior full year's
-// totals for the year-over-year comparison. Built from live ledger data.
-async function loadAnnualBigPicture(corpId, meta, year){
-  const [cur, prev] = await Promise.all([loadYearPL(corpId, meta, year), loadYearPL(corpId, meta, year-1)]);
-  const trend = cur.filter(x=>x.pl.totalSales!==0||x.pl.totalExpenses!==0)
-    .map(x=>({label:pad(x.m), sales:x.pl.totalSales, net:x.pl.net}));
-  const pT = prev.reduce((a,x)=>({s:a.s+x.pl.totalSales, n:a.n+x.pl.net}),{s:0,n:0});
-  const yoy = (pT.s!==0||pT.n!==0) ? {total_sales:pT.s, net_profit:pT.n} : null;
-  return { trend, yoy, months: cur.map(x=>x.pl) };
-}
-
-// A calm, investor-facing trend chart: sales as bars, net profit as a line, over the
-// trailing 12 published months. Designed to read as reassuring and clear rather than
-// dense. `series` = [{label, sales, net}] oldest->newest.
-function InvestorTrend({series}){
-  const [sel,setSel]=React.useState(null);
-  if(!series || series.length<2) return null;
-  const W=Math.max(520, series.length*46), H=200, padL=52, padR=14, padB=30, padT=18;
-  const plotH=H-padB-padT;
-  const maxSales=Math.max(1,...series.map(p=>p.sales));
-  const step=niceStep(maxSales,4); const axisMax=Math.ceil(maxSales/step)*step;
-  const barY=v=>padT+plotH*(1-v/axisMax); const baseY=padT+plotH;
-  const nets=series.map(p=>p.net); const maxNet=Math.max(0,...nets), minNet=Math.min(0,...nets);
-  const netSpan=(maxNet-minNet)||1; const netY=v=>padT+plotH*(1-(v-minNet)/netSpan);
-  const gap=(W-padL-padR)/series.length; const cx=i=>padL+gap*i+gap/2;
-  const bw=Math.min(24,gap*0.5);
-  const grid=[]; for(let g=0; g<=axisMax+1e-6; g+=step) grid.push(g);
-  return <div className="chart-wrap">
-    <svg width={W} height={H} onMouseLeave={()=>setSel(null)} style={{maxWidth:'100%'}}>
-      {grid.map((g,i)=><g key={i}>
-        <line x1={padL} x2={W-padR} y1={barY(g)} y2={barY(g)} stroke={i===0?'#E7E4DD':'#F0EEE9'} strokeWidth="1"/>
-        <text x={padL-8} y={barY(g)+3} fontSize="9.5" fill="#948B7C" textAnchor="end" fontFamily="IBM Plex Mono">{fmt$k(g)}</text>
-      </g>)}
-      {minNet<0 && <line x1={padL} x2={W-padR} y1={netY(0)} y2={netY(0)} stroke="#D8D3C9" strokeWidth="1" strokeDasharray="3 3"/>}
-      {series.map((p,i)=>{ const x=cx(i), h=baseY-barY(p.sales), on=sel===i;
-        return <g key={i} onPointerDown={()=>setSel(i)} onMouseEnter={()=>setSel(i)} style={{cursor:'pointer'}}>
-          <rect x={x-gap/2} y={padT} width={gap} height={plotH} fill="transparent"/>
-          <rect x={x-bw/2} y={barY(p.sales)} width={bw} height={Math.max(0,h)} fill={on?'#B08A1E':'#D9C079'} rx="2"/>
-          <text x={x} y={H-10} fontSize="9.5" fill="#948B7C" textAnchor="middle" fontFamily="IBM Plex Mono">{p.label}</text>
-        </g>;
-      })}
-      <polyline fill="none" stroke="#2E7D4F" strokeWidth="2" pointerEvents="none"
-        points={series.map((p,i)=>`${cx(i)},${netY(p.net)}`).join(' ')}/>
-      {series.map((p,i)=><circle key={i} cx={cx(i)} cy={netY(p.net)} r={sel===i?4.5:3} fill={p.net>=0?'#2E7D4F':'#C0392B'} pointerEvents="none"/>)}
-      {sel!==null && (()=>{ const p=series[sel], x=cx(sel), tw=132, th=44;
-        const tx=Math.min(Math.max(x-tw/2,padL),W-padR-tw), ty=Math.max(padT, barY(p.sales)-th-8);
-        return <g pointerEvents="none">
-          <rect x={tx} y={ty} width={tw} height={th} rx="6" fill="#2A2620" opacity="0.96"/>
-          <text x={tx+11} y={ty+18} fontSize="11" fill="#F4D77E" fontFamily="IBM Plex Mono">Revenue {fmt$k(p.sales)}</text>
-          <text x={tx+11} y={ty+33} fontSize="11" fill={p.net>=0?'#8FD3AC':'#E88'} fontFamily="IBM Plex Mono">Net {fmt$k(p.net)}</text>
-        </g>; })()}
-    </svg>
-    <div className="legend">
-      <span><span className="sw" style={{background:'#D9C079'}}></span>Revenue</span>
-      <span><span className="sw" style={{background:'#2E7D4F'}}></span>Net profit</span>
-      <span className="faint">Trailing published months</span>
-    </div>
-  </div>;
-}
-
-// Build a full-year investor summary by combining 12 monthly PLs. Same investor-safe
-// grouping as buildSummary, just summed across the year.
-function buildAnnualSummary(monthPLs){
-  const grouped = {}; const order = [];
-  let totalSales=0, totalExpenses=0, net=0;
-  const chGrouped = {}; const chOrder = [];
-  monthPLs.forEach(pl=>{
-    totalSales += pl.totalSales; totalExpenses += pl.totalExpenses; net += pl.net;
-    pl.categoryRows.filter(c=>c.amount!==0).forEach(c=>{ const key=c.investor_group||c.name;
-      if(!(key in grouped)){ grouped[key]=0; order.push(key); } grouped[key]+=c.amount; });
-    (pl.ruleRows||[]).filter(r=>r.amount!==0).forEach(r=>{ const key=r.name;
-      if(!(key in grouped)){ grouped[key]=0; order.push(key); } grouped[key]+=r.amount; });
-    pl.channelRows.filter(c=>c.amount!==0).forEach(c=>{ if(!(c.name in chGrouped)){ chGrouped[c.name]=0; chOrder.push(c.name); } chGrouped[c.name]+=c.amount; });
-  });
-  return {
-    total_sales:+totalSales.toFixed(2), total_expenses:+totalExpenses.toFixed(2),
-    net_profit:+net.toFixed(2), net_margin: totalSales? +(net/totalSales).toFixed(4) : null,
-    revenue: chOrder.map(k=>({name:k, amount:+chGrouped[k].toFixed(2)})),
-    expenses: order.map(k=>({name:k, amount:+grouped[k].toFixed(2)})),
-  };
-}
-
-// Investor-facing ANNUAL statement: full-year totals, 12-month trend, and vs last year.
-function AnnualStatementView({corpName, year, summary, notes, publishedAt, previewLabel, trend, yoy}){
-  const s = summary||{};
-  const rev = (s.revenue||[]).filter(x=>x.amount!==0);
-  const exp = (s.expenses||[]).filter(x=>x.amount!==0);
-  const margin = (s.net_margin!==null && s.net_margin!==undefined) ? s.net_margin : (s.total_sales? s.net_profit/s.total_sales : null);
-  return <div className="stmt">
-    <div className="stmt-head">
-      <div>
-        <div className="stmt-corp">{corpName||''}</div>
-        <div className="stmt-period">{year} · Annual Report</div>
-      </div>
-      <div className="stmt-badge">{previewLabel ? previewLabel : ('Published '+(publishedAt ? new Date(publishedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : ''))}</div>
-    </div>
-    <div className="stmt-summary">
-      <div className="stmt-sum-item"><div className="ss-lbl">Total Revenue</div><div className="ss-val">{fmt$(s.total_sales)}</div></div>
-      <div className="stmt-sum-item"><div className="ss-lbl">Total Expenses</div><div className="ss-val">{fmt$(s.total_expenses)}</div></div>
-      <div className="stmt-sum-item accent"><div className="ss-lbl">Net Profit</div>
-        <div className={'ss-val '+((s.net_profit||0)>=0?'pos':'neg')}>{fmt$(s.net_profit)}</div>
-        {margin!==null && <div className="ss-margin">{fmtPct(margin)} margin</div>}</div>
-    </div>
-    <div className="stmt-bigpic">
-      {yoy && <div className="stmt-yoy">
-        <div className="syoy-item">
-          <div className="syoy-lbl">Revenue · {year}</div>
-          <span className="syoy-now">{fmt$(s.total_sales,0)}</span>
-          <div className="syoy-cmp"><YoYDelta cur={s.total_sales} prev={yoy.total_sales} bare/>
-            <span className="syoy-prev">vs <b>{fmt$(yoy.total_sales,0)}</b> in {year-1}</span></div>
-        </div>
-        <div className="syoy-item">
-          <div className="syoy-lbl">Net profit · {year}</div>
-          <span className="syoy-now">{fmt$(s.net_profit,0)}</span>
-          <div className="syoy-cmp"><YoYDelta cur={s.net_profit} prev={yoy.net_profit} bare/>
-            <span className="syoy-prev">vs <b>{fmt$(yoy.net_profit,0)}</b> in {year-1}</span></div>
-        </div>
-      </div>}
-      {trend && trend.length>=1 && (()=>{
-        // Quarterly roll-up from the monthly trend (label is the 2-digit month).
-        const q=[{s:0,n:0,has:false},{s:0,n:0,has:false},{s:0,n:0,has:false},{s:0,n:0,has:false}];
-        trend.forEach(p=>{ const mm=parseInt(p.label,10); if(!mm) return; const qi=Math.floor((mm-1)/3);
-          q[qi].s+=p.sales; q[qi].n+=p.net; q[qi].has=true; });
-        if(!q.some(x=>x.has)) return null;
-        const names=['Q1','Q2','Q3','Q4'];
-        return <div className="stmt-quarters">
-          <div className="stmt-trend-h">By quarter</div>
-          <div className="sq-grid">
-            {q.map((x,i)=><div key={i} className={'sq-item'+(x.has?'':' empty')}>
-              <div className="sq-q">{names[i]}</div>
-              {x.has ? <>
-                <div className="sq-sales">{fmt$(x.s,0)}</div>
-                <div className={'sq-net '+(x.n>=0?'pos':'neg')}>{fmt$(x.n,0)} net</div>
-              </> : <div className="sq-empty">—</div>}
-            </div>)}
-          </div>
-        </div>;
-      })()}
-      {trend && trend.length>=2 && <div className="stmt-trend">
-        <div className="stmt-trend-h">Revenue &amp; net profit by month, {year}</div>
-        <InvestorTrend series={trend}/>
-      </div>}
-    </div>
-    {notes && <div className="stmt-notes"><div className="stmt-notes-lbl">Note from HQ</div>{notes}</div>}
-    <div className="stmt-cols">
-      <div className="stmt-block">
-        <div className="stmt-block-h">Revenue</div>
-        <table className="stmt-table"><tbody>
-          {rev.map((x,i)=><tr key={i}><td>{x.name}</td><td className="num">{fmt$(x.amount)}</td></tr>)}
-          <tr className="stmt-tot"><td>Total Revenue</td><td className="num">{fmt$(s.total_sales)}</td></tr>
-        </tbody></table>
-      </div>
-      <div className="stmt-block">
-        <div className="stmt-block-h">Expenses</div>
-        <table className="stmt-table"><tbody>
-          {exp.map((x,i)=><tr key={i}><td>{x.name}</td><td className="num">{fmt$(x.amount)}</td></tr>)}
-          <tr className="stmt-tot"><td>Total Expenses</td><td className="num">{fmt$(s.total_expenses)}</td></tr>
-        </tbody></table>
-      </div>
-    </div>
-    <div className="stmt-net">
-      <span>Net Profit for {year}</span>
-      <span className={(s.net_profit||0)>=0?'pos':'neg'}>{fmt$(s.net_profit)}</span>
-    </div>
-  </div>;
-}
-
-function StatementView({corpName, year, month, summary, notes, files, publishedAt, onDownload, previewLabel, trend, yoy, ytd, showBigPicture}){
+function StatementView({corpName, year, month, summary, notes, files, publishedAt, onDownload, previewLabel}){
   const s = summary||{};
   const rev = (s.revenue||[]).filter(x=>x.amount!==0);
   const exp = (s.expenses||[]).filter(x=>x.amount!==0);
@@ -3424,31 +3103,6 @@ function StatementView({corpName, year, month, summary, notes, files, publishedA
         <div className={'ss-val '+((s.net_profit||0)>=0?'pos':'neg')}>{fmt$(s.net_profit)}</div>
         {margin!==null && <div className="ss-margin">{fmtPct(margin)} margin</div>}</div>
     </div>
-    {showBigPicture && (trend||yoy||ytd) && <div className="stmt-bigpic">
-      {yoy && <div className="stmt-yoy">
-        <div className="syoy-item">
-          <div className="syoy-lbl">Revenue · {MONTHS[month-1]} {year}</div>
-          <span className="syoy-now">{fmt$(summary.total_sales,0)}</span>
-          <div className="syoy-cmp"><YoYDelta cur={summary.total_sales} prev={yoy.total_sales} bare/>
-            <span className="syoy-prev">vs <b>{fmt$(yoy.total_sales,0)}</b> in {MONTHS[month-1]} {year-1}{yoy.samePeriod?` (through the ${ordinal(yoy.throughDay)})`:''}</span></div>
-        </div>
-        <div className="syoy-item">
-          <div className="syoy-lbl">Net profit · {MONTHS[month-1]} {year}</div>
-          <span className="syoy-now">{fmt$(summary.net_profit,0)}</span>
-          <div className="syoy-cmp"><YoYDelta cur={summary.net_profit} prev={yoy.net_profit} bare/>
-            <span className="syoy-prev">vs <b>{fmt$(yoy.net_profit,0)}</b> in {MONTHS[month-1]} {year-1}{yoy.samePeriod?` (through the ${ordinal(yoy.throughDay)})`:''}</span></div>
-        </div>
-      </div>}
-      {ytd && <div className="stmt-ytd">
-        <div className="sytd-item"><div className="sytd-lbl">{year} Revenue to date</div><div className="sytd-val">{fmt$(ytd.sales,0)}</div></div>
-        <div className="sytd-item"><div className="sytd-lbl">{year} Net to date</div><div className={'sytd-val '+(ytd.net>=0?'pos':'neg')}>{fmt$(ytd.net,0)}</div></div>
-        <div className="sytd-item"><div className="sytd-lbl">{year} Margin to date</div><div className="sytd-val">{fmtPct(ytd.sales?ytd.net/ytd.sales:null)}</div></div>
-      </div>}
-      {trend && trend.length>=2 && <div className="stmt-trend">
-        <div className="stmt-trend-h">Revenue &amp; net profit, trailing {trend.length} months</div>
-        <InvestorTrend series={trend}/>
-      </div>}
-    </div>}
     {notes && <div className="stmt-notes"><div className="stmt-notes-lbl">Note from HQ</div>{notes}</div>}
     <div className="stmt-cols">
       <div className="stmt-block">
@@ -3479,38 +3133,20 @@ function StatementView({corpName, year, month, summary, notes, files, publishedA
 function InvestorPortal({corps}){
   const [corpId, setCorpId] = useState(corps[0] && corps[0].id);
   const [reports, setReports] = useState(null);
-  const [annuals, setAnnuals] = useState([]);
-  const [bigpic, setBigpic] = useState(null);
-  const [annualBP, setAnnualBP] = useState({});   // {year: {trend,yoy}}
 
   useEffect(()=>{ if(!corpId) return; let dead=false;
     (async()=>{
-      setReports(null); setBigpic(null); setAnnuals([]); setAnnualBP({});
+      setReports(null);
       const mc = await sb.from('monthly_close').select('*').eq('corporation_id',corpId)
         .eq('status','published').order('year',{ascending:false}).order('month',{ascending:false});
-      const all = (mc.data||[]).slice();
-      // month=0 rows are ANNUAL reports; month 1-12 are monthly statements.
-      const annualRows = all.filter(r=>r.month===0).sort((a,b)=>b.year-a.year);
-      const rows = all.filter(r=>r.month>=1).sort((a,b)=> b.year!==a.year ? b.year-a.year : b.month-a.month);
+      const rows = mc.data||[];
       const ids = rows.map(r=>r.id);
       let filesBy = {};
       if(ids.length){
         const fl = await sb.from('report_files').select('*').in('monthly_close_id',ids);
         (fl.data||[]).forEach(f=>{ (filesBy[f.monthly_close_id]=filesBy[f.monthly_close_id]||[]).push(f); });
       }
-      if(!dead){ setReports(rows.map(r=>({...r, files:filesBy[r.id]||[]}))); setAnnuals(annualRows); }
-      const mt = await loadCorpMeta(corpId);
-      // Big picture for the newest monthly report (live).
-      if(rows.length){
-        try{ const bp = await loadBigPicture(corpId, mt, rows[0].year, rows[0].month); if(!dead) setBigpic(bp); }
-        catch(_){ if(!dead) setBigpic(null); }
-      }
-      // Annual trend/YoY for each published annual report (live).
-      for(const ar of annualRows){
-        try{ const abp = await loadAnnualBigPicture(corpId, mt, ar.year);
-          if(!dead) setAnnualBP(prev=>({...prev, [ar.year]:{trend:abp.trend, yoy:abp.yoy}})); }
-        catch(_){}
-      }
+      if(!dead) setReports(rows.map(r=>({...r, files:filesBy[r.id]||[]})));
     })();
     return ()=>{dead=true};
   },[corpId]);
@@ -3521,31 +3157,19 @@ function InvestorPortal({corps}){
   };
 
   if(!corps.length) return <div className="card">No corporations available. Contact HQ.</div>;
-  const corp = corps.find(c=>c.id===corpId);
   return <div>
     <div className="page-head">
-      <div><div className="eyebrow">Investor Reports</div><h2>Reports</h2>
-        <div className="sub">Annual and monthly summaries published by Ugly HQ.</div></div>
+      <div><div className="eyebrow">Investor Reports</div><h2>Monthly Reports</h2>
+        <div className="sub">Monthly summaries published by Ugly HQ.</div></div>
       <CorpTabs corps={corps} sel={corpId} onSel={setCorpId}/>
     </div>
-    {reports===null ? <Spinner/> : (reports.length===0 && annuals.length===0) ?
+    {reports===null ? <Spinner/> : reports.length===0 ?
       <div className="card faint">No reports published yet.</div> :
-      <>
-        {annuals.length>0 && <div style={{marginBottom:8}}>
-          <div className="eyebrow" style={{marginBottom:10}}>Annual Reports</div>
-          {annuals.map(r=>
-            <AnnualStatementView key={r.id} corpName={corp?corp.name:''} year={r.year}
-              summary={r.summary||{}} notes={r.notes} publishedAt={r.published_at}
-              trend={annualBP[r.year]&&annualBP[r.year].trend} yoy={annualBP[r.year]&&annualBP[r.year].yoy}/>)}
-        </div>}
-        {reports.length>0 && <div>
-          {annuals.length>0 && <div className="eyebrow" style={{margin:'18px 0 10px'}}>Monthly Reports</div>}
-          {reports.map((r,idx)=>
-            <StatementView key={r.id} corpName={corp?corp.name:''} year={r.year} month={r.month}
-              summary={r.summary||{}} notes={r.notes} files={r.files} publishedAt={r.published_at} onDownload={download}
-              trend={idx===0&&bigpic?bigpic.trend:null} yoy={idx===0&&bigpic?bigpic.yoy:null} ytd={idx===0&&bigpic?bigpic.ytd:null} showBigPicture={idx===0}/>)}
-        </div>}
-      </>}
+      reports.map(r=>{
+        const corp = corps.find(c=>c.id===corpId);
+        return <StatementView key={r.id} corpName={corp?corp.name:''} year={r.year} month={r.month}
+          summary={r.summary||{}} notes={r.notes} files={r.files} publishedAt={r.published_at} onDownload={download}/>;
+      })}
   </div>;
 }
 
@@ -4496,53 +4120,6 @@ const NAV = [
   {id:'alerts',    label:'Install', full:'Install App',     ic:'⬇', roles:['owner','assistant','investor']},
 ];
 
-// First-run nudge: when the installed app opens and notifications haven't been enabled
-// yet, show a friendly one-time prompt so staff don't miss new approvals. Only for
-// owner/assistant (who get approval alerts), only in the installed PWA, and only while
-// the browser permission is still "default" (never asked). Dismissing it (or enabling)
-// stops it from showing again.
-function NotifPrompt({profile}){
-  const [show,setShow] = useState(false);
-  const [busy,setBusy] = useState(false);
-  useEffect(()=>{
-    try{
-      if(!('Notification' in window) || !('serviceWorker' in navigator)) return;
-      if(profile.role==='investor') return;                 // investors don't get approval pings
-      if(!isStandalone()) return;                            // only inside the installed app
-      if(localStorage.getItem('ft_notif_prompted')==='1') return; // already handled once
-      if(Notification.permission!=='default') return;       // already granted or blocked
-      setShow(true);
-    }catch(_){}
-  },[]);
-  const dismiss = ()=>{ try{ localStorage.setItem('ft_notif_prompted','1'); }catch(_){} setShow(false); };
-  const enable = async()=>{
-    setBusy(true);
-    try{
-      const perm = await Notification.requestPermission();
-      if(perm==='granted'){
-        const reg = await navigator.serviceWorker.ready;
-        const sub = await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:urlB64ToUint8(window.__VAPID_PUBLIC__)});
-        const raw = sub.toJSON();
-        await sb.from('push_subscriptions').upsert({
-          user_id:profile.id, endpoint:raw.endpoint,
-          p256dh:raw.keys.p256dh, auth:raw.keys.auth, role:profile.role },{onConflict:'endpoint'});
-      }
-    }catch(_){}
-    try{ localStorage.setItem('ft_notif_prompted','1'); }catch(_){}
-    setBusy(false); setShow(false);
-  };
-  if(!show) return null;
-  return <div className="notif-prompt-overlay" onClick={dismiss}>
-    <div className="notif-prompt" onClick={e=>e.stopPropagation()}>
-      <div className="np-bell">🔔</div>
-      <div className="np-title">Turn on notifications</div>
-      <div className="np-body">Get an alert the moment a Slack expense needs approval, so nothing waits unseen.</div>
-      <button className="btn btn-gold np-primary" disabled={busy} onClick={enable}>{busy?'...':'Turn on notifications'}</button>
-      <button className="np-later" onClick={dismiss}>Maybe later</button>
-    </div>
-  </div>;
-}
-
 function App(){
   const [session,setSession] = useState(undefined);
   const [profile,setProfile] = useState(null);
@@ -4643,7 +4220,6 @@ function App(){
   const moreNav = nav.filter(n=>!CORE.includes(n.id));
 
   return <div className="shell">
-    <NotifPrompt profile={profile}/>
     <div className="side">
       <div className="brand">Ugly <em>Finance</em></div>
       <div className="brand-sub">Finance Tool</div>

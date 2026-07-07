@@ -1,20 +1,19 @@
-# Ugly Finance Tool - first-run "turn on notifications" prompt
+# Ugly Finance Tool - Toast tips backfill for a date range
 
-Context: push notifications were working server-side (the webhook logged sent: 1), but
-after reinstalling the app the new install had no notification permission, so nothing
-arrived on the device. Easy to miss on iOS, where you have to opt in.
+Card tips are pulled from Toast by toast-sync, but it only syncs a rolling 3-day window,
+so any older gap (e.g. Jul 1-6) never gets filled. Added a one-off backfill you can
+trigger by URL:
 
-Added: a one-time, friendly prompt that appears the first time the INSTALLED app is
-opened by an owner/assistant when notifications haven't been enabled yet. "Turn on
-notifications" requests permission and registers the push subscription; "Maybe later"
-dismisses it. It only shows:
-- in the installed PWA (not a browser tab),
-- for owner/assistant (investors don't get approval pings),
-- while the browser permission is still "default" (never asked),
-- once (it won't nag again after enabling or dismissing).
+  https://uglyfinance.netlify.app/.netlify/functions/toast-sync?start=2026-07-01&end=2026-07-06
 
-Verified: prompt shows on first standalone open, dismiss hides it and it doesn't return
-after reload.
+- It re-pulls that exact inclusive date range from Toast for every store.
+- By DEFAULT it books TIPS ONLY and does not touch revenue, so nothing you enter later
+  (month-end totals / Excel board) gets overwritten.
+- The response JSON lists each store/day with the tips amount it booked, so you can
+  confirm.
+- If you ever also want to refresh revenue for a range, add &tips_only=0.
 
-The Slack photo diagnostic logs are still in place from the previous build; they can be
-removed in a later cleanup.
+Normal hourly sync is unchanged (no params = rolling 3-day window).
+
+To fill the Jul 1-6 gap: deploy, then open the URL above once (adjust the year if
+needed). From Jul 7 on, the regular sync handles it.
