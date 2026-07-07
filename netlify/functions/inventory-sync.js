@@ -92,7 +92,7 @@ exports.handler = async (event) => {
     for (let from = 0; ; from += PAGE) {
       const { data, error } = await inv
         .from('orders')
-        .select('source, order_date, total_amount, customer_id, customers(name)')
+        .select('source, order_date, total_amount, customer_id, external_id, customers(name)')
         .gte('order_date', dMin).lte('order_date', dMax)
         .in('source', ['quickbooks', 'ummasrecipe-store', 'wix'])
         .order('order_date').range(from, from + PAGE - 1);
@@ -129,6 +129,40 @@ exports.handler = async (event) => {
     }
   }
 
+  // UMMA store orders land in incoming_store_orders FIRST (status 'new'), and an
+  // orders row is only created when someone fulfills/approves them in the Inventory
+  // app. Count the not-yet-fulfilled ones so revenue books immediately.
+  // There is no link column, so dedupe uses a DOUBLE guard - a row is skipped if
+  // EITHER (a) its order_no already exists as an orders.external_id (the approval
+  // wrote it through), OR (b) its status says it was fulfilled/cancelled. Either
+  // guard alone prevents double counting; together they are safe even if one
+  // assumption about the Inventory app is wrong.
+  const incomingExcl = (process.env.INV_INCOMING_EXCLUDE_STATUSES || 'fulfilled,cancelled,canceled,rejected,refunded')
+    .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  const knownExternalIds = new Set(orders.map(o => String(o.external_id || '')).filter(Boolean));
+  let incoming = [];
+  let incomingReadError = null;
+  {
+    // created_at is a timestamptz; cover the whole dMax day
+    const nd = new Date(dMax + 'T00:00:00Z'); nd.setUTCDate(nd.getUTCDate() + 1);
+    const dMaxNext = `${nd.getUTCFullYear()}-${pad(nd.getUTCMonth() + 1)}-${pad(nd.getUTCDate())}`;
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await inv
+        .from('incoming_store_orders')
+        .select('source, order_no, total, status, created_at')
+        .gte('created_at', dMin).lt('created_at', dMaxNext)
+        .in('source', ['ummasrecipe-store', 'wix'])
+        .order('created_at').range(from, from + PAGE - 1);
+      if (error) { incomingReadError = error.message; break; }   // non-fatal
+      const rows = (data || []).filter(r =>
+        !incomingExcl.includes(String(r.status || '').toLowerCase())
+        && !knownExternalIds.has(String(r.order_no || '')));
+      incoming = incoming.concat(rows);
+      if ((data || []).length < PAGE || from > 200000) break;
+    }
+  }
+
   // normalize both tables into one list for aggregation
   const allRows = orders.map(o => ({
     source: o.source, date: o.order_date, amt: Number(o.total_amount || 0),
@@ -136,6 +170,11 @@ exports.handler = async (event) => {
   })).concat(queued.map(q => ({
     source: q.source, date: q.order_date, amt: Number(q.total_amount || 0),
     cust: q.customer_name,
+  }))).concat(incoming.map(r => ({
+    // date: the UTC date of created_at, matching how the Inventory app sets
+    // order_date on approval, so the revenue date does not shift after approval
+    source: r.source, date: String(r.created_at || '').slice(0, 10), amt: Number(r.total || 0),
+    cust: null,
   })));
 
   // resolve Finance Tool corp ids, channels, categories
@@ -217,7 +256,10 @@ exports.handler = async (event) => {
     orders: (orders || []).length,
     queuedUnapproved: queued.length,
     queuedUnapprovedTotal: +queued.reduce((a, q) => a + Number(q.total_amount || 0), 0).toFixed(2),
+    incomingNew: incoming.length,
+    incomingNewTotal: +incoming.reduce((a, r) => a + Number(r.total || 0), 0).toFixed(2),
     queueReadError: queueReadError || undefined,
+    incomingReadError: incomingReadError || undefined,
     range: `${dMin}~${dMax}`,
     hqRevenueTotal: +sumByDate(hqRev).toFixed(2),
     ummaRevenueByChannel: ummaTotals,
