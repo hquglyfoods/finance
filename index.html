@@ -193,6 +193,21 @@ a{color:var(--gold);text-decoration:none}
 /* cards */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:22px}
 .kpis.kpis-3{grid-template-columns:repeat(3,1fr)}
+.rev-break{padding:0;overflow:hidden}
+.rev-break-h{width:100%;display:flex;align-items:center;justify-content:space-between;background:none;border:none;cursor:pointer;padding:16px 18px;font-size:15px;font-weight:600;color:var(--text);text-align:left}
+.rev-break-h:hover{background:var(--panel2)}
+.rev-break-tot{font-family:var(--font-m);font-size:14px;color:var(--text2);display:flex;align-items:center;gap:8px}
+.rev-caret{display:inline-block;transition:transform .18s;font-size:15px;color:var(--text3)}
+.rev-caret.up{transform:rotate(180deg)}
+.rev-break-body{padding:4px 18px 16px;border-top:1px solid var(--border-soft)}
+.rev-row{padding:9px 0}
+.rev-row+.rev-row{border-top:1px solid var(--border-soft)}
+.rev-row-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+.rev-name{font-size:13.5px;font-weight:500;color:var(--text)}
+.rev-amt{font-family:var(--font-m);font-size:13.5px;font-weight:600}
+.rev-bar-wrap{height:6px;background:var(--panel3);border-radius:4px;overflow:hidden}
+.rev-bar{height:100%;background:var(--gold);border-radius:4px;min-width:2px}
+.rev-pct{font-size:11px;color:var(--text3);font-family:var(--font-m);margin-top:3px;text-align:right}
 /* store comparison */
 .cmp-chips{display:flex;gap:8px;flex-wrap:wrap}
 .cmp-period{display:inline-flex;gap:2px;background:var(--panel2);border-radius:9px;padding:3px;margin-bottom:12px}
@@ -309,6 +324,17 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .cal .day .note-dot{position:absolute;bottom:3px;right:4px;font-size:10px;color:var(--red)}
 .modal-overlay{position:fixed;inset:0;background:rgba(30,26,20,0.45);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px}
 .modal{background:var(--panel);border-radius:16px;padding:20px;width:min(400px,100%);box-shadow:0 20px 60px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto}
+.store-detail{background:var(--panel);border-radius:18px;width:min(420px,100%);box-shadow:0 20px 60px rgba(0,0,0,0.3);max-height:88vh;overflow-y:auto;padding:22px}
+.sd-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px}
+.sd-code{font-family:var(--font-m);font-size:12px;font-weight:700;letter-spacing:.1em;color:var(--gold-strong)}
+.sd-name{font-family:var(--font-d);font-size:20px;font-weight:700;letter-spacing:-0.01em;margin-top:2px}
+.sd-close{background:var(--panel2);border:none;width:32px;height:32px;border-radius:8px;font-size:15px;color:var(--text2);cursor:pointer;flex-shrink:0}
+.sd-close:hover{background:var(--panel3);color:var(--text)}
+.sd-total-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin-bottom:4px}
+.sd-total{font-family:var(--font-d);font-size:30px;font-weight:800;letter-spacing:-0.02em;margin-bottom:18px}
+.sd-channels{margin-bottom:18px}
+.sd-empty{color:var(--text3);font-size:14px;padding:8px 0 18px}
+.sd-more{width:100%;padding:12px;border-radius:10px;font-size:14px}
 .modal-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
 .modal-title{font-family:var(--font-d);font-size:19px;font-weight:700}
 .modal-x{background:var(--panel2);border:none;width:30px;height:30px;border-radius:50%;cursor:pointer;color:var(--text2);font-size:14px}
@@ -695,10 +721,15 @@ async function loadCorpMeta(corpId, force){
 // When a day has the Excel "board" final import, that import supersedes the
 // AUTO-ESTIMATED sources for that day (Slack expense bot, Toast POS, inventory sync),
 // because those are rough real-time captures the Excel figures replace. It must NOT
-// hide things that are never in the Excel: payroll (ADP bot), recurring bills, and
-// manual entries. isBoardSuperseded returns true only for the auto sources.
+// hide things that are never in the Excel: payroll (ADP bot), recurring bills, manual
+// entries, and Card Tips (which come from Toast but are an independent line the Excel
+// board never includes). isBoardSuperseded returns true only for auto sources that the
+// board actually replaces.
 const AUTO_SOURCES = new Set(['slack','toast','inventory']);
-function isBoardSuperseded(e){ return AUTO_SOURCES.has(e.source); }
+function isBoardSuperseded(e, catCode){
+  if(catCode==='tips') return false;   // tips are never in the Excel board; always show
+  return AUTO_SOURCES.has(e.source);
+}
 
 // Compute a single day's P&L (sales/expenses/net + payroll/supplies dollars) for one
 // corp, so specific dates (July 4th, a snow day, Christmas) can be compared across
@@ -717,7 +748,7 @@ async function loadDayPL(corpId, meta, date){
   revRows.forEach(r=>{ if(hasBoardRev && r.source!=='board') return; const ch=chBy[r.channel_id];
     if(ch && ch.counts_in_total) totalSales += Number(r.amount)*Number(ch.total_multiplier||1); });
   const catSum={};
-  expRows.forEach(e=>{ if(hasBoardExp && e.source!=='board' && isBoardSuperseded(e)) return; const c=catBy[e.category_id]; if(!c) return;
+  expRows.forEach(e=>{ const c=catBy[e.category_id]; if(hasBoardExp && e.source!=='board' && isBoardSuperseded(e, c&&c.code)) return; if(!c) return;
     catSum[c.code]=(catSum[c.code]||0)+Number(e.amount); });
   const totalExpenses=Object.values(catSum).reduce((a,b)=>a+b,0);
   const net=totalSales-totalExpenses;
@@ -850,10 +881,11 @@ function computePL(meta, raw){
   const hasBoard = boardLocked;   // auto-rules off for locked months
   confExp.forEach(e => {
     // The Excel board import supersedes only the auto-estimated sources (Slack/Toast/
-    // inventory). Payroll (ADP bot), recurring bills, and manual entries are never in
-    // the Excel, so they must always count - even in a locked past month.
-    if (boardLocked && e.source !== 'board' && isBoardSuperseded(e)) return;                 // locked: board replaces auto sources only
-    if (!boardLocked && e.source !== 'board' && isBoardSuperseded(e) && boardExpDates.has(e.date)) return; // current: per-date
+    // inventory). Payroll (ADP bot), recurring bills, manual entries, and Card Tips are
+    // never in the Excel, so they must always count - even in a locked past month.
+    const cc = catById[e.category_id];
+    if (boardLocked && e.source !== 'board' && isBoardSuperseded(e, cc&&cc.code)) return;                 // locked: board replaces auto sources only
+    if (!boardLocked && e.source !== 'board' && isBoardSuperseded(e, cc&&cc.code) && boardExpDates.has(e.date)) return; // current: per-date
     const c = catById[e.category_id]; if(!c) return;
     catSum[c.code] = (catSum[c.code]||0) + Number(e.amount);
   });
@@ -1219,7 +1251,7 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
           rawX.revenue.forEach(r=>{ if(lockedR&&r.source!=='board')return; if(!lockedR&&r.source!=='board'&&boardRevDates.has(r.date))return; const ch=chBy[r.channel_id]; if(!ch||!ch.counts_in_total)return;
             const d=parseInt(r.date.slice(8)); if(days[d]) days[d].rev+=Number(r.amount)*Number(ch.total_multiplier||1); });
           const boardExpDates=new Set(rawX.expenses.filter(e=>e.source==='board'&&e.status==='confirmed').map(e=>e.date));
-          rawX.expenses.forEach(e=>{ if(e.status!=='confirmed')return; if(lockedE&&e.source!=='board'&&isBoardSuperseded(e))return; if(!lockedE&&e.source!=='board'&&isBoardSuperseded(e)&&boardExpDates.has(e.date))return;
+          rawX.expenses.forEach(e=>{ if(e.status!=='confirmed')return; const cc=catBy[e.category_id]; if(lockedE&&e.source!=='board'&&isBoardSuperseded(e,cc&&cc.code))return; if(!lockedE&&e.source!=='board'&&isBoardSuperseded(e,cc&&cc.code)&&boardExpDates.has(e.date))return;
             const d=parseInt(e.date.slice(8)); if(days[d]){ days[d].exp+=Number(e.amount);
               days[d].items.push({id:e.id, category_id:e.category_id, date:e.date, cat:(catBy[e.category_id]||{}).name||'?', amount:Number(e.amount), payee:e.payee, memo:e.memo, source:e.source, by:e.entered_by, slack_user:e.slack_user}); } });
           return days;
@@ -1631,6 +1663,7 @@ function MonthView({pl, yoy, trend, y, m}){
 // ---- DAILY VIEW (per-day rev/exp/net, vs last year, with expense detail) ----
 function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
   const [open, setOpen] = useState(null);
+  const [revOpen, setRevOpen] = useState(false);   // "Revenue by channel" card, collapsed by default
   const [editId, setEditId] = useState(null);
   const [ef, setEf] = useState({amount:'', category_id:'', memo:''});
   const [busy, setBusy] = useState(false);
@@ -1720,6 +1753,26 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
       <div className="kpi"><div className="k-lbl">Net</div><div className={'k-val '+(net>=0?'pos':'neg')}>{fmt$(net)}</div>
         <div className="k-sub"><YoYDelta cur={net} prev={lyNet} bare/> {cmpLabel}</div></div>
     </div>
+    {pl && pl.channelRows && (()=>{
+      const chans = pl.channelRows.filter(c=>c.counts_in_total && Number(c.amount)>0)
+        .sort((a,b)=>Number(b.amount)-Number(a.amount));
+      const chTotal = chans.reduce((a,c)=>a+Number(c.amount),0);
+      if(!chans.length) return null;
+      return <div className="card rev-break">
+        <button className="rev-break-h" onClick={()=>setRevOpen(o=>!o)} aria-expanded={revOpen}>
+          <span>Revenue by channel <span className="faint" style={{fontWeight:400}}>{MONTHS[m-1]} {y}</span></span>
+          <span className="rev-break-tot">{fmt$(chTotal,0)} <span className={'rev-caret'+(revOpen?' up':'')}>⌄</span></span>
+        </button>
+        {revOpen && <div className="rev-break-body">
+          {chans.map(c=>{ const pct = chTotal? Number(c.amount)/chTotal*100 : 0;
+            return <div key={c.id} className="rev-row">
+              <div className="rev-row-top"><span className="rev-name">{c.name}</span><span className="rev-amt">{fmt$(Number(c.amount))}</span></div>
+              <div className="rev-bar-wrap"><div className="rev-bar" style={{width:pct+'%'}}></div></div>
+              <div className="rev-pct">{pct.toFixed(1)}%</div>
+            </div>; })}
+        </div>}
+      </div>;
+    })()}
     {findings.length>0 && <div className="card insight-card">
       <h3 style={{marginTop:0}}>What stands out</h3>
       <ul className="insight-list">
@@ -3863,6 +3916,7 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose
   const editable = corps.filter(c=>canEditIds.has(c.id));
   const ids = editable.map(c=>c.id);
   const [data, setData] = useState(null);
+  const [detail, setDetail] = useState(null);   // {corp, store-data} for the day-breakdown popup
   const date = todayStr();
   const now = new Date();
   const prev = now.getMonth()===0 ? {y:now.getFullYear()-1,m:12} : {y:now.getFullYear(),m:now.getMonth()};
@@ -3874,7 +3928,7 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose
       const win = new Date(now); win.setDate(win.getDate()-13);
       const winStart = `${win.getFullYear()}-${pad(win.getMonth()+1)}-${pad(win.getDate())}`;
       const [chAll, revToday, expToday, pend, revMonth, closes, rev14] = await Promise.all([
-        sb.from('revenue_channels').select('id,corporation_id,code,counts_in_total,total_multiplier').in('corporation_id',ids),
+        sb.from('revenue_channels').select('id,corporation_id,code,name,counts_in_total,total_multiplier').in('corporation_id',ids),
         sb.from('daily_revenue').select('corporation_id,channel_id,amount,source').in('corporation_id',ids).eq('date',date),
         sb.from('expenses').select('corporation_id').in('corporation_id',ids).eq('date',date).eq('status','confirmed'),
         sb.from('expenses').select('corporation_id').in('corporation_id',ids).eq('status','pending'),
@@ -3885,13 +3939,16 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose
       if(dead) return;
       const chBy = {}; (chAll.data||[]).forEach(c=>chBy[c.id]=c);
       const per = {};
-      editable.forEach(c=>per[c.id]={sales:0,revRows:0,synced:false,exp:0,pending:0,daysDone:new Set(),closed:false,week:[],lastSameDay:null});
+      editable.forEach(c=>per[c.id]={sales:0,revRows:0,synced:false,exp:0,pending:0,daysDone:new Set(),closed:false,week:[],lastSameDay:null,channels:[]});
+      const chTot = {}; ids.forEach(id=>chTot[id]={});
       (revToday.data||[]).forEach(r=>{
         const p=per[r.corporation_id]; if(!p) return;
         const ch=chBy[r.channel_id];
         if(ch && ch.counts_in_total) p.sales += Number(r.amount)*Number(ch.total_multiplier);
         if(Number(r.amount)>0) p.revRows++;
         if(r.source!=='manual' && r.source!=='import') p.synced=true;
+        // accumulate per-channel for today's breakdown popup
+        if(ch){ const t=chTot[r.corporation_id]; if(t){ t[ch.id]=t[ch.id]||{name:ch.name||ch.code,ch,amount:0}; t[ch.id].amount+=Number(r.amount)*Number(ch.total_multiplier||1); } }
       });
       (expToday.data||[]).forEach(r=>{ if(per[r.corporation_id]) per[r.corporation_id].exp++; });
       (pend.data||[]).forEach(r=>{ if(per[r.corporation_id]) per[r.corporation_id].pending++; });
@@ -3909,6 +3966,11 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose
         per[c.id].week=week;
         const lw=new Date(now); lw.setDate(lw.getDate()-7);
         per[c.id].lastSameDay = t[dstr(lw)]!=null ? t[dstr(lw)] : null;   // same weekday last week
+        // today's per-channel breakdown, largest first, only channels with revenue
+        per[c.id].channels = Object.values(chTot[c.id]||{})
+          .filter(x=>x.ch.counts_in_total && Number(x.amount)>0)
+          .sort((a,b)=>b.amount-a.amount)
+          .map(x=>({name:x.name, amount:x.amount}));
       });
       setData(per);
     })();
@@ -3945,7 +4007,7 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose
         const delta = (lsd!=null && lsd>0) ? (p.sales-lsd)/lsd : null;
         const week = p.week||[];
         const wkMax = Math.max(1, ...week.map(d=>d.amount));
-        return <div key={c.id} className={'home-card'+(done?' done':'')} onClick={()=>goInsights(c.id)}>
+        return <div key={c.id} className={'home-card'+(done?' done':'')} onClick={()=>setDetail({corp:c, p})}>
           {done && <div className="hc-check">✓</div>}
           {p.pending>0 && <div className="hc-pend-badge" style={{right:done?38:14}}><span className="dot warn"></span>{p.pending} pending</div>}
           <div className="hc-code hc-code-big">{c.code}</div>
@@ -3970,9 +4032,36 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose
         </div>;
       })}
     </div>
+    {detail && (()=>{
+      const p = detail.p||{}; const chans = p.channels||[];
+      const chTotal = chans.reduce((a,c)=>a+Number(c.amount),0);
+      return <div className="modal-overlay" onClick={()=>setDetail(null)}>
+        <div className="store-detail" onClick={e=>e.stopPropagation()}>
+          <div className="sd-head">
+            <div>
+              <div className="sd-code">{detail.corp.code}</div>
+              <div className="sd-name">{detail.corp.name}</div>
+            </div>
+            <button className="sd-close" onClick={()=>setDetail(null)} aria-label="Close">✕</button>
+          </div>
+          <div className="sd-total-lbl">{MONTHS[now.getMonth()]} {now.getDate()} · Sales today</div>
+          <div className="sd-total">{fmt$(p.sales||0)}</div>
+          {chans.length===0
+            ? <div className="sd-empty">No sales recorded yet today.</div>
+            : <div className="sd-channels">
+                {chans.map((c,i)=>{ const pct=chTotal?Number(c.amount)/chTotal*100:0;
+                  return <div key={i} className="rev-row">
+                    <div className="rev-row-top"><span className="rev-name">{c.name}</span><span className="rev-amt">{fmt$(Number(c.amount))}</span></div>
+                    <div className="rev-bar-wrap"><div className="rev-bar" style={{width:pct+'%'}}></div></div>
+                    <div className="rev-pct">{pct.toFixed(1)}%</div>
+                  </div>; })}
+              </div>}
+          <button className="btn btn-gold sd-more" onClick={()=>{ const id=detail.corp.id; setDetail(null); goInsights(id); }}>Open full breakdown</button>
+        </div>
+      </div>;
+    })()}
   </div>;
 }
-
 // ================= APP SHELL =================
 function NotificationBell({profile, onNavigate}){
   const [open,setOpen]=useState(false);
@@ -4025,7 +4114,7 @@ function NotificationBell({profile, onNavigate}){
   </div>;
 }
 
-function AccountMenu({profile, pendingCount, onNotifications}){
+function AccountMenu({profile, pendingCount, onNotifications, onInstall}){
   const [open,setOpen]=useState(false);
   const [notif,setNotif]=useState('idle'); // idle|on|off|denied|unsupported
   const ref=React.useRef(null);
@@ -4071,6 +4160,9 @@ function AccountMenu({profile, pendingCount, onNotifications}){
       {notif==='off' && <button className="acct-item" onClick={enableNotif}><span>Enable push alerts</span></button>}
       {notif==='on' && <div className="acct-item static"><span>Push alerts on</span><span className="acct-ok">●</span></div>}
       {notif==='denied' && <div className="acct-item static muted"><span>Push blocked in browser</span></div>}
+      {onInstall && <button className="acct-item" onClick={()=>{ onInstall(); setOpen(false); }}>
+        <span>Install App</span>
+      </button>}
       <div className="acct-sep"></div>
       <button className="acct-item danger" onClick={()=>sb.auth.signOut()}><span>Sign Out</span></button>
     </div>}
@@ -4223,13 +4315,15 @@ function App(){
     <div className="side">
       <div className="brand">Ugly <em>Finance</em></div>
       <div className="brand-sub">Finance Tool</div>
-      {nav.map(n=><button key={n.id} className={'nav-item'+(effTab===n.id?' on':'')} onClick={()=>setTab(n.id)}>
+      {nav.filter(n=>n.id!=='alerts').map(n=><button key={n.id} className={'nav-item'+(effTab===n.id?' on':'')} onClick={()=>setTab(n.id)}>
         {n.full||n.label}
         {n.id==='approvals' && pendingCount>0 && <span className="nav-badge">{pendingCount}</span>}
       </button>)}
       <div className="foot">
         <NotificationBell profile={profile} onNavigate={(t)=>setTab(t)}/>
-        <AccountMenu profile={profile} pendingCount={pendingCount} onNotifications={()=>setTab(nav.some(n=>n.id==='alerts')?'alerts':'settings')}/>
+        <AccountMenu profile={profile} pendingCount={pendingCount}
+          onNotifications={()=>setTab(nav.some(n=>n.id==='alerts')?'alerts':'settings')}
+          onInstall={nav.some(n=>n.id==='alerts')?()=>setTab('alerts'):null}/>
       </div>
     </div>
     <div className="main">{page}</div>

@@ -1,19 +1,12 @@
-# Ugly Finance Tool - Toast tips backfill for a date range
+# Ugly Finance Tool - tap a Home store card for today's revenue breakdown
 
-Card tips are pulled from Toast by toast-sync, but it only syncs a rolling 3-day window,
-so any older gap (e.g. Jul 1-6) never gets filled. Added a one-off backfill you can
-trigger by URL:
+Tapping a store card on Home now opens a popup with that store's revenue for today,
+broken down by channel (Card, Cash, Uber Eats, DoorDash, GrubHub, etc.), each with its
+amount, a share bar, and percent of the day's total, largest first. The popup header
+shows the store and today's total.
 
-  https://uglyfinance.netlify.app/.netlify/functions/toast-sync?start=2026-07-01&end=2026-07-06
+A "Open full breakdown" button at the bottom jumps to the store's full Insights view
+(the old behavior of tapping the card). Tap outside or the X to close.
 
-- It re-pulls that exact inclusive date range from Toast for every store.
-- By DEFAULT it books TIPS ONLY and does not touch revenue, so nothing you enter later
-  (month-end totals / Excel board) gets overwritten.
-- The response JSON lists each store/day with the tips amount it booked, so you can
-  confirm.
-- If you ever also want to refresh revenue for a range, add &tips_only=0.
-
-Normal hourly sync is unchanged (no params = rolling 3-day window).
-
-To fill the Jul 1-6 gap: deploy, then open the URL above once (adjust the year if
-needed). From Jul 7 on, the regular sync handles it.
+Verified: card tap opens the popup, shows today's total and per-channel split with correct
+amounts/percentages, and closes cleanly.

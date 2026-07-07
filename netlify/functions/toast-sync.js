@@ -199,16 +199,18 @@ exports.handler = async (event) => {
       }
 
       // tips -> expense (only for completed days, not the live provisional one,
-      // to avoid churn; the final sync of that day books tips)
+      // to avoid churn; the final sync of that day books tips). Booked as 'confirmed'
+      // because Toast tips are actual, finalized amounts (not something to approve), and
+      // the app only counts confirmed expenses.
       if (tipCat && !d.provisional) {
         const { data: ex } = await admin.from('expenses').select('id,source')
           .eq('corporation_id', corp.id).eq('category_id', tipCat.id).eq('date', d.iso)
           .eq('source', 'toast').maybeSingle();
-        if (ex) { await admin.from('expenses').update({ amount: tips }).eq('id', ex.id); }
+        if (ex) { await admin.from('expenses').update({ amount: tips, status: 'confirmed' }).eq('id', ex.id); }
         else if (tips > 0) {
           await admin.from('expenses').insert({
             corporation_id: corp.id, category_id: tipCat.id, date: d.iso,
-            amount: tips, memo: 'Card tips (Toast)', source: 'toast',
+            amount: tips, memo: 'Card tips (Toast)', source: 'toast', status: 'confirmed',
           });
         }
       }
