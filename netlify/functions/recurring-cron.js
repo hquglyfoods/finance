@@ -69,5 +69,32 @@ exports.handler = async () => {
     if (ierr) return { statusCode: 500, body: JSON.stringify({ error: ierr.message }) };
   }
 
-  return { statusCode: 200, body: JSON.stringify({ ok: true, created: inserts.length }) };
+  // Housekeeping: clear out old, already-seen notifications so the bell list does not
+  // grow forever. Rule: a notification is deleted only if it is older than 30 days AND
+  // at least one person has read it (so anything still unread is kept indefinitely).
+  // Unseen alerts never disappear; seen ones age out after a month.
+  let notifCleaned = 0;
+  try {
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
+    const cutoffIso = cutoff.toISOString();
+    // candidate notifications: older than 30 days
+    const { data: oldNotifs } = await admin.from('notifications')
+      .select('id').lt('created_at', cutoffIso).limit(1000);
+    const oldIds = (oldNotifs || []).map(n => n.id);
+    if (oldIds.length) {
+      // which of them have at least one read record?
+      const { data: readRows } = await admin.from('notification_reads')
+        .select('notification_id').in('notification_id', oldIds);
+      const readSet = new Set((readRows || []).map(r => r.notification_id));
+      const toDelete = oldIds.filter(id => readSet.has(id));
+      if (toDelete.length) {
+        // delete the read records first (avoid orphans), then the notifications
+        await admin.from('notification_reads').delete().in('notification_id', toDelete);
+        await admin.from('notifications').delete().in('id', toDelete);
+        notifCleaned = toDelete.length;
+      }
+    }
+  } catch (e) { /* non-fatal: cleanup is best-effort */ }
+
+  return { statusCode: 200, body: JSON.stringify({ ok: true, created: inserts.length, notifCleaned }) };
 };

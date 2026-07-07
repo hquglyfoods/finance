@@ -867,7 +867,7 @@ function TrendChart({points}){
       {minNet<0 && <line x1={padL} x2={W-padR} y1={netY(0)} y2={netY(0)} stroke="#D8D3C9" strokeWidth="1" strokeDasharray="3 3"/>}
       {points.map((p,i)=>{
         const x = cx(i), h = baseY - barY(p.sales), on = sel===i;
-        return <g key={i} onMouseEnter={()=>setSel(i)} onClick={()=>setSel(sel===i?null:i)} style={{cursor:'pointer'}}>
+        return <g key={i} onPointerDown={()=>setSel(i)} onMouseEnter={()=>setSel(i)} style={{cursor:'pointer'}}>
           <rect x={x-gap/2} y={padT} width={gap} height={plotH} fill="transparent"/>
           <rect x={x-bw/2} y={barY(p.sales)} width={bw} height={Math.max(0,h)} fill={on?'#B08A1E':'#D4B454'} rx="3"/>
           <text x={x} y={H-8} fontSize="10" fill="#948B7C" textAnchor="middle" fontFamily="IBM Plex Mono">{p.label}</text>
@@ -922,7 +922,7 @@ function RatioChart({points}){
       {line('suppliesPct','#3A6EA5')}
       {dots('payrollPct','#B08A1E')}
       {dots('suppliesPct','#3A6EA5')}
-      {pts.map((p,i)=><g key={i} onMouseEnter={()=>setSel(i)} onClick={()=>setSel(sel===i?null:i)} style={{cursor:'pointer'}}>
+      {pts.map((p,i)=><g key={i} onPointerDown={()=>setSel(i)} onMouseEnter={()=>setSel(i)} style={{cursor:'pointer'}}>
         <rect x={cx(i)-gap/2} y={padT} width={gap} height={H-padB-padT} fill={sel===i?'rgba(176,138,30,0.05)':'transparent'}/>
         <text x={cx(i)} y={H-8} fontSize="10" fill="#948B7C" textAnchor="middle" fontFamily="IBM Plex Mono">{p.label}</text>
       </g>)}
@@ -1593,7 +1593,7 @@ function MultiYearChart({series}){
       </g>)}
       {series[0].months.map((_,i)=>{
         const gw=(bw-8)/series.length; const on=sel===i;
-        return <g key={i} onMouseEnter={()=>setSel(i)} onClick={()=>setSel(sel===i?null:i)} style={{cursor:'pointer'}}>
+        return <g key={i} onPointerDown={()=>setSel(i)} onMouseEnter={()=>setSel(i)} style={{cursor:'pointer'}}>
           <rect x={padL+i*bw} y={0} width={bw} height={H} fill={on?'rgba(176,138,30,0.05)':'transparent'}/>
           {series.map((s,si)=>{
             const v=s.months[i].pl.totalSales; const h=axisMax?v/axisMax*H:0;
@@ -1602,12 +1602,12 @@ function MultiYearChart({series}){
         </g>;
       })}
       {MONTHS.map((mn,i)=><text key={i} x={padL+i*bw+bw/2} y={H+14} fill="var(--text2)" fontSize="9" textAnchor="middle">{mn.slice(0,1)}</text>)}
-      {sel!==null && (()=>{ const x=padL+sel*bw+bw/2; const tw=110, th=14+series.length*15;
+      {sel!==null && (()=>{ const x=padL+sel*bw+bw/2; const lh=15; const tw=120, th=12+lh*(series.length+1)+6;
         const tx=Math.min(Math.max(x-tw/2,padL),W-padR-tw); const ty=6;
         return <g pointerEvents="none">
           <rect x={tx} y={ty} width={tw} height={th} rx="6" fill="#2A2620" opacity="0.95"/>
-          <text x={tx+9} y={ty+15} fontSize="10" fill="#F4D77E" fontFamily="IBM Plex Mono">{MONTHS[sel].slice(0,3)}</text>
-          {series.map((s,si)=><text key={s.label} x={tx+9} y={ty+15+(si+1)*15} fontSize="10" fill="#E8E4DC" fontFamily="IBM Plex Mono">
+          <text x={tx+9} y={ty+18} fontSize="10" fill="#F4D77E" fontFamily="IBM Plex Mono">{MONTHS[sel].slice(0,3)}</text>
+          {series.map((s,si)=><text key={s.label} x={tx+9} y={ty+18+(si+1)*lh} fontSize="10" fill="#E8E4DC" fontFamily="IBM Plex Mono">
             {s.label} {fmt$k(s.months[sel].pl.totalSales)}</text>)}
         </g>; })()}
     </svg>
@@ -3642,7 +3642,7 @@ function NotificationBell({profile, onNavigate}){
   const ref=React.useRef(null);
   const load=useCallback(async()=>{
     const [nt, rd]=await Promise.all([
-      sb.from('notifications').select('*').order('created_at',{ascending:false}).limit(30),
+      sb.from('notifications').select('*').order('created_at',{ascending:false}).limit(50),
       sb.from('notification_reads').select('notification_id').eq('user_id',profile.id),
     ]);
     let list=(nt.data||[]).filter(n=>{
