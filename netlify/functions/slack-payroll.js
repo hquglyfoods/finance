@@ -260,14 +260,33 @@ exports.handler = async (event) => {
     return { statusCode: 200, body: 'no rows' };
   }
 
-  // insert (dedup on slack_ts unique index prevents double-posting on Slack retries)
-  const { error } = await admin.from('expenses').insert(rows);
-  if (error && !String(error.message).includes('duplicate')) {
-    await postSlack(channel, ':warning: Saving payroll failed: ' + error.message);
+  // Save each row independently. A single duplicate slack_ts must not roll back the
+  // whole batch (Postgres batch inserts are atomic), which previously made the bot
+  // report success while nothing was saved. upsert with ignoreDuplicates skips rows
+  // already present and inserts the rest.
+  let saved = 0, failMsg = null;
+  for (const r of rows) {
+    const { error } = await admin.from('expenses')
+      .upsert(r, { onConflict: 'slack_ts', ignoreDuplicates: true });
+    if (error) {
+      if (String(error.message).toLowerCase().includes('duplicate')) continue; // already there
+      failMsg = error.message;
+    } else {
+      saved++;
+    }
+  }
+  if (failMsg) {
+    await postSlack(channel, ':warning: Saving payroll failed: ' + failMsg);
     return { statusCode: 200, body: 'insert error' };
   }
 
   const dateLabel = Array.from(datesUsed).sort().join(', ');
+  if (saved === 0) {
+    // Everything was already recorded (a re-confirmation of the same payroll).
+    await postSlack(channel,
+      `:information_source: This payroll (week ending *${dateLabel}*) is already recorded in the finance app, so nothing new was added.`);
+    return { statusCode: 200, body: JSON.stringify({ ok: true, date: dateLabel, saved: 0, note: 'all duplicates' }) };
+  }
   await postSlack(channel,
     `:white_check_mark: Payroll booked for week ending *${dateLabel}*:\n` +
     summary.map(s => '• ' + s).join('\n') +
@@ -281,5 +300,5 @@ exports.handler = async (event) => {
     });
   } catch {}
 
-  return { statusCode: 200, body: JSON.stringify({ ok: true, date: dateLabel, stores: summary.length, rows: rows.length }) };
+  return { statusCode: 200, body: JSON.stringify({ ok: true, date: dateLabel, stores: summary.length, saved }) };
 };

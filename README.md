@@ -1,25 +1,31 @@
-# Ugly Finance Tool - payroll books to the ADP pay-period end date
+# Ugly Finance Tool - payroll no longer hidden by board data + board rows are editable
 
-Payroll was booking to a server-computed "prior week Sunday" (6/28), which didn't match
-the actual ADP work week. Now the bot reads the ADP "Payroll dates" range (e.g.
-"Jun 29, 2026 -> Jul 5, 2026") and books to the END of that range (7/5), so payroll
-lands on the Sunday that actually closes the work week it covers.
+This explains why payroll "didn't show up": it WAS saved (on 6/28), but the app hides
+non-board expenses on any day that also has Excel board data. Payroll is never in the
+Excel import, so it was being hidden and left out of the totals.
 
-Details (slack-payroll.js):
-- The image reader now also returns "period_end" (YYYY-MM-DD) from the ADP Payroll
-  dates range.
-- Each store books to its own period_end, validated (correct format, within ~60 days
-  back / 14 days forward). If ADP didn't show a usable range, it falls back to the old
-  prior-week-Sunday so nothing breaks.
-- The Slack reply and push now show the real week-ending date(s), and each store line
-  includes its week-ending date.
+Two fixes:
 
-CLEANUP: the earlier run booked payroll to 2026-06-28 (wrong week). Delete those
-6/28 payroll + payroll tax entries in the app (Daily view, June, the 28th). The
-corrected run will book to 2026-07-05. Re-confirming creates new rows (different slack
-timestamp), it does NOT overwrite the 6/28 ones, so remove the 6/28 ones manually.
+1) Payroll_bot expenses are now EXEMPT from the "board hides non-board" rule everywhere:
+   - computePL (month / year / all-time P&L math),
+   - the Daily view day-by-day list,
+   - loadDayPL (Compare Stores).
+   So payroll always shows and always counts, even on days with board data. Verified:
+   a day with $1,200 board + $8,738.04 payroll now totals $9,938.04 and both lines
+   appear.
 
-Still included from prior builds: semi-auto approvals, Slack retry guard, correct ADP
-column reading (Gross pay / Employer taxes).
+2) Daily view Edit / ✕ buttons now appear for BOARD (Excel) rows too, not just
+   slack/manual ones, so you can correct or remove imported lines. (Still owner-only.)
+
+So your existing payroll on 6/28 should now be visible in June with the correct totals.
+If you re-book it to 7/5 (date fix) you can delete the 6/28 copy from the Daily view now
+that board/any row is deletable.
+
+Note: buttons only show for role = owner. If you still don't see them, your account
+role may not be "owner".
+
+Includes prior fixes: payroll saves row-by-row (no silent duplicate block) and reports
+the real saved count; payroll date = ADP period end; semi-auto approvals; retry guard;
+Insights speed + auto-refresh.
 
 No SQL this round.

@@ -668,14 +668,18 @@ function useToast(){
 }
 
 // ================= DATA LAYER =================
-async function loadCorpMeta(corpId){
+const _metaCache = {};
+async function loadCorpMeta(corpId, force){
+  if(!force && _metaCache[corpId]) return _metaCache[corpId];
   const [ch, cat, rules, own] = await Promise.all([
     sb.from('revenue_channels').select('*').eq('corporation_id', corpId).order('display_order'),
     sb.from('expense_categories').select('*').eq('corporation_id', corpId).order('display_order'),
     sb.from('auto_expense_rules').select('*').eq('corporation_id', corpId).eq('active', true).order('display_order'),
     sb.from('ownership').select('*').eq('corporation_id', corpId).order('display_order'),
   ]);
-  return { channels: ch.data||[], categories: cat.data||[], rules: rules.data||[], ownership: own.data||[] };
+  const meta = { channels: ch.data||[], categories: cat.data||[], rules: rules.data||[], ownership: own.data||[] };
+  _metaCache[corpId] = meta;
+  return meta;
 }
 
 // Compute a single day's P&L (sales/expenses/net + payroll/supplies dollars) for one
@@ -695,7 +699,7 @@ async function loadDayPL(corpId, meta, date){
   revRows.forEach(r=>{ if(hasBoardRev && r.source!=='board') return; const ch=chBy[r.channel_id];
     if(ch && ch.counts_in_total) totalSales += Number(r.amount)*Number(ch.total_multiplier||1); });
   const catSum={};
-  expRows.forEach(e=>{ if(hasBoardExp && e.source!=='board') return; const c=catBy[e.category_id]; if(!c) return;
+  expRows.forEach(e=>{ if(hasBoardExp && e.source!=='board' && e.source!=='payroll_bot') return; const c=catBy[e.category_id]; if(!c) return;
     catSum[c.code]=(catSum[c.code]||0)+Number(e.amount); });
   const totalExpenses=Object.values(catSum).reduce((a,b)=>a+b,0);
   const net=totalSales-totalExpenses;
@@ -823,8 +827,11 @@ function computePL(meta, raw){
   const boardExpDates = new Set(confExp.filter(e => e.source === 'board').map(e => e.date));
   const hasBoard = boardLocked;   // auto-rules off for locked months
   confExp.forEach(e => {
-    if (boardLocked && e.source !== 'board') return;                 // locked: board only
-    if (!boardLocked && e.source !== 'board' && boardExpDates.has(e.date)) return; // current: per-date
+    // Payroll comes from the ADP payroll bot and is never part of the Excel board
+    // import, so it must always count even on days that have board data.
+    const isPayrollBot = e.source === 'payroll_bot';
+    if (boardLocked && e.source !== 'board' && !isPayrollBot) return;                 // locked: board only (plus payroll)
+    if (!boardLocked && e.source !== 'board' && !isPayrollBot && boardExpDates.has(e.date)) return; // current: per-date
     const c = catById[e.category_id]; if(!c) return;
     catSum[c.code] = (catSum[c.code]||0) + Number(e.amount);
   });
@@ -1074,6 +1081,19 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
   const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refresh, setRefresh] = useState(0);   // bump to reload after edit/delete
+  // Auto-refresh when the user returns to the app (switched tabs/apps, e.g. came back
+  // from checking Slack), and periodically while it stays open, so new data (payroll,
+  // expenses booked elsewhere) shows without a manual reload. Throttled so rapid
+  // focus/blur doesn't spam queries.
+  useEffect(()=>{
+    let last=Date.now();
+    const bump=()=>{ if(document.visibilityState!=='visible') return; const now=Date.now();
+      if(now-last<15000) return; last=now; setRefresh(x=>x+1); };
+    window.addEventListener('focus', bump);
+    document.addEventListener('visibilitychange', bump);
+    const iv=setInterval(bump, 90000);
+    return ()=>{ window.removeEventListener('focus', bump); document.removeEventListener('visibilitychange', bump); clearInterval(iv); };
+  },[]);
   // when navigated from a Home store card, focus that store's daily detail
   useEffect(()=>{ if(presetCorp && presetCorp.id){ setCorpId(presetCorp.id); setView('daily'); } },[presetCorp]);
 
@@ -1135,7 +1155,7 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
           rawX.revenue.forEach(r=>{ if(lockedR&&r.source!=='board')return; if(!lockedR&&r.source!=='board'&&boardRevDates.has(r.date))return; const ch=chBy[r.channel_id]; if(!ch||!ch.counts_in_total)return;
             const d=parseInt(r.date.slice(8)); if(days[d]) days[d].rev+=Number(r.amount)*Number(ch.total_multiplier||1); });
           const boardExpDates=new Set(rawX.expenses.filter(e=>e.source==='board'&&e.status==='confirmed').map(e=>e.date));
-          rawX.expenses.forEach(e=>{ if(e.status!=='confirmed')return; if(lockedE&&e.source!=='board')return; if(!lockedE&&e.source!=='board'&&boardExpDates.has(e.date))return;
+          rawX.expenses.forEach(e=>{ if(e.status!=='confirmed')return; const isPayrollBot=e.source==='payroll_bot'; if(lockedE&&e.source!=='board'&&!isPayrollBot)return; if(!lockedE&&e.source!=='board'&&!isPayrollBot&&boardExpDates.has(e.date))return;
             const d=parseInt(e.date.slice(8)); if(days[d]){ days[d].exp+=Number(e.amount);
               days[d].items.push({id:e.id, category_id:e.category_id, date:e.date, cat:(catBy[e.category_id]||{}).name||'?', amount:Number(e.amount), payee:e.payee, memo:e.memo, source:e.source, by:e.entered_by, slack_user:e.slack_user}); } });
           return days;
@@ -1617,8 +1637,8 @@ function DailyView({rows, pl, y, m, isOwner, categories, onChanged}){
                     <td style={{paddingLeft:20}}>{it.cat} <span className="badge" style={{background:'var(--panel)',fontSize:10}}>{it.source}</span></td>
                     <td className="faint" style={{fontSize:12.5}}>{it.memo||''}{it.payee?` · ${it.payee}`:''}{it.slack_user?` · @${it.slack_user}`:''}</td>
                     <td className="num mono" style={{width:110}}>{fmt$(it.amount)}</td>
-                    <td style={{width:isOwner&&it.id&&it.source!=='board'?96:1,textAlign:'right',whiteSpace:'nowrap'}}>
-                      {isOwner && it.id && it.source!=='board' && <>
+                    <td style={{width:isOwner&&it.id?96:1,textAlign:'right',whiteSpace:'nowrap'}}>
+                      {isOwner && it.id && <>
                         <button className="btn btn-sm" disabled={busy} onClick={()=>startEdit(it)}>Edit</button>
                         <button className="btn btn-sm btn-danger" disabled={busy} style={{marginLeft:5}} onClick={()=>delItem(it)}>✕</button>
                       </>}
