@@ -29,9 +29,18 @@ self.addEventListener('push', event => {
 
 self.addEventListener('notificationclick', event => {
   event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || '/';
+  // add a changing param so navigate() always triggers a fresh load of current code
+  const fresh = target + (target.includes('?') ? '&' : '?') + 'n=' + Date.now();
   event.waitUntil((async () => {
     const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    for (const c of all) { if ('focus' in c) return c.focus(); }
-    if (self.clients.openWindow) return self.clients.openWindow('/');
+    for (const c of all) {
+      if ('focus' in c) {
+        try { await c.focus(); } catch (e) {}
+        if ('navigate' in c) { try { await c.navigate(fresh); } catch (e) {} }
+        return;
+      }
+    }
+    if (self.clients.openWindow) return self.clients.openWindow(fresh);
   })());
 });

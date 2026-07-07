@@ -92,21 +92,34 @@ async function postSlack(channel, text) {
 async function parsePayroll(images, storeCodes) {
   const content = [];
   content.push({ type: 'text', text:
-    `You are reading payroll screenshots from a restaurant company's payroll channel. ` +
-    `The images are ADP payroll screens (and possibly Excel summaries) for one or more stores.\n\n` +
+    `You are reading screenshots from a restaurant company's payroll channel. ` +
+    `Only some of these images are ADP payroll screens. Others may be Excel bonus ` +
+    `tables, attendance sheets, or other summaries.\n\n` +
     `Store codes in this company: ${storeCodes.join(', ')} ` +
     `(AD = American Dream, BW = Bushwick, FH = Forest Hills).\n\n` +
+    `CRITICAL - what counts as payroll:\n` +
+    `- ONLY extract numbers from actual ADP payroll screens. An ADP screen shows a ` +
+    `payroll run with columns like Type, Total hours, Gross pay, Taxes, Deductions, ` +
+    `Net pay, and totals such as "Gross Pay" and "Cash required", plus a check date / ` +
+    `pay period.\n` +
+    `- Bonuses are already INCLUDED in the ADP Gross Pay total (they are entered into ` +
+    `ADP before the run), so do NOT add them separately.\n` +
+    `- IGNORE any bonus tables, "perfect attendance" tables, Refunds/Bonus columns, ` +
+    `Excel spreadsheets, or attendance sheets. These are supporting documents, NOT ` +
+    `payroll, and their numbers must never be extracted or added. If an image is not ` +
+    `clearly an ADP payroll screen, skip it entirely.\n\n` +
     `On an ADP screen, the "Gross Pay" total equals Payroll (wages) PLUS Payroll Tax. ` +
-    `Extract, for each store you can identify:\n` +
-    `  - payroll: the wages / net payroll amount (Gross Pay total minus payroll tax), and\n` +
+    `For each store you can identify FROM AN ADP SCREEN, extract:\n` +
+    `  - payroll: the wages amount (Gross Pay total minus payroll tax), and\n` +
     `  - payroll_tax: the employer payroll tax amount.\n` +
     `If a screen shows Gross Pay total and a separate tax figure, compute payroll = gross_total - payroll_tax. ` +
     `If only a single wages figure is shown with no tax, set payroll to that and payroll_tax to 0.\n\n` +
-    `Match each screenshot to a store using any store name, address, or label visible. ` +
+    `Match each ADP screen to a store using any store name, address, or label visible. ` +
     `If you cannot tell which store, use "UNKNOWN".\n\n` +
-    `Respond with ONLY a JSON array, no markdown, no prose:\n` +
+    `Respond with ONLY a JSON array, no markdown, no prose. Include ONE object per ADP ` +
+    `payroll screen only (no objects for bonus/attendance/Excel images):\n` +
     `[{"store":"AD","payroll":<number>,"payroll_tax":<number>,"gross":<number>,"confident":<true|false>}]\n` +
-    `One object per store. Numbers only, no currency symbols or commas.`
+    `Numbers only, no currency symbols or commas. If no ADP payroll screen is present, return [].`
   });
   for (const img of images) content.push({ type: 'image', source: { type: 'base64', media_type: img.media_type, data: img.data } });
 
