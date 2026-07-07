@@ -184,6 +184,34 @@ a{color:var(--gold);text-decoration:none}
 /* cards */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:22px}
 .kpis.kpis-3{grid-template-columns:repeat(3,1fr)}
+/* store comparison */
+.cmp-chips{display:flex;gap:8px;flex-wrap:wrap}
+.cmp-chip{font-family:var(--font-m);font-weight:700;font-size:14px;letter-spacing:.04em;padding:9px 16px;border-radius:9px;border:1.5px solid var(--border);background:var(--panel);color:var(--text2);cursor:pointer;transition:all .12s}
+.cmp-chip.on{background:var(--gold-dim);border-color:var(--gold);color:var(--gold-strong)}
+.cmp-chip.disabled{opacity:.4;cursor:not-allowed}
+.cmp-tick{margin-right:5px}
+.cmp-cards{display:grid;gap:12px;margin-bottom:16px}
+.cmp-cards.cmp-n1{grid-template-columns:1fr}
+.cmp-cards.cmp-n2{grid-template-columns:1fr 1fr}
+.cmp-cards.cmp-n3{grid-template-columns:1fr 1fr 1fr}
+.cmp-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px 16px 14px;box-shadow:var(--shadow)}
+.cmp-card-code{font-family:var(--font-d);font-weight:800;font-size:22px;color:var(--gold-strong);margin-bottom:10px}
+.cmp-net-val{font-family:var(--font-m);font-weight:700;font-size:22px}
+.cmp-net-lbl{font-size:11.5px;color:var(--text3);margin-top:2px}
+.cmp-bar-wrap{height:7px;background:var(--panel2);border-radius:4px;margin:12px 0 6px;overflow:hidden}
+.cmp-bar{height:100%;background:var(--gold);border-radius:4px}
+.cmp-card-sales{font-family:var(--font-m);font-size:13px;color:var(--text2)}
+.cmp-table{width:100%;border-collapse:collapse;min-width:340px}
+.cmp-table th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700;padding:6px 10px 10px;text-align:right}
+.cmp-table th:first-child{text-align:left}
+.cmp-table td{padding:11px 10px;font-size:14px;border-bottom:1px solid var(--border-soft)}
+.cmp-table td.num{font-family:var(--font-m);text-align:right;white-space:nowrap}
+.cmp-mlabel{color:var(--text2)}
+.cmp-table tr.cmp-strong td{font-weight:700;font-size:15px;background:var(--gold-dim)}
+.cmp-best{color:var(--green);font-weight:700}
+.cmp-star{margin-left:4px;font-size:11px;color:var(--gold)}
+.cmp-combo-h{color:var(--gold-strong)!important;border-left:2px solid var(--gold-dim)}
+.cmp-combo{font-family:var(--font-m);text-align:right;color:var(--gold-strong);font-weight:600;border-left:2px solid var(--gold-dim);background:var(--gold-dim)}
 .kpis.kpis-2{grid-template-columns:repeat(2,1fr)}
 .kpi{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
 .kpi .k-lbl{font-size:11.5px;color:var(--text3);font-weight:500;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px}
@@ -389,6 +417,14 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   /* 3-card rows (Daily, Year, etc.): 3 across, compact, and guaranteed to fit the
      screen. Values use compact currency ($1.95M) so they never overflow. */
   .kpis.kpis-3{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+  .cmp-cards.cmp-n3,.cmp-cards.cmp-n2{grid-template-columns:1fr 1fr}
+  .cmp-card{padding:12px 12px 11px}
+  .cmp-card-code{font-size:18px;margin-bottom:6px}
+  .cmp-net-val{font-size:18px}
+  .cmp-card-sales{font-size:12px}
+  .cmp-table td{padding:10px 6px;font-size:13px}
+  .cmp-table th{padding:5px 6px 8px;font-size:11px}
+  .cmp-chip{font-size:13px;padding:8px 13px}
   .kpis.kpis-3 .kpi{padding:11px 10px;min-width:0}
   .kpis.kpis-3 .k-lbl{font-size:9px;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .kpis.kpis-3 .k-val{font-size:16px;white-space:nowrap}
@@ -891,6 +927,9 @@ function Dashboard({corps, canEditIds, presetCorp}){
   const [yearMonthsPrev, setYearMonthsPrev] = useState([]); // compare view
   const [yearMonthsPrev2, setYearMonthsPrev2] = useState([]); // 3-year
   const [allTime, setAllTime] = useState(null); // all-time view
+  // store comparison: pick up to 3 stores, compare the selected month side by side
+  const [cmpIds, setCmpIds] = useState(()=>editable.slice(0,3).map(c=>c.id));
+  const [cmpData, setCmpData] = useState(null);
 
   useEffect(()=>{ if(!corpId) return; let dead=false; setLoading(true);
     (async()=>{
@@ -963,15 +1002,36 @@ function Dashboard({corps, canEditIds, presetCorp}){
     return ()=>{dead=true};
   },[corpId,y,m,view]);
 
+  // load side-by-side comparison for the selected stores + month
+  useEffect(()=>{ if(view!=='stores') return; let dead=false; setCmpData(null);
+    (async()=>{
+      const ids = cmpIds.slice(0,3);
+      const out = await Promise.all(ids.map(async id=>{
+        const mt = await loadCorpMeta(id);
+        const [raw, rawLY] = await Promise.all([loadMonthRaw(id,y,m), loadMonthRaw(id,y-1,m)]);
+        const p = computePL(mt,raw); const ply = computePL(mt,rawLY);
+        const corp = editable.find(c=>c.id===id) || {};
+        return { id, code:corp.code, name:corp.name, pl:p,
+          lySales:(ply.totalSales!==0||ply.totalExpenses!==0)?ply.totalSales:null };
+      }));
+      if(!dead) setCmpData(out);
+    })();
+    return ()=>{dead=true};
+  },[view, cmpIds, y, m]);
+
   if(!editable.length) return <div className="card">No corporations available for your account.</div>;
 
-  const VIEWS=[['daily','Daily'],['month','Month'],['year','Year'],['compare','3-Year'],['alltime','All-Time']];
+  const VIEWS=[['daily','Daily'],['month','Month'],['year','Year'],['compare','3-Year'],['alltime','All-Time'],['stores','Compare Stores']];
   const showPicker = view!=='alltime';
+  const toggleCmp = (id)=>{
+    setCmpData(null);
+    setCmpIds(prev=> prev.includes(id) ? prev.filter(x=>x!==id) : (prev.length>=3 ? prev : [...prev,id]));
+  };
   return <div>
     <div className="page-head">
-      <div><div className="eyebrow">Insights</div><h2>{view==='daily'?'Daily Breakdown':view==='year'?'Yearly P&L':view==='compare'?'Three-Year Comparison':view==='alltime'?'All-Time':'Monthly P&L'}</h2></div>
+      <div><div className="eyebrow">Insights</div><h2>{view==='daily'?'Daily Breakdown':view==='year'?'Yearly P&L':view==='compare'?'Three-Year Comparison':view==='alltime'?'All-Time':view==='stores'?'Compare Stores':'Monthly P&L'}</h2></div>
       <div style={{display:'flex',gap:14,alignItems:'center',flexWrap:'wrap'}}>
-        <CorpTabs corps={editable} sel={corpId} onSel={setCorpId}/>
+        {view!=='stores' && <CorpTabs corps={editable} sel={corpId} onSel={setCorpId}/>}
         {showPicker && (view==='year'||view==='compare'
           ? <YearPick y={y} onChange={setY}/>
           : <MonthPick y={y} m={m} onChange={(a,b)=>{setY(a);setM(b);}}/>)}
@@ -981,7 +1041,9 @@ function Dashboard({corps, canEditIds, presetCorp}){
       {VIEWS.map(([id,label])=>
         <button key={id} className={'viewtab'+(view===id?' on':'')} onClick={()=>setView(id)}>{label}</button>)}
     </div>
-    {loading ? <Spinner/> :
+    {view==='stores' ?
+      <StoreCompareView editable={editable} cmpIds={cmpIds} toggleCmp={toggleCmp} data={cmpData} y={y} m={m}/> :
+      loading ? <Spinner/> :
       view==='month'   ? <MonthView pl={pl} yoy={yoy} trend={trend} y={y} m={m}/> :
       view==='daily'   ? <DailyView rows={dayRows} pl={pl} y={y} m={m}/> :
       view==='year'    ? <YearView months={yearMonths} y={y}/> :
@@ -1053,6 +1115,88 @@ function analyzeChange(pl, yoy){
       text:`${mv.name} is ${Math.abs(mv.dd).toFixed(1)} points ${mv.dd>0?'higher':'lower'} as a share of sales than last year.`}));
   }
   return out;
+}
+
+function StoreCompareView({editable, cmpIds, toggleCmp, data, y, m}){
+  const selectable = editable;
+  const sel = (data||[]).filter(Boolean);
+  const bestHigh = (vals)=>{ const nums=vals.filter(v=>v!=null); return nums.length?Math.max(...nums):null; };
+  const bestLow  = (vals)=>{ const nums=vals.filter(v=>v!=null); return nums.length?Math.min(...nums):null; };
+  const maxSales = sel.length ? Math.max(1,...sel.map(s=>s.pl.totalSales)) : 1;
+
+  // combined totals across the selected stores (raw dollars sum; ratios recomputed)
+  const payAmt = s => (s.pl.catSum && s.pl.catSum['payroll']) || 0;
+  const supAmt = s => { const cs=s.pl.catSum||{}; return (cs['supplies']||0)+(cs['supplies_food']||0)+(cs['supplies_material']||0)+(cs['hq_supplies']||0); };
+  const combo = sel.length>1 ? (()=>{
+    const sales=sel.reduce((a,s)=>a+s.pl.totalSales,0);
+    const exp=sel.reduce((a,s)=>a+s.pl.totalExpenses,0);
+    const net=sel.reduce((a,s)=>a+s.pl.net,0);
+    const pay=sel.reduce((a,s)=>a+payAmt(s),0);
+    const sup=sel.reduce((a,s)=>a+supAmt(s),0);
+    return { sales, exp, net, margin: sales? net/sales : null,
+      payrollPct: sales? pay/sales : null, suppliesPct: sales? sup/sales : null };
+  })() : null;
+
+  // 'best' only where a cross-store comparison is fair. Raw Total Expenses is NOT
+  // marked (a bigger store naturally spends more, so "lowest" would be misleading).
+  const metrics = [
+    {key:'sales',   label:'Total Sales',   get:s=>s.pl.totalSales,    cget:c=>c.sales, fmt:v=>fmt$k(v), best:'high'},
+    {key:'exp',     label:'Total Expenses',get:s=>s.pl.totalExpenses, cget:c=>c.exp,   fmt:v=>fmt$k(v), best:null},
+    {key:'net',     label:'Net Profit',    get:s=>s.pl.net,           cget:c=>c.net,   fmt:v=>fmt$k(v), best:'high', strong:true},
+    {key:'margin',  label:'Net Margin',    get:s=>s.pl.margin,        cget:c=>c.margin, fmt:v=>v==null?'-':fmtPct(v), best:'high'},
+    {key:'payroll', label:'Payroll %',     get:s=>s.pl.payrollPct,    cget:c=>c.payrollPct, fmt:v=>v==null?'-':fmtPct(v), best:'low'},
+    {key:'supplies',label:'Supplies %',    get:s=>s.pl.suppliesPct,   cget:c=>c.suppliesPct, fmt:v=>v==null?'-':fmtPct(v), best:'low'},
+  ];
+
+  return <div>
+    <div className="card">
+      <h3>Pick up to 3 stores to compare</h3>
+      <div className="hint" style={{marginTop:0,marginBottom:12}}>Comparing {MONTHS[m-1]} {y}. Tap a store to add or remove it (max 3).</div>
+      <div className="cmp-chips">
+        {selectable.map(c=>{ const on=cmpIds.includes(c.id); const full=cmpIds.length>=3 && !on;
+          return <button key={c.id} className={'cmp-chip'+(on?' on':'')+(full?' disabled':'')}
+            onClick={()=>{ if(!full) toggleCmp(c.id); }}>{on && <span className="cmp-tick">✓</span>}{c.code}</button>; })}
+      </div>
+    </div>
+
+    {cmpIds.length===0 ? <div className="card faint">Select at least one store above.</div> :
+     data===null ? <Spinner/> :
+     <>
+      {/* headline cards, one per store */}
+      <div className={'cmp-cards cmp-n'+sel.length}>
+        {sel.map(s=><div className="cmp-card" key={s.id}>
+          <div className="cmp-card-code">{s.code}</div>
+          <div className="cmp-card-net">
+            <div className={'cmp-net-val '+(s.pl.net>=0?'pos':'neg')}>{fmt$k(s.pl.net)}</div>
+            <div className="cmp-net-lbl">Net Profit · {s.pl.margin!=null?fmtPct(s.pl.margin):'-'}</div>
+          </div>
+          <div className="cmp-bar-wrap"><div className="cmp-bar" style={{width:Math.max(3,Math.round(s.pl.totalSales/maxSales*100))+'%'}}></div></div>
+          <div className="cmp-card-sales">{fmt$k(s.pl.totalSales)} <span className="faint">sales</span></div>
+        </div>)}
+      </div>
+
+      {/* side-by-side metric table with best highlighted */}
+      <div className="card" style={{overflowX:'auto'}}>
+        <table className="cmp-table">
+          <thead><tr><th></th>{sel.map(s=><th key={s.id} className="num">{s.code}</th>)}
+            {combo && <th className="num cmp-combo-h">All 3</th>}</tr></thead>
+          <tbody>
+            {metrics.map(mt=>{
+              const vals = sel.map(s=>mt.get(s));
+              const target = mt.best==='high'?bestHigh(vals):(mt.best==='low'?bestLow(vals):null);
+              return <tr key={mt.key} className={mt.strong?'cmp-strong':''}>
+                <td className="cmp-mlabel">{mt.label}</td>
+                {sel.map((s,i)=>{ const v=vals[i]; const isBest = mt.best && sel.length>1 && v!=null && target!=null && Math.abs(v-target)<1e-9;
+                  return <td key={s.id} className={'num '+(isBest?'cmp-best':'')}>{mt.fmt(v)}{isBest && <span className="cmp-star">★</span>}</td>; })}
+                {combo && <td className="num cmp-combo">{mt.fmt(mt.cget(combo))}</td>}
+              </tr>;
+            })}
+          </tbody>
+        </table>
+        <div className="hint" style={{marginTop:10}}>★ marks the best store per line: highest sales, profit, and margin; lowest payroll % and supplies %. (Total expenses is not starred, since a larger store naturally spends more; compare the % ratios instead.){combo && ' The "All 3" column combines the selected stores.'}</div>
+      </div>
+     </>}
+  </div>;
 }
 
 function MonthView({pl, yoy, trend, y, m}){
@@ -2318,6 +2462,7 @@ function ClosePage({corps, canEditIds, profile, isOwner, preset}){
   const [adj,setAdj] = useState({category_id:'', amount:'', memo:'', reverse:true});
   const [toast,showToast] = useToast();
   const [busy,setBusy] = useState(false);
+  const [preview,setPreview] = useState(false);
   const fileRef = useRef();
 
   const reload = useCallback(async()=>{
@@ -2448,6 +2593,7 @@ function ClosePage({corps, canEditIds, profile, isOwner, preset}){
           {isOwner && <input type="file" ref={fileRef} onChange={upload} disabled={busy} style={{marginTop:8}}/>}
           <hr className="divider"/>
           {isOwner ? <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+            <button className="btn" disabled={busy} onClick={()=>setPreview(p=>!p)}>{preview?'Hide Preview':'Preview Report'}</button>
             <button className="btn" disabled={busy} onClick={()=>saveClose(false)}>Save Draft</button>
             <button className="btn btn-gold" disabled={busy} onClick={()=>saveClose(true)}>Publish</button>
             {close && close.status==='published' && <button className="btn btn-danger" onClick={unpublish}>Unpublish</button>}
@@ -2455,11 +2601,70 @@ function ClosePage({corps, canEditIds, profile, isOwner, preset}){
         </div>
       </div>
     </div>}
+    {preview && pl && <div style={{marginTop:20}}>
+      <div className="hint" style={{marginBottom:10}}>This is exactly how investors will see the report when published. It uses the current live numbers and notes; distribution and ownership are never included.</div>
+      <StatementView
+        corpName={(editable.find(c=>c.id===corpId)||{}).name||''}
+        year={y} month={m}
+        summary={buildSummary(pl)} notes={notes}
+        files={files.map(f=>({id:f.id, name:f.name}))}
+        previewLabel={close && close.status==='published' ? 'Preview · already published' : 'Preview · not yet published'}/>
+    </div>}
     {toast && <div className="toast">{toast}</div>}
   </div>;
 }
 
 // ================= INVESTOR PORTAL =================
+// Renders one monthly statement in the exact layout investors see. Used by the
+// investor portal and by the Close & Publish preview so the owner sees precisely
+// what will be published.
+function StatementView({corpName, year, month, summary, notes, files, publishedAt, onDownload, previewLabel}){
+  const s = summary||{};
+  const rev = (s.revenue||[]).filter(x=>x.amount!==0);
+  const exp = (s.expenses||[]).filter(x=>x.amount!==0);
+  const margin = (s.net_margin!==null && s.net_margin!==undefined) ? s.net_margin : (s.total_sales? s.net_profit/s.total_sales : null);
+  return <div className="stmt">
+    <div className="stmt-head">
+      <div>
+        <div className="stmt-corp">{corpName||''}</div>
+        <div className="stmt-period">{MONTHS[month-1]} {year} · Monthly Statement</div>
+      </div>
+      <div className="stmt-badge">{previewLabel ? previewLabel : ('Published '+(publishedAt ? new Date(publishedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : ''))}</div>
+    </div>
+    <div className="stmt-summary">
+      <div className="stmt-sum-item"><div className="ss-lbl">Total Revenue</div><div className="ss-val">{fmt$(s.total_sales)}</div></div>
+      <div className="stmt-sum-item"><div className="ss-lbl">Total Expenses</div><div className="ss-val">{fmt$(s.total_expenses)}</div></div>
+      <div className="stmt-sum-item accent"><div className="ss-lbl">Net Profit</div>
+        <div className={'ss-val '+((s.net_profit||0)>=0?'pos':'neg')}>{fmt$(s.net_profit)}</div>
+        {margin!==null && <div className="ss-margin">{fmtPct(margin)} margin</div>}</div>
+    </div>
+    {notes && <div className="stmt-notes"><div className="stmt-notes-lbl">Note from HQ</div>{notes}</div>}
+    <div className="stmt-cols">
+      <div className="stmt-block">
+        <div className="stmt-block-h">Revenue</div>
+        <table className="stmt-table"><tbody>
+          {rev.map((x,i)=><tr key={i}><td>{x.name}</td><td className="num">{fmt$(x.amount)}</td></tr>)}
+          <tr className="stmt-tot"><td>Total Revenue</td><td className="num">{fmt$(s.total_sales)}</td></tr>
+        </tbody></table>
+      </div>
+      <div className="stmt-block">
+        <div className="stmt-block-h">Expenses</div>
+        <table className="stmt-table"><tbody>
+          {exp.map((x,i)=><tr key={i}><td>{x.name}{x.auto && <span className="stmt-auto">auto</span>}</td><td className="num">{fmt$(x.amount)}</td></tr>)}
+          <tr className="stmt-tot"><td>Total Expenses</td><td className="num">{fmt$(s.total_expenses)}</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+    <div className="stmt-net">
+      <span>Net Profit for {MONTHS[month-1]} {year}</span>
+      <span className={(s.net_profit||0)>=0?'pos':'neg'}>{fmt$(s.net_profit)}</span>
+    </div>
+    {files && files.length>0 && <div className="stmt-files">
+      {files.map(f=><button key={f.id} className="btn btn-sm" onClick={()=>onDownload&&onDownload(f)}>📄 {f.name}</button>)}
+    </div>}
+  </div>;
+}
+
 function InvestorPortal({corps}){
   const [corpId, setCorpId] = useState(corps[0] && corps[0].id);
   const [reports, setReports] = useState(null);
@@ -2496,51 +2701,9 @@ function InvestorPortal({corps}){
     {reports===null ? <Spinner/> : reports.length===0 ?
       <div className="card faint">No reports published yet.</div> :
       reports.map(r=>{
-        const s = r.summary||{};
         const corp = corps.find(c=>c.id===corpId);
-        const rev = (s.revenue||[]).filter(x=>x.amount!==0);
-        const exp = (s.expenses||[]).filter(x=>x.amount!==0);
-        const margin = (s.net_margin!==null && s.net_margin!==undefined) ? s.net_margin : (s.total_sales? s.net_profit/s.total_sales : null);
-        return <div className="stmt" key={r.id}>
-          <div className="stmt-head">
-            <div>
-              <div className="stmt-corp">{corp?corp.name:''}</div>
-              <div className="stmt-period">{MONTHS[r.month-1]} {r.year} · Monthly Statement</div>
-            </div>
-            <div className="stmt-badge">Published {r.published_at && new Date(r.published_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>
-          </div>
-          <div className="stmt-summary">
-            <div className="stmt-sum-item"><div className="ss-lbl">Total Revenue</div><div className="ss-val">{fmt$(s.total_sales)}</div></div>
-            <div className="stmt-sum-item"><div className="ss-lbl">Total Expenses</div><div className="ss-val">{fmt$(s.total_expenses)}</div></div>
-            <div className="stmt-sum-item accent"><div className="ss-lbl">Net Profit</div>
-              <div className={'ss-val '+((s.net_profit||0)>=0?'pos':'neg')}>{fmt$(s.net_profit)}</div>
-              {margin!==null && <div className="ss-margin">{fmtPct(margin)} margin</div>}</div>
-          </div>
-          {r.notes && <div className="stmt-notes"><div className="stmt-notes-lbl">Note from HQ</div>{r.notes}</div>}
-          <div className="stmt-cols">
-            <div className="stmt-block">
-              <div className="stmt-block-h">Revenue</div>
-              <table className="stmt-table"><tbody>
-                {rev.map((x,i)=><tr key={i}><td>{x.name}</td><td className="num">{fmt$(x.amount)}</td></tr>)}
-                <tr className="stmt-tot"><td>Total Revenue</td><td className="num">{fmt$(s.total_sales)}</td></tr>
-              </tbody></table>
-            </div>
-            <div className="stmt-block">
-              <div className="stmt-block-h">Expenses</div>
-              <table className="stmt-table"><tbody>
-                {exp.map((x,i)=><tr key={i}><td>{x.name}{x.auto && <span className="stmt-auto">auto</span>}</td><td className="num">{fmt$(x.amount)}</td></tr>)}
-                <tr className="stmt-tot"><td>Total Expenses</td><td className="num">{fmt$(s.total_expenses)}</td></tr>
-              </tbody></table>
-            </div>
-          </div>
-          <div className="stmt-net">
-            <span>Net Profit for {MONTHS[r.month-1]} {r.year}</span>
-            <span className={(s.net_profit||0)>=0?'pos':'neg'}>{fmt$(s.net_profit)}</span>
-          </div>
-          {r.files.length>0 && <div className="stmt-files">
-            {r.files.map(f=><button key={f.id} className="btn btn-sm" onClick={()=>download(f)}>📄 {f.name}</button>)}
-          </div>}
-        </div>;
+        return <StatementView key={r.id} corpName={corp?corp.name:''} year={r.year} month={r.month}
+          summary={r.summary||{}} notes={r.notes} files={r.files} publishedAt={r.published_at} onDownload={download}/>;
       })}
   </div>;
 }
