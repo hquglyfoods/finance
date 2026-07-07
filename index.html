@@ -490,7 +490,7 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .home-card .hc-enter:hover{background:var(--gold-dim);box-shadow:0 2px 6px rgba(0,0,0,0.08)}
 .home-card .hc-amt{font-family:var(--font-d);font-weight:800;font-size:25px;letter-spacing:-0.02em;margin-bottom:12px}
 .home-card .hc-amt .cur{font-family:var(--font-d);font-weight:600;font-size:13px;color:var(--text3);letter-spacing:0}
-.home-card .hc-cmp{font-size:12px;margin:2px 0 8px;font-family:var(--font-m)}
+.home-card .hc-cmp{font-size:12px;margin:2px 0 8px;font-family:var(--font-m);min-height:17px}
 .home-card .hc-cmp .pos{color:var(--green);font-weight:700}
 .home-card .hc-cmp .neg{color:var(--red);font-weight:700}
 .home-card .hc-spark{display:flex;align-items:flex-end;gap:3px;height:34px;margin-bottom:10px}
@@ -3548,15 +3548,19 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose
           {done && <div className="hc-check">✓</div>}
           <div className="hc-code hc-code-big">{c.code}</div>
           <div className="hc-amt"><span className="cur">$</span>{p.sales.toLocaleString('en-US',{maximumFractionDigits:0})}<span className="cur"> today</span></div>
-          {lsd!=null && <div className="hc-cmp">
-            {delta!=null
+          <div className="hc-cmp">
+            {lsd!=null && delta!=null
               ? <><span className={delta>=0?'pos':'neg'}>{delta>=0?'▲':'▼'} {Math.abs(delta*100).toFixed(0)}%</span> <span className="faint">vs last {DOW[week.length?week[week.length-1].dow:now.getDay()]} ({fmt$k(lsd)})</span></>
-              : <span className="faint">Last {DOW[now.getDay()]}: {fmt$k(lsd)}</span>}
-          </div>}
-          {week.length>0 && <div className="hc-spark" title="Last 7 days">
-            {week.map((d,i)=><div key={i} className={'hc-spark-bar'+(i===week.length-1?' today':'')}
-              style={{height:Math.max(8,Math.round(d.amount/wkMax*100))+'%'}} title={`${DOW[d.dow]} ${fmt$k(d.amount)}`}></div>)}
-          </div>}
+              : lsd!=null
+              ? <span className="faint">Last {DOW[now.getDay()]}: {fmt$k(lsd)}</span>
+              : <span className="faint">No sales last {DOW[week.length?week[week.length-1].dow:now.getDay()]}</span>}
+          </div>
+          <div className="hc-spark" title="Last 7 days">
+            {week.length>0
+              ? week.map((d,i)=><div key={i} className={'hc-spark-bar'+(i===week.length-1?' today':'')}
+                  style={{height:Math.max(8,Math.round(d.amount/wkMax*100))+'%'}} title={`${DOW[d.dow]} ${fmt$k(d.amount)}`}></div>)
+              : null}
+          </div>
           {p.pending>0 && <div className="hc-status"><span><span className="dot warn"></span>{p.pending} pending</span></div>}
           <div className="hc-actions">
             <button className="hc-btn income" onClick={e=>{e.stopPropagation(); goEntry(c.id,'income');}}>Income</button>

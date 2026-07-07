@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VAPID 키 변환기</title>
+<style>
+  :root{
+    --gold:#B08A1E; --gold-strong:#8A6D14; --gold-dim:#FBF6E7;
+    --green:#2E7D4F; --red:#C0392B;
+    --text:#1A1712; --text2:#5A5346; --text3:#948B7C;
+    --panel:#FFFDF8; --panel2:#F5F1E8; --border:#E7E2D6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#F1ECE0;color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    line-height:1.55;padding:24px 16px 60px}
+  .wrap{max-width:640px;margin:0 auto}
+  h1{font-size:22px;margin:0 0 4px}
+  .sub{color:var(--text2);font-size:14px;margin-bottom:20px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;
+    padding:20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  .step-n{display:inline-flex;align-items:center;justify-content:center;
+    width:24px;height:24px;border-radius:50%;background:var(--gold);color:#fff;
+    font-weight:700;font-size:13px;margin-right:8px}
+  h3{font-size:15px;margin:0 0 10px;display:flex;align-items:center}
+  textarea{width:100%;min-height:130px;padding:12px;border:1px solid var(--border);
+    border-radius:8px;font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:12px;
+    background:var(--panel2);resize:vertical}
+  button{background:var(--gold);color:#fff;border:none;border-radius:8px;
+    padding:12px 20px;font-size:15px;font-weight:700;cursor:pointer;margin-top:12px}
+  button:hover{background:var(--gold-strong)}
+  button.copy{background:var(--green);margin-left:8px}
+  .out{margin-top:16px}
+  .out-box{width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;
+    font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#fff;
+    word-break:break-all;user-select:all;min-height:60px}
+  .status{margin-top:12px;padding:10px 14px;border-radius:8px;font-size:14px;font-weight:600}
+  .status.ok{background:#E8F3EC;color:var(--green)}
+  .status.err{background:#FBEBE9;color:var(--red)}
+  .hint{font-size:13px;color:var(--text3);margin-top:6px}
+  .safe{background:var(--gold-dim);border-radius:8px;padding:12px 14px;font-size:13px;
+    color:var(--gold-strong);margin-bottom:20px}
+  ol{margin:6px 0 0;padding-left:20px}
+  li{margin-bottom:4px;font-size:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>VAPID 개인키 변환기</h1>
+  <div class="sub">개인키(PEM)를 붙여넣기 사고가 안 나는 한 줄(base64)로 바꿔줍니다.</div>
+
+  <div class="safe">🔒 이 페이지는 인터넷에 아무것도 보내지 않아요. 변환은 전부 이 브라우저 안에서만 일어나서 키가 밖으로 나가지 않습니다. 안심하고 쓰셔도 돼요.</div>
+
+  <div class="card">
+    <h3><span class="step-n">1</span>개인키(PEM)를 여기에 붙여넣으세요</h3>
+    <div class="hint" style="margin-bottom:8px">Netlify → Site settings → Environment variables → <b>VAPID_PRIVATE_KEY</b> 값 전체.
+    <br><code>-----BEGIN PRIVATE KEY-----</code> 부터 <code>-----END PRIVATE KEY-----</code> 까지 다 복사해서 붙여넣으세요.</div>
+    <textarea id="input" placeholder="-----BEGIN PRIVATE KEY-----&#10;MIGH...&#10;-----END PRIVATE KEY-----"></textarea>
+    <button onclick="convert()">변환하기</button>
+    <div id="status"></div>
+  </div>
+
+  <div class="card out" id="outCard" style="display:none">
+    <h3><span class="step-n">2</span>이 한 줄을 복사하세요</h3>
+    <div class="out-box" id="output"></div>
+    <button class="copy" onclick="copyOut()">📋 복사</button>
+    <span id="copied" style="color:var(--green);font-size:13px;margin-left:10px"></span>
+  </div>
+
+  <div class="card" id="nextCard" style="display:none">
+    <h3><span class="step-n">3</span>Netlify에 붙여넣기</h3>
+    <ol>
+      <li>Netlify → Site settings → Environment variables</li>
+      <li><b>VAPID_PRIVATE_KEY</b> 를 찾아 값을 방금 복사한 <b>한 줄</b>로 교체</li>
+      <li>저장 (Save)</li>
+      <li>Deploys 탭 → <b>Trigger deploy</b> (환경변수는 새로 배포해야 적용돼요)</li>
+      <li>앱 → Install App & Notifications → Diagnostics → <b>Send test push</b> 로 확인</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+// EC(P-256) 개인키인지 브라우저에서 검증한 뒤 base64 한 줄로 변환.
+// 아무것도 네트워크로 보내지 않음.
+function pemToDer(pem){
+  const b64 = pem.replace(/-----[^-]+-----/g,'').replace(/\s+/g,'');
+  const bin = atob(b64);
+  const buf = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) buf[i]=bin.charCodeAt(i);
+  return buf.buffer;
+}
+async function convert(){
+  const status=document.getElementById('status');
+  const outCard=document.getElementById('outCard');
+  const nextCard=document.getElementById('nextCard');
+  let pem=document.getElementById('input').value.trim();
+  status.className=''; status.textContent=''; outCard.style.display='none'; nextCard.style.display='none';
+  if(!pem){ status.className='status err'; status.textContent='개인키를 붙여넣어 주세요.'; return; }
+  // 혹시 base64나 \n 이스케이프로 들어와도 복원
+  if(!pem.includes('BEGIN')){
+    try{ const d=atob(pem.replace(/-/g,'+').replace(/_/g,'/')); if(d.includes('BEGIN')) pem=d; }catch(_){}
+  }
+  pem=pem.replace(/\\n/g,'\n').trim();
+  if(!pem.includes('BEGIN')){
+    status.className='status err';
+    status.textContent='PEM 형식이 아니에요. -----BEGIN PRIVATE KEY----- 로 시작하는 값을 전체 붙여넣어 주세요.';
+    return;
+  }
+  // EC 키인지 브라우저 crypto로 실제 로딩 검증
+  try{
+    const der=pemToDer(pem);
+    await crypto.subtle.importKey('pkcs8', der, {name:'ECDSA', namedCurve:'P-256'}, true, ['sign']);
+  }catch(e){
+    status.className='status err';
+    status.textContent='키를 EC(P-256)로 읽지 못했어요. 값이 잘렸거나 다른 종류의 키일 수 있어요. BEGIN/END 줄까지 전체를 붙여넣었는지 확인해 주세요.';
+    return;
+  }
+  // base64 한 줄로
+  const oneLine = btoa(pem);
+  document.getElementById('output').textContent=oneLine;
+  status.className='status ok';
+  status.textContent='✓ 확인됐어요 (EC / P-256 키). 아래 한 줄을 Netlify에 넣으세요.';
+  outCard.style.display='block';
+  nextCard.style.display='block';
+}
+function copyOut(){
+  const t=document.getElementById('output').textContent;
+  navigator.clipboard.writeText(t).then(()=>{
+    document.getElementById('copied').textContent='복사됨!';
+    setTimeout(()=>document.getElementById('copied').textContent='',2000);
+  }).catch(()=>{
+    // clipboard 안 되면 수동 선택 안내
+    document.getElementById('copied').textContent='직접 드래그해서 복사하세요';
+  });
+}
+</script>
+</body>
+</html>

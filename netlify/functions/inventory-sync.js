@@ -51,7 +51,7 @@ function storeFor(rules, name) {
   return null;
 }
 
-exports.handler = async () => {
+exports.handler = async (event) => {
   const fin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY,
     { auth: { persistSession: false } });
   const inv = createClient(process.env.INV_SUPABASE_URL, process.env.INV_SUPABASE_READ_KEY,
@@ -60,19 +60,28 @@ exports.handler = async () => {
   const custRules = parseCustomerMap(process.env.INV_CUSTOMER_MAP) || DEFAULT_CUSTOMER_MAP;
   const ummaMap = parseUmmaMap(process.env.INV_UMMA_MAP) || DEFAULT_UMMA_MAP;
 
-  // date window: default last 10 days, or an explicit range via ?from=&to=
+  // date window: default is today back through 10 days ago (INCLUDING today, so an
+  // order placed today syncs immediately), or an explicit range via ?from=&to=
   // (use the range to backfill months of history, e.g. UMMA orders).
   const qs = (event && event.queryStringParameters) || {};
   let dMin, dMax;
   if (qs.from && qs.to) {
     dMin = qs.from; dMax = qs.to;
   } else {
-    const dates = [];
-    for (let back = 1; back <= 10; back++) {
-      const d = new Date(); d.setDate(d.getDate() - back);
-      dates.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+    const today = new Date();
+    const back10 = new Date(); back10.setDate(back10.getDate() - 10);
+    dMax = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+    dMin = `${back10.getFullYear()}-${pad(back10.getMonth() + 1)}-${pad(back10.getDate())}`;
+  }
+  // enumerate every date from dMin..dMax (inclusive) for the write loop
+  const dates = [];
+  {
+    const cur = new Date(dMin + 'T00:00:00Z');
+    const end = new Date(dMax + 'T00:00:00Z');
+    while (cur <= end) {
+      dates.push(`${cur.getUTCFullYear()}-${pad(cur.getUTCMonth() + 1)}-${pad(cur.getUTCDate())}`);
+      cur.setUTCDate(cur.getUTCDate() + 1);
     }
-    dMin = dates[dates.length - 1]; dMax = dates[0];
   }
 
   // pull inventory orders in window, join customer name (paginated: a wide
@@ -163,7 +172,18 @@ exports.handler = async () => {
       if (ummaChId[ch]) await upsertRev(corpId.UMMA, ummaChId[ch], date, byDate[date] || 0);
   }
 
+  // sum helpers for the diagnostic response
+  const sumByDate = obj => Object.values(obj).reduce((a, v) => a + v, 0);
+  const ummaTotals = {};
+  for (const [ch, byDate] of Object.entries(ummaRev)) ummaTotals[ch] = +sumByDate(byDate).toFixed(2);
+
   return { statusCode: 200, body: JSON.stringify({
-    ok: true, orders: (orders || []).length, range: `${dMin}~${dMax}`,
+    ok: true,
+    orders: (orders || []).length,
+    range: `${dMin}~${dMax}`,
+    hqRevenueTotal: +sumByDate(hqRev).toFixed(2),
+    ummaRevenueByChannel: ummaTotals,
+    ummaChannelsFound: Object.keys(ummaChId),
+    sourcesSeen: [...new Set((orders || []).map(o => o.source))],
   }) };
 };
