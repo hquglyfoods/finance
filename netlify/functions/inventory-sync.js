@@ -103,6 +103,41 @@ exports.handler = async (event) => {
     }
   }
 
+  // ALSO pull unapproved rows still sitting in the Import tab (import_queue), so
+  // revenue shows immediately without waiting for approval in the Inventory app.
+  // Dedupe guarantee: approving a queue row sets its order_id and creates the
+  // orders row, so filtering order_id IS NULL means a purchase is counted from
+  // exactly one of the two tables at any moment.
+  const exclStatuses = (process.env.INV_QUEUE_EXCLUDE_STATUSES || 'rejected,error,dismissed,duplicate,skipped')
+    .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  let queued = [];
+  let queueReadError = null;
+  {
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await inv
+        .from('import_queue')
+        .select('source, order_date, total_amount, customer_name, status, order_id')
+        .gte('order_date', dMin).lte('order_date', dMax)
+        .in('source', ['quickbooks', 'ummasrecipe-store', 'wix'])
+        .is('order_id', null)
+        .order('order_date').range(from, from + PAGE - 1);
+      if (error) { queueReadError = error.message; break; }   // non-fatal: confirmed orders still sync
+      const rows = (data || []).filter(r => !exclStatuses.includes(String(r.status || '').toLowerCase()));
+      queued = queued.concat(rows);
+      if ((data || []).length < PAGE || from > 200000) break;
+    }
+  }
+
+  // normalize both tables into one list for aggregation
+  const allRows = orders.map(o => ({
+    source: o.source, date: o.order_date, amt: Number(o.total_amount || 0),
+    cust: o.customers && o.customers.name,
+  })).concat(queued.map(q => ({
+    source: q.source, date: q.order_date, amt: Number(q.total_amount || 0),
+    cust: q.customer_name,
+  })));
+
   // resolve Finance Tool corp ids, channels, categories
   const { data: corps } = await fin.from('corporations').select('id,code');
   const corpId = {}; corps.forEach(c => corpId[c.code] = c.id);
@@ -121,11 +156,11 @@ exports.handler = async (event) => {
   const hqRev = {};            // date -> amount
   const storeExp = {};         // store -> date -> amount
   const ummaRev = {};          // channel -> date -> amount
-  for (const o of orders || []) {
-    const date = o.order_date;
-    const amt = Number(o.total_amount || 0);
+  for (const o of allRows) {
+    const date = o.date;
+    const amt = o.amt;
     if (!date || amt === 0) continue;
-    const custName = o.customers && o.customers.name;
+    const custName = o.cust;
 
     if (o.source === 'quickbooks') {
       hqRev[date] = (hqRev[date] || 0) + amt;
@@ -180,10 +215,13 @@ exports.handler = async (event) => {
   return { statusCode: 200, body: JSON.stringify({
     ok: true,
     orders: (orders || []).length,
+    queuedUnapproved: queued.length,
+    queuedUnapprovedTotal: +queued.reduce((a, q) => a + Number(q.total_amount || 0), 0).toFixed(2),
+    queueReadError: queueReadError || undefined,
     range: `${dMin}~${dMax}`,
     hqRevenueTotal: +sumByDate(hqRev).toFixed(2),
     ummaRevenueByChannel: ummaTotals,
     ummaChannelsFound: Object.keys(ummaChId),
-    sourcesSeen: [...new Set((orders || []).map(o => o.source))],
+    sourcesSeen: [...new Set(allRows.map(o => o.source))],
   }) };
 };
