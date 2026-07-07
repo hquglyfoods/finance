@@ -1,15 +1,20 @@
-# Ugly Finance Tool - fix: large receipt photos now recognized
+# Ugly Finance Tool - first-run "turn on notifications" prompt
 
-Root cause found from the logs: the photo WAS arriving and downloading fine, but the
-original file was 5.7MB, over our 4.5MB cap, so it was dropped ("SLACK_IMG_TOO_BIG").
-Modern phone photos are routinely 5-10MB, and that size is also too large for the vision
-model.
+Context: push notifications were working server-side (the webhook logged sent: 1), but
+after reinstalling the app the new install had no notification permission, so nothing
+arrived on the device. Easy to miss on iOS, where you have to opt in.
 
-Fix: instead of the full-resolution original, we now use Slack's auto-generated
-thumbnail (thumb_1024 / thumb_960 / etc.), which is plenty readable for a receipt and
-well under the size limit. The full file is only used as a last resort when no thumbnail
-exists. Verified: a 6MB original with a thumbnail available is downloaded via the
-thumbnail and booked correctly.
+Added: a one-time, friendly prompt that appears the first time the INSTALLED app is
+opened by an owner/assistant when notifications haven't been enabled yet. "Turn on
+notifications" requests permission and registers the push subscription; "Maybe later"
+dismisses it. It only shows:
+- in the installed PWA (not a browser tab),
+- for owner/assistant (investors don't get approval pings),
+- while the browser permission is still "default" (never asked),
+- once (it won't nag again after enabling or dismissing).
 
-The diagnostic logs (SLACK_EVENT, SLACK_PARSE_INPUT, etc.) are kept for now so we can
-confirm it's working in production; they can be removed in a later build.
+Verified: prompt shows on first standalone open, dismiss hides it and it doesn't return
+after reload.
+
+The Slack photo diagnostic logs are still in place from the previous build; they can be
+removed in a later cleanup.
