@@ -24,6 +24,17 @@
 const { createClient } = require('@supabase/supabase-js');
 const pad = n => String(n).padStart(2, '0');
 
+// Postgres timestamptz -> YYYY-MM-DD in the store's timezone (default America/New_York).
+// A late-evening New York order otherwise lands on the next UTC day.
+function localDateFromTs(ts) {
+  if (!ts) return null;
+  const iso = String(ts).replace(' ', 'T').replace(/(\.\d+)?\+00(:00)?$/, 'Z');
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(ts).slice(0, 10);   // fallback: raw date part
+  const tz = process.env.STORE_TIMEZONE || 'America/New_York';
+  return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+}
+
 const DEFAULT_CUSTOMER_MAP = [
   { match: 'american dream', store: 'AD' },
   { match: 'bushwick', store: 'BW' },
@@ -171,9 +182,11 @@ exports.handler = async (event) => {
     source: q.source, date: q.order_date, amt: Number(q.total_amount || 0),
     cust: q.customer_name,
   }))).concat(incoming.map(r => ({
-    // date: the UTC date of created_at, matching how the Inventory app sets
-    // order_date on approval, so the revenue date does not shift after approval
-    source: r.source, date: String(r.created_at || '').slice(0, 10), amt: Number(r.total || 0),
+    // date from created_at in the STORE's timezone (not UTC): an order placed in
+    // the evening in New York books to that day, not the next (same handling as
+    // slack-expense). Approved orders keep the Inventory app's order_date; only
+    // not-yet-approved incoming rows are computed here.
+    source: r.source, date: localDateFromTs(r.created_at), amt: Number(r.total || 0),
     cust: null,
   })));
 
