@@ -1,14 +1,19 @@
-# Ugly Finance Tool - cash calendar cells are a uniform size
+# Ugly Finance Tool - payroll bot: 48h screenshot window
 
-The Cash Calendar day cells were sized by content (min-height), so a day with more info
-(sales + cash spent + envelope + counted) grew taller than its neighbors and the grid
-looked uneven. Now every cell is a fixed height sized for the busiest possible day, so
-the calendar is even no matter what a day contains:
-- Desktop: 96px cells (grid-auto-rows + fixed height).
-- Mobile: 88px cells.
-- overflow:hidden guards against any rare extra line.
+Payroll is usually confirmed 24-36 hours after Maria posts the ADP screenshots, so the
+6h (then 24h) lookback was too short and the bot found no screenshots to read.
 
-Verified: all cells identical height on mobile (88) and desktop (96), including the
-fullest day (sales + cash expense + envelope + counted), with no content clipped.
+Changes to netlify/functions/slack-payroll.js:
+- Screenshot lookback widened to 48 hours (covers the 24-36h confirm gap with margin).
+- Channel history fetch raised from 40 to 200 messages so a busy channel over 48h still
+  includes the ADP screenshots (200 is Slack's max per call, no pagination needed).
+- Image cap raised 12 -> 15 (3 stores of ADP plus any bonus/excel images that get
+  ignored). The 15 kept are the most recent (closest to the confirmation).
+- The diagnostic reply (how many images read, what was extracted, matchable store
+  codes) from the previous build is still in place.
+
+RE-TEST: confirm in #payroll-corporate. If the ADP screenshots are within 48h they'll
+now be read. If it still can't book, the bot's reply will show what it extracted so we
+can pinpoint store-identification vs code-matching.
 
 No SQL this round.

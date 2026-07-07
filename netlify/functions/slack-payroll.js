@@ -163,9 +163,9 @@ exports.handler = async (event) => {
   const confirmTs = ev.ts;
 
   // Gather ADP/Excel images posted before this confirmation (same channel, not threaded).
-  const history = await slackHistory(channel, 40);
+  const history = await slackHistory(channel, 200);
   const confirmTime = Number(ev.ts);
-  const cutoff = confirmTime - 6 * 3600; // look back up to 6 hours
+  const cutoff = confirmTime - 48 * 3600; // look back up to 48h (payroll is usually confirmed 24-36h after the ADP screenshots are posted)
   const imgFiles = [];
   for (const msg of history) {
     const t = Number(msg.ts);
@@ -175,10 +175,10 @@ exports.handler = async (event) => {
       if (f.mimetype && f.mimetype.startsWith('image/') && f.url_private_download) imgFiles.push(f.url_private_download);
     }
   }
-  if (!imgFiles.length) { await postSlack(channel, ':warning: I saw the confirmation but found no payroll screenshots in the last few hours to read.'); return { statusCode: 200, body: 'no images' }; }
+  if (!imgFiles.length) { await postSlack(channel, ':warning: I saw the confirmation but found no screenshots in the last 48 hours to read.'); return { statusCode: 200, body: 'no images' }; }
 
   const images = [];
-  for (const url of imgFiles.slice(0, 12)) { const img = await downloadImage(url); if (img) images.push(img); }
+  for (const url of imgFiles.slice(0, 15)) { const img = await downloadImage(url); if (img) images.push(img); }
   if (!images.length) return { statusCode: 200, body: 'no downloadable images' };
 
   let parsed;
@@ -214,7 +214,19 @@ exports.handler = async (event) => {
     summary.push(`${p.store}: payroll $${payroll.toLocaleString()} · tax $${tax.toLocaleString()}`);
   }
 
-  if (!rows.length) { await postSlack(channel, ':warning: I read the screenshots but could not match any store payroll. Please enter manually.'); return { statusCode: 200, body: 'no rows' }; }
+  if (!rows.length) {
+    // Explain WHY nothing matched so it's fixable without digging through logs.
+    const parsedNote = Array.isArray(parsed) && parsed.length
+      ? parsed.map(p => `${p.store||'?'}: payroll ${p.payroll==null?'-':'$'+p.payroll}, tax ${p.payroll_tax==null?'-':'$'+p.payroll_tax}${p.confident===false?' (low confidence)':''}`).join('; ')
+      : '(the reader returned nothing usable)';
+    const knownStores = Object.keys(corpByCode).join(', ') || '(none found in DB)';
+    await postSlack(channel,
+      `:warning: I read ${images.length} image${images.length===1?'':'s'} but could not book any store payroll.\n` +
+      `What I extracted: ${parsedNote}\n` +
+      `Stores I can match: ${knownStores}. ` +
+      `Make sure the ADP screenshots for each store were posted in the last 6 hours and show the store name/address, then re-confirm. Or enter payroll manually.`);
+    return { statusCode: 200, body: 'no rows' };
+  }
 
   // insert (dedup on slack_ts unique index prevents double-posting on Slack retries)
   const { error } = await admin.from('expenses').insert(rows);
