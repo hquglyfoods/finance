@@ -220,18 +220,24 @@ exports.handler = async (event) => {
     .select('signal, category_name, category_code').eq('corporation_id', corp.id)
     .order('created_at', { ascending: false }).limit(40);
 
-  // collect up to 3 images. Prefer the direct-download URL, but fall back to the
-  // standard private URL (some file_share events include only url_private).
+  // collect up to 3 images. Modern phone photos are often 5-10MB, which is too big for
+  // us AND for the vision model. Slack auto-generates smaller thumbnails; prefer a
+  // reasonably-sized thumbnail (still very readable for a receipt) and only fall back to
+  // the full-resolution file when no thumbnail is available.
   const images = [];
   for (const f of (ev.files || []).slice(0, 3)) {
     const isImg = (f.mimetype && f.mimetype.startsWith('image/'))
       || (f.filetype && ['jpg','jpeg','png','heic','webp','gif'].includes(String(f.filetype).toLowerCase()));
-    const url = f.url_private_download || f.url_private;
-    if (isImg && url) {
-      const img = await downloadImage(url);
-      if (img) images.push(img);
-      else console.log('SLACK_IMG_DOWNLOAD_FAILED', JSON.stringify({ mimetype: f.mimetype, filetype: f.filetype }));
+    if (!isImg) continue;
+    // Candidate URLs, largest-readable thumbnail first, full file last.
+    const candidates = [f.thumb_1024, f.thumb_960, f.thumb_800, f.thumb_720, f.url_private_download, f.url_private].filter(Boolean);
+    let got = null;
+    for (const url of candidates) {
+      got = await downloadImage(url);
+      if (got) break;   // first one that downloads and fits wins
     }
+    if (got) images.push(got);
+    else console.log('SLACK_IMG_DOWNLOAD_FAILED', JSON.stringify({ mimetype: f.mimetype, filetype: f.filetype, tried: candidates.length }));
   }
   const text = (ev.text || '').trim();
   console.log('SLACK_PARSE_INPUT', JSON.stringify({ has_text: !!text, image_count: images.length, file_count: (ev.files || []).length }));
