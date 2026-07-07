@@ -233,6 +233,13 @@ a{color:var(--gold);text-decoration:none}
 .kpi .k-lbl{font-size:11.5px;color:var(--text3);font-weight:500;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px}
 .kpi .k-val{font-family:var(--font-m);font-size:21px;font-weight:500}
 .kpi .k-sub{font-size:12px;color:var(--text2);margin-top:3px}
+.insight-card{margin-bottom:22px}
+.insight-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}
+.insight-list li{display:flex;align-items:flex-start;gap:9px;font-size:13.5px;color:var(--text);line-height:1.4}
+.insight-ic{flex:0 0 auto;width:18px;height:18px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;background:var(--panel2);margin-top:1px}
+.insight-ic.pos{color:var(--green)}
+.insight-ic.neg{color:var(--red)}
+.insight-ic.faint{color:var(--text3)}
 
 .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px 22px;margin-bottom:18px;box-shadow:var(--shadow)}
 .card h3{font-size:14px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px}
@@ -1062,10 +1069,11 @@ function TrendArrow({cur, prev, higherIsBad}){
   return <span className={bad?'neg':'pos'}> {up?'▲':'▼'} {(Math.abs(d)*100).toFixed(1)}pt</span>;
 }
 
-function YoYDelta({cur, prev}){
-  if(prev===null||prev===undefined||Math.abs(prev)<0.01) return <span className="faint">no data last year</span>;
+function ordinal(n){ const s=['th','st','nd','rd'], v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); }
+function YoYDelta({cur, prev, bare}){
+  if(prev===null||prev===undefined||Math.abs(prev)<0.01) return <span className="faint">{bare?'—':'no data last year'}</span>;
   const d = (cur-prev)/Math.abs(prev);
-  return <span className={d>=0?'pos':'neg'}>{d>=0?'+':''}{(d*100).toFixed(1)}% vs last year</span>;
+  return <span className={d>=0?'pos':'neg'}>{d>=0?'+':''}{(d*100).toFixed(1)}%{bare?'':' vs last year'}</span>;
 }
 
 // ================= DASHBOARD =================
@@ -1281,7 +1289,7 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
       <StoreCompareView editable={editable} cmpIds={cmpIds} toggleCmp={toggleCmp} data={cmpData} y={y} m={m} period={cmpPeriod} cmpDate={cmpDate}/> :
       loading ? <Spinner/> :
       view==='month'   ? <MonthView pl={pl} yoy={yoy} trend={trend} y={y} m={m}/> :
-      view==='daily'   ? <DailyView rows={dayRows} pl={pl} y={y} m={m} isOwner={isOwner} categories={(meta&&meta.categories)||[]} onChanged={()=>setRefresh(x=>x+1)}/> :
+      view==='daily'   ? <DailyView rows={dayRows} pl={pl} yoy={yoy} y={y} m={m} isOwner={isOwner} categories={(meta&&meta.categories)||[]} onChanged={()=>setRefresh(x=>x+1)}/> :
       view==='year'    ? <YearView months={yearMonths} y={y} yearMode={yearMode} onYearMode={setYearMode}
                            prev={yearMonthsPrev} prev2={yearMonthsPrev2}/> :
       view==='alltime' ? <AllTimeView data={allTime}/> :
@@ -1557,7 +1565,7 @@ function MonthView({pl, yoy, trend, y, m}){
 }
 
 // ---- DAILY VIEW (per-day rev/exp/net, vs last year, with expense detail) ----
-function DailyView({rows, pl, y, m, isOwner, categories, onChanged}){
+function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
   const [open, setOpen] = useState(null);
   const [editId, setEditId] = useState(null);
   const [ef, setEf] = useState({amount:'', category_id:'', memo:''});
@@ -1590,17 +1598,80 @@ function DailyView({rows, pl, y, m, isOwner, categories, onChanged}){
   };
 
   if(!rows.length) return <div className="card faint">No data for {MONTHS[m-1]} {y}.</div>;
-  const tot=rows.reduce((a,r)=>({rev:a.rev+r.rev,exp:a.exp+r.exp,lyRev:a.lyRev+r.lyRev,lyExp:a.lyExp+r.lyExp}),{rev:0,exp:0,lyRev:0,lyExp:0});
+  // If we're looking at the current month in progress, compare only through today's
+  // day-of-month against last year's SAME days (e.g. on Jul 7, compare Jul 1-7 vs last
+  // year's Jul 1-7). Otherwise compare the whole month. This keeps the YoY % fair.
+  const _now=new Date();
+  const isCurMonth = (y===_now.getFullYear() && m===_now.getMonth()+1);
+  const throughDay = isCurMonth ? _now.getDate() : 31;
+  const tot=rows.reduce((a,r)=> r.d>throughDay ? a : ({rev:a.rev+r.rev,exp:a.exp+r.exp,lyRev:a.lyRev+r.lyRev,lyExp:a.lyExp+r.lyExp}),{rev:0,exp:0,lyRev:0,lyExp:0});
   const net=tot.rev-tot.exp, lyNet=tot.lyRev-tot.lyExp;
+  const cmpLabel = isCurMonth ? `vs ${y-1} (through the ${ordinal(throughDay)})` : `vs ${y-1}`;
+
+  // ---- Rule-based insights for the month shown -----------------------------
+  // Uses only this month's daily rows (each has rev/exp/items). Kept simple and
+  // deterministic: no AI, no extra queries.
+  const findings = (()=>{
+    const F=[];
+    const active = rows.filter(r=> r.d<=throughDay && (r.rev!==0||r.exp!==0));
+    if(!active.length) return F;
+    const daysElapsed = active.length;
+    const daysInMonth = lastDay(y,m);
+
+    // 1) Highest / lowest sales day
+    const withSales = active.filter(r=>r.rev>0);
+    if(withSales.length>=2){
+      const hi = withSales.reduce((a,b)=> b.rev>a.rev?b:a);
+      const lo = withSales.reduce((a,b)=> b.rev<a.rev?b:a);
+      F.push({kind:'info', text:`Best day was the ${ordinal(hi.d)} at ${fmt$(hi.rev,0)}; slowest was the ${ordinal(lo.d)} at ${fmt$(lo.rev,0)}.`});
+    }
+
+    // 2) Loss days
+    const lossDays = active.filter(r=> (r.rev-r.exp) < 0);
+    if(lossDays.length){
+      F.push({kind:'bad', text:`${lossDays.length} day${lossDays.length>1?'s':''} ran at a loss this month (${lossDays.map(r=>ordinal(r.d)).join(', ')}).`});
+    }
+
+    // 3) Cost anomaly: a category whose single-day charge is well above its own
+    //    average day (>= 2x average and material size), or a day's total expense
+    //    that spikes. Aggregate per category across the month's items.
+    const catTotals={}, catDays={};
+    active.forEach(r=> (r.items||[]).forEach(it=>{ const k=it.cat||'?'; catTotals[k]=(catTotals[k]||0)+it.amount; catDays[k]=(catDays[k]||0)+1; }));
+    // find the single largest one-off line and flag if it dwarfs that category's typical line
+    let bigLine=null;
+    active.forEach(r=> (r.items||[]).forEach(it=>{ if(!bigLine||it.amount>bigLine.amount) bigLine={...it, d:r.d}; }));
+    if(bigLine){
+      const catAvg = catTotals[bigLine.cat] / Math.max(1, catDays[bigLine.cat]);
+      if(bigLine.amount >= 500 && bigLine.amount >= catAvg*2){
+        F.push({kind:'watch', text:`Large ${bigLine.cat} charge of ${fmt$(bigLine.amount,0)} on the ${ordinal(bigLine.d)}, above the usual ${bigLine.cat} line.`});
+      }
+    }
+
+    // 4) Month-end projection (only meaningful mid-month)
+    if(isCurMonth && daysElapsed>=3 && daysElapsed<daysInMonth){
+      const projRev = tot.rev / daysElapsed * daysInMonth;
+      const projNet = net / daysElapsed * daysInMonth;
+      F.push({kind:'info', text:`On this pace, ${MONTHS[m-1]} projects to about ${fmt$(projRev,0)} sales and ${fmt$(projNet,0)} net by month end.`});
+    }
+    return F;
+  })();
+
+  const FKIND = { good:{ic:'▲',cls:'pos'}, bad:{ic:'▼',cls:'neg'}, watch:{ic:'!',cls:'neg'}, info:{ic:'•',cls:'faint'} };
   return <>
     <div className="kpis kpis-3">
       <div className="kpi"><div className="k-lbl">Sales</div><div className="k-val">{fmt$(tot.rev)}</div>
-        <div className="k-sub"><YoYDelta cur={tot.rev} prev={tot.lyRev}/> vs {y-1}</div></div>
+        <div className="k-sub"><YoYDelta cur={tot.rev} prev={tot.lyRev} bare/> {cmpLabel}</div></div>
       <div className="kpi"><div className="k-lbl">Expenses</div><div className="k-val">{fmt$(tot.exp)}</div>
-        <div className="k-sub"><YoYDelta cur={tot.exp} prev={tot.lyExp}/> vs {y-1}</div></div>
+        <div className="k-sub"><YoYDelta cur={tot.exp} prev={tot.lyExp} bare/> {cmpLabel}</div></div>
       <div className="kpi"><div className="k-lbl">Net</div><div className={'k-val '+(net>=0?'pos':'neg')}>{fmt$(net)}</div>
-        <div className="k-sub"><YoYDelta cur={net} prev={lyNet}/> vs {y-1}</div></div>
+        <div className="k-sub"><YoYDelta cur={net} prev={lyNet} bare/> {cmpLabel}</div></div>
     </div>
+    {findings.length>0 && <div className="card insight-card">
+      <h3 style={{marginTop:0}}>What stands out</h3>
+      <ul className="insight-list">
+        {findings.map((f,i)=><li key={i}><span className={'insight-ic '+(FKIND[f.kind]||FKIND.info).cls}>{(FKIND[f.kind]||FKIND.info).ic}</span><span>{f.text}</span></li>)}
+      </ul>
+    </div>}
     <div className="card">
       <h3>{MONTHS[m-1]} {y} · Day by Day <span className="faint" style={{fontWeight:400,fontSize:13}}>vs {y-1}</span></h3>
       <table className="t">
@@ -1716,11 +1787,11 @@ function CompareView({cur, prev, prev2, y}){
   return <>
     <div className="kpis kpis-3">
       <div className="kpi"><div className="k-lbl">{y} Sales</div><div className="k-val">{fmt$k(tc.s)}</div>
-        <div className="k-sub"><YoYDelta cur={tc.s} prev={tp.s}/> vs {y-1}</div></div>
+        <div className="k-sub"><YoYDelta cur={tc.s} prev={tp.s} bare/> vs {y-1}</div></div>
       <div className="kpi"><div className="k-lbl">{y} Expenses</div><div className="k-val">{fmt$k(tc.e)}</div>
-        <div className="k-sub"><YoYDelta cur={tc.e} prev={tp.e}/> vs {y-1}</div></div>
+        <div className="k-sub"><YoYDelta cur={tc.e} prev={tp.e} bare/> vs {y-1}</div></div>
       <div className="kpi"><div className="k-lbl">{y} Net</div><div className={'k-val '+(tc.n>=0?'pos':'neg')}>{fmt$k(tc.n)}</div>
-        <div className="k-sub"><YoYDelta cur={tc.n} prev={tp.n}/> vs {y-1}</div></div>
+        <div className="k-sub"><YoYDelta cur={tc.n} prev={tp.n} bare/> vs {y-1}</div></div>
     </div>
     <div className="card">
       <h3>Sales by Month · {y-2}–{y}</h3>
