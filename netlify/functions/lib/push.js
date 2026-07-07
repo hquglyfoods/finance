@@ -2,6 +2,27 @@
 // Zero-dependency Web Push (VAPID ES256 + RFC 8291 aes128gcm). Node crypto only.
 const crypto = require('crypto');
 
+// Load the VAPID private key from an env value that may be in any of three forms:
+//   (1) base64-encoded PEM on one line  (safest to paste: no newlines to lose)
+//   (2) PEM with literal "\n" escapes
+//   (3) real multi-line PEM
+// Netlify (and other UIs) sometimes strip the newlines out of a pasted PEM, which
+// makes crypto reject it with "error:1E08010C:DECODER routines::unsupported".
+// Normalizing here means the key loads no matter how it was pasted.
+function loadVapidPrivateKey(raw) {
+  let pem = raw || '';
+  if (!pem.includes('BEGIN')) {
+    // looks like base64-of-PEM (or base64url); decode it back to PEM text
+    try {
+      const b64 = pem.replace(/-/g, '+').replace(/_/g, '/');
+      const decoded = Buffer.from(b64, 'base64').toString('utf8');
+      if (decoded.includes('BEGIN')) pem = decoded;
+    } catch (_) { /* fall through */ }
+  }
+  pem = pem.replace(/\\n/g, '\n').trim();
+  return pem;
+}
+
 function b64url(buf) {
   return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
@@ -39,7 +60,7 @@ function vapidJWT(audience, subject, privatePem) {
   const signingInput = header + '.' + payload;
   const signer = crypto.createSign('SHA256');
   signer.update(signingInput);
-  const der = signer.sign(privatePem);
+  const der = signer.sign(loadVapidPrivateKey(privatePem));
   const jose = derToJose(der);
   return signingInput + '.' + b64url(jose);
 }
@@ -106,4 +127,4 @@ async function sendPush(subscription, payloadObj, opts) {
   return { ok: res.ok, status: res.status };
 }
 
-module.exports = { sendPush };
+module.exports = { sendPush, loadVapidPrivateKey };

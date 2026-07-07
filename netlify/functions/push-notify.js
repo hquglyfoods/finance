@@ -40,12 +40,19 @@ async function sbDelete(path) {
 }
 
 exports.handler = async (event) => {
-  const q = event.queryStringParameters || {};
-  if (q.key !== process.env.WEBHOOK_SECRET) return { statusCode: 403, body: 'Forbidden' };
+  // Auth: strip stray angle brackets / whitespace from the ?key= value so a webhook
+  // URL pasted as ?key=<SECRET> (placeholder brackets left in) still authenticates.
+  const rawKey = ((event.queryStringParameters || {}).key || '').trim().replace(/^[<]+|[>]+$/g, '');
+  const secret = (process.env.WEBHOOK_SECRET || '').trim();
+  if (!secret || rawKey !== secret) {
+    console.log('WEBHOOK AUTH FAIL', { hasSecret: !!secret, keyLen: rawKey.length });
+    return { statusCode: 401, body: 'unauthorized' };
+  }
 
   let payload;
   try { payload = JSON.parse(event.body || '{}'); } catch { return { statusCode: 400, body: 'Bad JSON' }; }
   const { table, type, record, old_record } = payload;
+  console.log('WEBHOOK IN', { table, type, keys: record ? Object.keys(record) : [] });
 
   // Decide target roles + message
   let targetRoles = null;         // ['owner','assistant'] or ['investor']
@@ -64,7 +71,16 @@ exports.handler = async (event) => {
     title = 'New monthly report';
     body = 'A new monthly report has been published.';
   } else {
-    return { statusCode: 200, body: 'ignored' };
+    // Explain why nothing was sent so the reason is visible in logs and the response.
+    const reason =
+      (table !== 'expenses' && table !== 'monthly_close') ? `table "${table}" is not handled` :
+      (table === 'expenses' && type !== 'INSERT') ? `expenses ${type} ignored (only INSERT)` :
+      (table === 'expenses' && (!record || record.status !== 'pending')) ? `expense status is "${record ? record.status : 'none'}" (need pending)` :
+      (table === 'monthly_close' && (!record || record.status !== 'published')) ? `monthly_close status is "${record ? record.status : 'none'}" (need published)` :
+      (table === 'monthly_close' && old_record && old_record.status === 'published') ? 'monthly_close was already published (no transition)' :
+      'conditions not met';
+    console.log('WEBHOOK IGNORED', { table, type, reason });
+    return { statusCode: 200, body: JSON.stringify({ ok: false, ignored: true, reason }) };
   }
 
   // Log to the in-app notifications feed (the bell), so alerts show in-app too.
@@ -88,7 +104,7 @@ exports.handler = async (event) => {
 
   const opts = {
     publicKey: process.env.VAPID_PUBLIC_KEY,
-    privateKey: (process.env.VAPID_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+    privateKey: process.env.VAPID_PRIVATE_KEY || '',   // lib/push.js normalizes (base64 / \n / raw PEM)
     subject: process.env.VAPID_SUBJECT || 'mailto:hq@uglydonutsncorndogs.com',
   };
 
@@ -109,7 +125,7 @@ exports.handler = async (event) => {
     subs = await sbJson(`push_subscriptions?role=in.(owner,assistant)&select=*`);
   }
 
-  let sent = 0, removed = 0;
+  let sent = 0, removed = 0, errors = [];
   for (const row of subs) {
     const sub = row.subscription;
     // badge value depends on recipient role
@@ -123,8 +139,10 @@ exports.handler = async (event) => {
       const r = await sendPush(sub, { title, body, badge, tag: table }, opts);
       if (r.gone) { await sbDelete(`push_subscriptions?endpoint=eq.${encodeURIComponent(row.endpoint)}`); removed++; }
       else if (r.ok) sent++;
-    } catch (e) { /* skip individual failures */ }
+      else errors.push('status ' + r.status);
+    } catch (e) { errors.push(String(e.message || e)); }
   }
+  console.log('WEBHOOK SENT', { targets: subs.length, sent, removed, errors: errors.slice(0, 3) });
 
-  return { statusCode: 200, body: JSON.stringify({ ok: true, sent, removed, targets: subs.length }) };
+  return { statusCode: 200, body: JSON.stringify({ ok: true, sent, removed, targets: subs.length, errors: errors.slice(0, 3) }) };
 };

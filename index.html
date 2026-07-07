@@ -490,6 +490,12 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .home-card .hc-enter:hover{background:var(--gold-dim);box-shadow:0 2px 6px rgba(0,0,0,0.08)}
 .home-card .hc-amt{font-family:var(--font-d);font-weight:800;font-size:25px;letter-spacing:-0.02em;margin-bottom:12px}
 .home-card .hc-amt .cur{font-family:var(--font-d);font-weight:600;font-size:13px;color:var(--text3);letter-spacing:0}
+.home-card .hc-cmp{font-size:12px;margin:2px 0 8px;font-family:var(--font-m)}
+.home-card .hc-cmp .pos{color:var(--green);font-weight:700}
+.home-card .hc-cmp .neg{color:var(--red);font-weight:700}
+.home-card .hc-spark{display:flex;align-items:flex-end;gap:3px;height:34px;margin-bottom:10px}
+.home-card .hc-spark-bar{flex:1;background:var(--gold-soft);border-radius:2px 2px 0 0;min-height:3px;opacity:.55;transition:opacity .15s}
+.home-card .hc-spark-bar.today{background:var(--gold);opacity:1}
 .home-card .hc-status{display:flex;gap:14px;font-size:12.5px;color:var(--text2);margin-bottom:14px}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--border);margin-right:6px;vertical-align:0}
 .dot.ok{background:var(--green)} .dot.warn{background:var(--gold)}
@@ -822,69 +828,111 @@ function MonthPick({y, m, onChange}){
 function Spinner(){ return <div className="faint" style={{padding:'30px 0',textAlign:'center'}}>Loading...</div>; }
 
 // simple SVG trend chart: bars = sales, line = net profit
+// pick a "nice" round step so the axis has ~4-5 labelled gridlines
+function niceStep(maxV, target){
+  const rough = maxV/(target||4);
+  const pow = Math.pow(10, Math.floor(Math.log10(rough||1)));
+  const candidates = [1,2,2.5,5,10].map(x=>x*pow);
+  return candidates.find(c=>c>=rough) || candidates[candidates.length-1];
+}
 function TrendChart({points}){
+  const [sel,setSel] = React.useState(null);
   if(!points.length) return null;
-  const W = Math.max(560, points.length*52), H = 190, padL = 8, padB = 26, padT = 14;
+  const W = Math.max(560, points.length*52), H = 210, padL = 46, padR = 10, padB = 26, padT = 14;
   const plotH = H - padB - padT;
-  // Sales bars: scaled to the max sales value (bars always proportional to sales).
   const maxSales = Math.max(1, ...points.map(p=>p.sales));
-  const barY = v => padT + plotH * (1 - v/maxSales);        // top of a sales bar
-  const baseY = padT + plotH;                                // sales baseline (0)
-  // Net line: its own scale so it isn't crushed by the sales magnitude.
+  const step = niceStep(maxSales, 4);
+  const axisMax = Math.ceil(maxSales/step)*step;                // round top up to a gridline
+  const barY = v => padT + plotH * (1 - v/axisMax);
+  const baseY = padT + plotH;
   const nets = points.map(p=>p.net);
   const maxNet = Math.max(0, ...nets), minNet = Math.min(0, ...nets);
   const netSpan = (maxNet - minNet) || 1;
   const netY = v => padT + plotH * (1 - (v - minNet)/netSpan);
-  const bw = 26, gap = (W - padL*2)/points.length;
+  const bw = 26, gap = (W - padL - padR)/points.length;
+  const cx = i => padL + gap*i + gap/2;
+  const grid = []; for(let g=0; g<=axisMax+1e-6; g+=step) grid.push(g);
   return <div className="chart-wrap">
-    <svg width={W} height={H}>
-      {/* sales baseline */}
-      <line x1={padL} x2={W-padL} y1={baseY} y2={baseY} stroke="#E7E4DD" strokeWidth="1"/>
-      {/* net-zero reference line (dashed) if nets go negative */}
-      {minNet<0 && <line x1={padL} x2={W-padL} y1={netY(0)} y2={netY(0)} stroke="#D8D3C9" strokeWidth="1" strokeDasharray="3 3"/>}
+    <svg width={W} height={H} onMouseLeave={()=>setSel(null)}>
+      {/* horizontal gridlines + $ labels */}
+      {grid.map((g,i)=><g key={i}>
+        <line x1={padL} x2={W-padR} y1={barY(g)} y2={barY(g)} stroke={i===0?'#E7E4DD':'#F0EEE9'} strokeWidth="1"/>
+        <text x={padL-6} y={barY(g)+3} fontSize="9.5" fill="#948B7C" textAnchor="end" fontFamily="IBM Plex Mono">{fmt$k(g)}</text>
+      </g>)}
+      {minNet<0 && <line x1={padL} x2={W-padR} y1={netY(0)} y2={netY(0)} stroke="#D8D3C9" strokeWidth="1" strokeDasharray="3 3"/>}
       {points.map((p,i)=>{
-        const x = padL + gap*i + gap/2;
-        const h = baseY - barY(p.sales);
-        return <g key={i}>
-          <rect x={x-bw/2} y={barY(p.sales)} width={bw} height={Math.max(0,h)} fill="#D4B454" rx="3"/>
+        const x = cx(i), h = baseY - barY(p.sales), on = sel===i;
+        return <g key={i} onMouseEnter={()=>setSel(i)} onClick={()=>setSel(sel===i?null:i)} style={{cursor:'pointer'}}>
+          <rect x={x-gap/2} y={padT} width={gap} height={plotH} fill="transparent"/>
+          <rect x={x-bw/2} y={barY(p.sales)} width={bw} height={Math.max(0,h)} fill={on?'#B08A1E':'#D4B454'} rx="3"/>
           <text x={x} y={H-8} fontSize="10" fill="#948B7C" textAnchor="middle" fontFamily="IBM Plex Mono">{p.label}</text>
         </g>;
       })}
-      <polyline fill="none" stroke="#2E7D4F" strokeWidth="2"
-        points={points.map((p,i)=>`${padL+gap*i+gap/2},${netY(p.net)}`).join(' ')}/>
-      {points.map((p,i)=><circle key={i} cx={padL+gap*i+gap/2} cy={netY(p.net)} r="3" fill={p.net>=0?'#2E7D4F':'#C0392B'}/>)}
+      <polyline fill="none" stroke="#2E7D4F" strokeWidth="2" pointerEvents="none"
+        points={points.map((p,i)=>`${cx(i)},${netY(p.net)}`).join(' ')}/>
+      {points.map((p,i)=><circle key={i} cx={cx(i)} cy={netY(p.net)} r={sel===i?4.5:3} fill={p.net>=0?'#2E7D4F':'#C0392B'} pointerEvents="none"/>)}
+      {sel!==null && (()=>{ const p=points[sel]; const x=cx(sel); const tw=118, th=42;
+        const tx=Math.min(Math.max(x-tw/2,padL), W-padR-tw); const ty=Math.max(padT, barY(p.sales)-th-8);
+        return <g pointerEvents="none">
+          <rect x={tx} y={ty} width={tw} height={th} rx="6" fill="#2A2620" opacity="0.95"/>
+          <text x={tx+10} y={ty+17} fontSize="11" fill="#F4D77E" fontFamily="IBM Plex Mono">Sales {fmt$k(p.sales)}</text>
+          <text x={tx+10} y={ty+32} fontSize="11" fill={p.net>=0?'#8FD3AC':'#E88'} fontFamily="IBM Plex Mono">Net {fmt$k(p.net)}</text>
+        </g>; })()}
     </svg>
     <div className="legend">
       <span><span className="sw" style={{background:'#D4B454'}}></span>Sales</span>
       <span><span className="sw" style={{background:'#2E7D4F'}}></span>Net profit</span>
+      <span className="faint">Tap a bar for values</span>
     </div>
   </div>;
 }
 
 // ratio trend chart: payroll % and supplies % over months
 function RatioChart({points}){
+  const [sel,setSel] = React.useState(null);
   const pts = points.filter(p=>p.payrollPct!==null || p.suppliesPct!==null);
   if(!pts.length) return null;
-  const W = Math.max(560, pts.length*52), H = 180, padL=8, padB=26, padT=14;
+  const W = Math.max(560, pts.length*52), H = 200, padL=40, padR=10, padB=26, padT=14;
   const vals = pts.flatMap(p=>[p.payrollPct,p.suppliesPct]).filter(v=>v!==null);
-  const maxV = Math.max(0.35, ...vals), minV = 0;
+  const rawMax = Math.max(0.30, ...vals);
+  const maxV = Math.ceil(rawMax/0.05)*0.05, minV = 0;          // round up to a 5% line
   const yOf = v => padT + (H-padB-padT)*(1-(v-minV)/(maxV-minV));
-  const gap = (W-padL*2)/pts.length;
+  const gap = (W-padL-padR)/pts.length;
+  const cx = i => padL + gap*i + gap/2;
   const line = (key,color)=>{
-    const ps = pts.map((p,i)=>p[key]===null?null:`${padL+gap*i+gap/2},${yOf(p[key])}`).filter(Boolean);
-    return <polyline fill="none" stroke={color} strokeWidth="2" points={ps.join(' ')}/>;
+    const ps = pts.map((p,i)=>p[key]===null?null:`${cx(i)},${yOf(p[key])}`).filter(Boolean);
+    return <polyline fill="none" stroke={color} strokeWidth="2" pointerEvents="none" points={ps.join(' ')}/>;
   };
+  const dots = (key,color)=> pts.map((p,i)=>p[key]===null?null:
+    <circle key={key+i} cx={cx(i)} cy={yOf(p[key])} r={sel===i?4:2.5} fill={color} pointerEvents="none"/>);
+  // 5% gridlines
+  const grid=[]; for(let g=0; g<=maxV+1e-6; g+=0.05) grid.push(+g.toFixed(2));
   return <div className="chart-wrap">
-    <svg width={W} height={H}>
-      {[0.1,0.2,0.3].map(g=><line key={g} x1={padL} x2={W-padL} y1={yOf(g)} y2={yOf(g)} stroke="#F0EEE9" strokeWidth="1"/>)}
-      {[0.1,0.2,0.3].map(g=><text key={'t'+g} x={padL+2} y={yOf(g)-4} fontSize="9" fill="#948B7C" fontFamily="IBM Plex Mono">{g*100}%</text>)}
+    <svg width={W} height={H} onMouseLeave={()=>setSel(null)}>
+      {grid.map((g,i)=><g key={i}>
+        <line x1={padL} x2={W-padR} y1={yOf(g)} y2={yOf(g)} stroke={i===0?'#E7E4DD':'#F0EEE9'} strokeWidth="1"/>
+        <text x={padL-6} y={yOf(g)+3} fontSize="9.5" fill="#948B7C" textAnchor="end" fontFamily="IBM Plex Mono">{Math.round(g*100)}%</text>
+      </g>)}
       {line('payrollPct','#B08A1E')}
       {line('suppliesPct','#3A6EA5')}
-      {pts.map((p,i)=><text key={i} x={padL+gap*i+gap/2} y={H-8} fontSize="10" fill="#948B7C" textAnchor="middle" fontFamily="IBM Plex Mono">{p.label}</text>)}
+      {dots('payrollPct','#B08A1E')}
+      {dots('suppliesPct','#3A6EA5')}
+      {pts.map((p,i)=><g key={i} onMouseEnter={()=>setSel(i)} onClick={()=>setSel(sel===i?null:i)} style={{cursor:'pointer'}}>
+        <rect x={cx(i)-gap/2} y={padT} width={gap} height={H-padB-padT} fill={sel===i?'rgba(176,138,30,0.05)':'transparent'}/>
+        <text x={cx(i)} y={H-8} fontSize="10" fill="#948B7C" textAnchor="middle" fontFamily="IBM Plex Mono">{p.label}</text>
+      </g>)}
+      {sel!==null && (()=>{ const p=pts[sel]; const x=cx(sel); const tw=120, th=42;
+        const tx=Math.min(Math.max(x-tw/2,padL), W-padR-tw); const ty=padT+4;
+        return <g pointerEvents="none">
+          <rect x={tx} y={ty} width={tw} height={th} rx="6" fill="#2A2620" opacity="0.95"/>
+          <text x={tx+10} y={ty+17} fontSize="11" fill="#E7C86A" fontFamily="IBM Plex Mono">Payroll {p.payrollPct!=null?fmtPct(p.payrollPct):'-'}</text>
+          <text x={tx+10} y={ty+32} fontSize="11" fill="#8FB4E0" fontFamily="IBM Plex Mono">Supplies {p.suppliesPct!=null?fmtPct(p.suppliesPct):'-'}</text>
+        </g>; })()}
     </svg>
     <div className="legend">
       <span><span className="sw" style={{background:'#B08A1E'}}></span>Payroll %</span>
       <span><span className="sw" style={{background:'#3A6EA5'}}></span>Supplies %</span>
+      <span className="faint">Tap a point for values</span>
     </div>
   </div>;
 }
@@ -1468,24 +1516,43 @@ function CompareView({cur, prev, prev2, y}){
 
 // simple multi-year bar chart (sales by month, grouped)
 function MultiYearChart({series}){
+  const [sel,setSel] = React.useState(null);
   if(!series.length) return <div className="faint">No data.</div>;
   const max=Math.max(1,...series.flatMap(s=>s.months.map(x=>x.pl.totalSales)));
-  const H=170, W=760, pad=30, bw=W/12;
+  const step=niceStep(max,4); const axisMax=Math.ceil(max/step)*step;
+  const H=180, W=760, padL=44, padR=8, bw=(W-padL-padR)/12;
+  const yOf=v=>H*(1-v/axisMax);
+  const grid=[]; for(let g=0; g<=axisMax+1e-6; g+=step) grid.push(g);
   return <div style={{overflowX:'auto'}}>
-    <svg viewBox={`0 0 ${W} ${H+30}`} style={{width:'100%',minWidth:640}}>
-      {[0.25,0.5,0.75,1].map(f=><line key={f} x1={pad} x2={W} y1={H-H*f} y2={H-H*f} stroke="var(--border)" strokeWidth="0.5"/>)}
+    <svg viewBox={`0 0 ${W} ${H+30}`} style={{width:'100%',minWidth:640}} onMouseLeave={()=>setSel(null)}>
+      {grid.map((g,i)=><g key={i}>
+        <line x1={padL} x2={W-padR} y1={yOf(g)} y2={yOf(g)} stroke={i===0?'var(--border)':'#F0EEE9'} strokeWidth="0.7"/>
+        <text x={padL-5} y={yOf(g)+3} fill="#948B7C" fontSize="8.5" textAnchor="end" fontFamily="IBM Plex Mono">{fmt$k(g)}</text>
+      </g>)}
       {series[0].months.map((_,i)=>{
-        const gw=(bw-8)/series.length;
-        return series.map((s,si)=>{
-          const v=s.months[i].pl.totalSales; const h=max?v/max*H:0;
-          return <rect key={s.label+i} x={pad+i*bw+4+si*gw} y={H-h} width={gw-1} height={h} fill={s.color} rx="1"/>;
-        });
+        const gw=(bw-8)/series.length; const on=sel===i;
+        return <g key={i} onMouseEnter={()=>setSel(i)} onClick={()=>setSel(sel===i?null:i)} style={{cursor:'pointer'}}>
+          <rect x={padL+i*bw} y={0} width={bw} height={H} fill={on?'rgba(176,138,30,0.05)':'transparent'}/>
+          {series.map((s,si)=>{
+            const v=s.months[i].pl.totalSales; const h=axisMax?v/axisMax*H:0;
+            return <rect key={s.label+i} x={padL+i*bw+4+si*gw} y={H-h} width={gw-1} height={h} fill={s.color} rx="1"/>;
+          })}
+        </g>;
       })}
-      {MONTHS.map((mn,i)=><text key={i} x={pad+i*bw+bw/2} y={H+14} fill="var(--text2)" fontSize="9" textAnchor="middle">{mn.slice(0,1)}</text>)}
+      {MONTHS.map((mn,i)=><text key={i} x={padL+i*bw+bw/2} y={H+14} fill="var(--text2)" fontSize="9" textAnchor="middle">{mn.slice(0,1)}</text>)}
+      {sel!==null && (()=>{ const x=padL+sel*bw+bw/2; const tw=110, th=14+series.length*15;
+        const tx=Math.min(Math.max(x-tw/2,padL),W-padR-tw); const ty=6;
+        return <g pointerEvents="none">
+          <rect x={tx} y={ty} width={tw} height={th} rx="6" fill="#2A2620" opacity="0.95"/>
+          <text x={tx+9} y={ty+15} fontSize="10" fill="#F4D77E" fontFamily="IBM Plex Mono">{MONTHS[sel].slice(0,3)}</text>
+          {series.map((s,si)=><text key={s.label} x={tx+9} y={ty+15+(si+1)*15} fontSize="10" fill="#E8E4DC" fontFamily="IBM Plex Mono">
+            {s.label} {fmt$k(s.months[sel].pl.totalSales)}</text>)}
+        </g>; })()}
     </svg>
-    <div style={{display:'flex',gap:16,marginTop:8,fontSize:12}}>
+    <div style={{display:'flex',gap:16,marginTop:8,fontSize:12,flexWrap:'wrap'}}>
       {series.map(s=><span key={s.label} style={{display:'flex',alignItems:'center',gap:6}}>
         <span style={{width:12,height:12,background:s.color,borderRadius:2,display:'inline-block'}}></span>{s.label}</span>)}
+      <span className="faint">Tap a month for values</span>
     </div>
   </div>;
 }
@@ -2941,6 +3008,23 @@ function PwaCard({profile}){
   const [notifState, setNotifState] = useState('checking'); // checking/unsupported/ios-needs-install/denied/on/off
   const [busy, setBusy] = useState(false);
   const [toast, showToast] = useToast();
+  const [testing, setTesting] = useState(false);
+  const [testRes, setTestRes] = useState(null);
+  const isOwner = profile.role==='owner';
+
+  const sendTestPush = async ()=>{
+    setTesting(true); setTestRes(null);
+    try{
+      const { data:{ session } } = await sb.auth.getSession();
+      const res = await fetch('/.netlify/functions/push-test', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', Authorization:'Bearer '+(session&&session.access_token) },
+      });
+      const j = await res.json();
+      setTestRes(j);
+    }catch(e){ setTestRes({ ok:false, error:String(e.message||e) }); }
+    setTesting(false);
+  };
 
   useEffect(()=>{
     const onReady = ()=>setInstallable(true);
@@ -3031,6 +3115,30 @@ function PwaCard({profile}){
         <button className="btn btn-gold" disabled={busy} onClick={enableNotif}>{busy?'...':'Turn on notifications'}</button></>}
       {notifState==='on' && <><div className="pos" style={{marginBottom:12,fontSize:14}}>✓ Notifications are on</div>
         <button className="btn" disabled={busy} onClick={disableNotif}>Turn off</button></>}
+      {isOwner && (notifState==='on'||notifState==='off') && <>
+        <hr className="divider"/>
+        <h3 style={{fontSize:14,marginBottom:4}}>Diagnostics</h3>
+        <div className="muted" style={{fontSize:13,marginBottom:10}}>Fire a real test push to this device and see each step's result (env keys, key loading, send status).</div>
+        <button className="btn" disabled={testing} onClick={sendTestPush}>{testing?'Sending...':'Send test push'}</button>
+        {testRes && <div className="push-diag" style={{marginTop:12}}>
+          <div className={testRes.ok?'pos':'neg'} style={{fontWeight:700,marginBottom:6,fontSize:13.5}}>
+            {testRes.ok ? '✓ ok: sent successfully' : '✕ ok: false'+(testRes.reason?' — '+testRes.reason:'')+(testRes.error?' — '+testRes.error:'')}</div>
+          {testRes.steps && <table className="t" style={{fontSize:12.5}}><tbody>
+            <tr><td>VAPID_PUBLIC_KEY</td><td className="num mono">{testRes.steps.envPublic}</td></tr>
+            <tr><td>VAPID_PRIVATE_KEY</td><td className="num mono">{testRes.steps.envPrivate}</td></tr>
+            <tr><td>Key format</td><td className="num mono">{testRes.steps.keyFormat}</td></tr>
+            <tr><td>Key loads (EC)</td><td className="num mono">{String(testRes.steps.keyLoads)}{testRes.steps.keyType?` (${testRes.steps.keyType})`:''}</td></tr>
+            {testRes.steps.keyError && <tr><td>Key error</td><td className="num mono neg">{testRes.steps.keyError}</td></tr>}
+            <tr><td>Subscriptions</td><td className="num mono">{testRes.steps.subscriptions}</td></tr>
+            {testRes.steps.sent!=null && <tr><td>Sent</td><td className="num mono">{testRes.steps.sent}</td></tr>}
+            {testRes.steps.gone>0 && <tr><td>Expired removed</td><td className="num mono">{testRes.steps.gone}</td></tr>}
+          </tbody></table>}
+          {testRes.steps && testRes.steps.results && testRes.steps.results.length>0 && <div className="hint" style={{marginTop:8}}>
+            {testRes.steps.results.map((r,i)=><div key={i} className="mono" style={{fontSize:11.5}}>
+              {r.error ? `✕ ${r.error}` : r.gone ? '⌫ expired (removed)' : `status ${r.status} ${r.ok?'✓':''}`}</div>)}
+          </div>}
+        </div>}
+      </>}
     </div>
     {toast && <div className="toast">{toast}</div>}
   </div>;
@@ -3361,18 +3469,22 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose
   useEffect(()=>{ if(!ids.length){ setData({}); return; } let dead=false;
     (async()=>{
       const monthStart = `${now.getFullYear()}-${pad(now.getMonth()+1)}-01`;
-      const [chAll, revToday, expToday, pend, revMonth, closes] = await Promise.all([
+      // 14-day window: last 7 days for the mini trend + the same weekday last week
+      const win = new Date(now); win.setDate(win.getDate()-13);
+      const winStart = `${win.getFullYear()}-${pad(win.getMonth()+1)}-${pad(win.getDate())}`;
+      const [chAll, revToday, expToday, pend, revMonth, closes, rev14] = await Promise.all([
         sb.from('revenue_channels').select('id,corporation_id,code,counts_in_total,total_multiplier').in('corporation_id',ids),
         sb.from('daily_revenue').select('corporation_id,channel_id,amount,source').in('corporation_id',ids).eq('date',date),
         sb.from('expenses').select('corporation_id').in('corporation_id',ids).eq('date',date).eq('status','confirmed'),
         sb.from('expenses').select('corporation_id').in('corporation_id',ids).eq('status','pending'),
         fetchAllRows(()=>sb.from('daily_revenue').select('corporation_id,date,amount').in('corporation_id',ids).gte('date',monthStart).lte('date',date).gt('amount',0).order('date')),
         isOwner ? sb.from('monthly_close').select('corporation_id,status').in('corporation_id',ids).eq('year',prev.y).eq('month',prev.m) : Promise.resolve({data:[]}),
+        fetchAllRows(()=>sb.from('daily_revenue').select('corporation_id,channel_id,date,amount').in('corporation_id',ids).gte('date',winStart).lte('date',date).order('date')),
       ]);
       if(dead) return;
       const chBy = {}; (chAll.data||[]).forEach(c=>chBy[c.id]=c);
       const per = {};
-      editable.forEach(c=>per[c.id]={sales:0,revRows:0,synced:false,exp:0,pending:0,daysDone:new Set(),closed:false});
+      editable.forEach(c=>per[c.id]={sales:0,revRows:0,synced:false,exp:0,pending:0,daysDone:new Set(),closed:false,week:[],lastSameDay:null});
       (revToday.data||[]).forEach(r=>{
         const p=per[r.corporation_id]; if(!p) return;
         const ch=chBy[r.channel_id];
@@ -3384,6 +3496,19 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose
       (pend.data||[]).forEach(r=>{ if(per[r.corporation_id]) per[r.corporation_id].pending++; });
       (revMonth||[]).forEach(r=>{ if(per[r.corporation_id]) per[r.corporation_id].daysDone.add(r.date); });
       (closes.data||[]).forEach(r=>{ if(per[r.corporation_id]) per[r.corporation_id].closed = r.status==='published'; });
+      // per-day totals over the 14-day window (respecting counts_in_total + multiplier)
+      const dayTot = {}; ids.forEach(id=>dayTot[id]={});
+      (rev14||[]).forEach(r=>{ const ch=chBy[r.channel_id]; if(!ch||!ch.counts_in_total) return;
+        const t=dayTot[r.corporation_id]; if(!t) return;
+        t[r.date]=(t[r.date]||0)+Number(r.amount)*Number(ch.total_multiplier); });
+      const dstr = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+      editable.forEach(c=>{ const t=dayTot[c.id]||{};
+        const week=[]; for(let i=6;i>=0;i--){ const d=new Date(now); d.setDate(d.getDate()-i);
+          const ds=dstr(d); week.push({date:ds, dow:d.getDay(), amount:t[ds]||0}); }
+        per[c.id].week=week;
+        const lw=new Date(now); lw.setDate(lw.getDate()-7);
+        per[c.id].lastSameDay = t[dstr(lw)]!=null ? t[dstr(lw)] : null;   // same weekday last week
+      });
       setData(per);
     })();
     return ()=>{dead=true};
@@ -3411,13 +3536,27 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose
 
     <div className="home-grid">
       {editable.map(c=>{
-        const p = data[c.id] || {sales:0,revRows:0,synced:false,exp:0,pending:0,daysDone:new Set(),closed:false};
+        const p = data[c.id] || {sales:0,revRows:0,synced:false,exp:0,pending:0,daysDone:new Set(),closed:false,week:[],lastSameDay:null};
         const done = p.revRows>0;
         const pct = Math.min(100, Math.round(p.daysDone.size/dayOfMonth*100));
+        // same weekday last week comparison (today is still in progress, so this is a pace check)
+        const lsd = p.lastSameDay;
+        const delta = (lsd!=null && lsd>0) ? (p.sales-lsd)/lsd : null;
+        const week = p.week||[];
+        const wkMax = Math.max(1, ...week.map(d=>d.amount));
         return <div key={c.id} className={'home-card'+(done?' done':'')} onClick={()=>goInsights(c.id)}>
           {done && <div className="hc-check">✓</div>}
           <div className="hc-code hc-code-big">{c.code}</div>
           <div className="hc-amt"><span className="cur">$</span>{p.sales.toLocaleString('en-US',{maximumFractionDigits:0})}<span className="cur"> today</span></div>
+          {lsd!=null && <div className="hc-cmp">
+            {delta!=null
+              ? <><span className={delta>=0?'pos':'neg'}>{delta>=0?'▲':'▼'} {Math.abs(delta*100).toFixed(0)}%</span> <span className="faint">vs last {DOW[week.length?week[week.length-1].dow:now.getDay()]} ({fmt$k(lsd)})</span></>
+              : <span className="faint">Last {DOW[now.getDay()]}: {fmt$k(lsd)}</span>}
+          </div>}
+          {week.length>0 && <div className="hc-spark" title="Last 7 days">
+            {week.map((d,i)=><div key={i} className={'hc-spark-bar'+(i===week.length-1?' today':'')}
+              style={{height:Math.max(8,Math.round(d.amount/wkMax*100))+'%'}} title={`${DOW[d.dow]} ${fmt$k(d.amount)}`}></div>)}
+          </div>}
           {p.pending>0 && <div className="hc-status"><span><span className="dot warn"></span>{p.pending} pending</span></div>}
           <div className="hc-actions">
             <button className="hc-btn income" onClick={e=>{e.stopPropagation(); goEntry(c.id,'income');}}>Income</button>
