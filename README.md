@@ -1,26 +1,32 @@
-# Ugly Finance Tool - stop duplicate bot replies (Slack retries) + payroll amount
+# Ugly Finance Tool - semi-auto approvals
 
-TWO issues from the last test:
+You approve new/unfamiliar things manually (which is what trains the system); once an
+expense type is familiar it auto-approves.
 
-1) The bot replied 2-3 times to one confirmation. Cause: our work (download 3 images +
-   call Claude) takes a few seconds, so Slack thinks we failed and RETRIES the same
-   event, running it again each time. Fix: both slack-payroll.js and slack-expense.js
-   now detect Slack's retry header (x-slack-retry-num) and ignore retries, so one
-   confirmation = one run = one reply. (The first, slow attempt still completes and
-   posts once.)
+EXPENSES (slack-expense.js):
+- Auto-confirm ONLY when BOTH are true:
+  1) Claude is confident about the reading, AND
+  2) it's familiar - a past approval used the SAME category for a matching description
+     (exact signal match, one contains the other, or 2+ shared distinctive words;
+     common words like "from/store/cash" are ignored so they can't trigger a false
+     auto-approval).
+- Otherwise it stays PENDING for manual approval, exactly as before. Manual approvals
+  keep teaching the system (they write the learning that later enables auto-approve).
+- No amount cap: if it's familiar it auto-approves regardless of amount (as you chose).
+- Auto-approved items are tagged in the memo "[auto-approved: matches a past approval]"
+  and show with the Slack badge in the Daily view, where you can still edit or delete
+  them.
 
-2) The amounts were still wrong (FH showed $5,068.04 = Gross - tax). That is the OLD
-   subtracting code. The current code does NOT subtract: payroll = Gross pay total as
-   shown, payroll_tax = Employer taxes total. This means the previous test ran before
-   this build was deployed.
+PAYROLL (slack-payroll.js):
+- Now books as CONFIRMED (not pending), since Chi already confirms it in Slack before
+  you see it. The Slack reply wording changed to "Payroll booked... recorded in the
+  finance app. Edit them there if anything looks off."
 
-HOW TO TELL THE NEW CODE IS LIVE after deploying:
-- Correct (new): FH payroll = $5,534.88, BW = $7,194.54, AD = $8,738.04
-- Old (subtracting): FH payroll = $5,068.04, BW = $6,593.05
-Confirm the deploy shows Published in Netlify BEFORE re-testing.
+Also in this build (from the prior fix): Slack retry guard so one confirmation makes
+one reply, and the corrected ADP reading (payroll = Gross pay total, payroll_tax =
+Employer taxes total, no subtraction).
 
-Steps: deploy this, verify Published, reject the wrong pending rows in Approvals, then
-re-confirm once in #payroll-corporate. You should get exactly ONE reply with the
-Gross-pay numbers above.
+Behavior note: because familiar expenses skip Approvals now, the Approvals list will be
+shorter - it only holds new/uncertain items. That is expected.
 
-No SQL this round.
+No SQL this round (uses existing slack_learnings, expenses.status).

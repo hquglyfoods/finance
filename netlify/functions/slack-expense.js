@@ -43,6 +43,43 @@ function channelMap() {
   return m;
 }
 
+// Normalize a description into a "signal" the same way the app does when it records a
+// learning on approve, so we can compare a new expense to past approvals.
+function toSignal(s) {
+  return (s || '').toLowerCase()
+    .replace(/\[.*?\]|\(.*?\)/g, '')
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim().slice(0, 80);
+}
+
+// Is this expense "familiar"? True when a past approval used the same (or clearly
+// overlapping) signal AND landed on the same category we're about to file it under.
+// That means the owner has confirmed this kind of expense before.
+const STOP_WORDS = new Set(['from','with','and','the','for','store','purchase','receipt','paid','cash','out','payment','bill','total','order','items','item']);
+function matchesLearning(summary, categoryCode, categoryName, learnings) {
+  const sig = toSignal(summary);
+  if (sig.length < 3) return false;
+  const words = sig.split(' ').filter(w => w.length >= 3 && !STOP_WORDS.has(w));
+  const wordSet = new Set(words);
+  for (const l of (learnings || [])) {
+    const lsig = toSignal(l.signal);
+    if (!lsig) continue;
+    const sameCat = (l.category_code && categoryCode && l.category_code === categoryCode)
+      || (l.category_name && categoryName && l.category_name === categoryName);
+    if (!sameCat) continue;
+    // exact signal match, or one fully contains the other
+    if (lsig === sig || lsig.includes(sig) || sig.includes(lsig)) return true;
+    // otherwise require at least TWO shared distinctive (non-stopword) words, so a
+    // single common word like "from" can't trigger a false auto-approval.
+    const lwords = new Set(lsig.split(' ').filter(w => w.length >= 3 && !STOP_WORDS.has(w)));
+    let shared = 0;
+    for (const w of wordSet) if (lwords.has(w)) shared++;
+    if (shared >= 2) return true;
+  }
+  return false;
+}
+
 async function downloadImage(url) {
   const res = await fetch(url, { headers: { Authorization: 'Bearer ' + process.env.SLACK_BOT_TOKEN } });
   if (!res.ok) return null;
@@ -134,7 +171,7 @@ exports.handler = async (event) => {
 
   // recent human corrections for this store, to teach Claude
   const { data: learnings } = await admin.from('slack_learnings')
-    .select('signal, category_name').eq('corporation_id', corp.id)
+    .select('signal, category_name, category_code').eq('corporation_id', corp.id)
     .order('created_at', { ascending: false }).limit(40);
 
   // collect up to 3 images
@@ -177,14 +214,22 @@ exports.handler = async (event) => {
   if (!parsed.confident) memoBits.push('[low confidence, please verify]');
   if (images.length) memoBits.push(`(${images.length} receipt photo${images.length > 1 ? 's' : ''})`);
 
+  // SEMI-AUTO: auto-confirm only when Claude is confident AND we've approved this kind
+  // of expense before (same category as a past approval). Anything new or uncertain
+  // stays pending for manual approval, which is also what trains the system.
+  const familiar = parsed.confident === true
+    && matchesLearning(parsed.summary, cat.code, cat.name, learnings || []);
+  const status = familiar ? 'confirmed' : 'pending';
+  if (familiar) memoBits.push('[auto-approved: matches a past approval]');
+
   await admin.from('expenses').insert({
     corporation_id: corp.id, category_id: cat.id, date: iso,
     amount: +amount.toFixed(2), memo: memoBits.join(' ').slice(0, 300),
-    source: 'slack', status: 'pending', method: 'cash',
+    source: 'slack', status, method: 'cash',
     slack_ts: ev.ts, slack_user: ev.user || null,
   });
   // A Supabase database webhook on expenses INSERT (status=pending) fires
   // push-notify to owner/assistant. No direct call needed here.
 
-  return { statusCode: 200, body: 'ok' };
+  return { statusCode: 200, body: familiar ? 'ok (auto-confirmed)' : 'ok (pending)' };
 };

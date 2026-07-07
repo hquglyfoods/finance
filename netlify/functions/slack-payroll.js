@@ -218,11 +218,11 @@ exports.handler = async (event) => {
     const tax = Number(p.payroll_tax) || 0;
     if (payroll > 0 && catBy[corpId + '|payroll']) {
       rows.push({ corporation_id: corpId, category_id: catBy[corpId + '|payroll'], date, amount: payroll,
-        memo: `Payroll (ADP, confirmed) wk ending ${date}`, source: 'payroll_bot', status: 'pending', slack_ts: `pr_${confirmTs}_${p.store}_p` });
+        memo: `Payroll (ADP, confirmed) wk ending ${date}`, source: 'payroll_bot', status: 'confirmed', slack_ts: `pr_${confirmTs}_${p.store}_p` });
     }
     if (tax > 0 && catBy[corpId + '|payroll_tax']) {
       rows.push({ corporation_id: corpId, category_id: catBy[corpId + '|payroll_tax'], date, amount: tax,
-        memo: `Payroll tax (ADP, confirmed) wk ending ${date}`, source: 'payroll_bot', status: 'pending', slack_ts: `pr_${confirmTs}_${p.store}_t` });
+        memo: `Payroll tax (ADP, confirmed) wk ending ${date}`, source: 'payroll_bot', status: 'confirmed', slack_ts: `pr_${confirmTs}_${p.store}_t` });
     }
     summary.push(`${p.store}: payroll $${payroll.toLocaleString()} · tax $${tax.toLocaleString()}`);
   }
@@ -249,9 +249,9 @@ exports.handler = async (event) => {
   }
 
   await postSlack(channel,
-    `:white_check_mark: Payroll captured for week ending *${date}* and sent to approvals:\n` +
+    `:white_check_mark: Payroll booked for week ending *${date}*:\n` +
     summary.map(s => '• ' + s).join('\n') +
-    `\nThe owner will confirm these in the finance app.`);
+    `\nThese are recorded in the finance app. Edit them there if anything looks off.`);
 
   // notify owner via push (best effort)
   try {
