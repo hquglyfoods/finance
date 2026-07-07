@@ -1974,6 +1974,7 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
   const [meta, setMeta] = useState(null);
   const [rows, setRows] = useState([]);
   const [f, setF] = useState({name:'', category_id:'', amount:'', frequency:'monthly', day_of_week:'5', day_of_month:'1', payee:''});
+  const [inst, setInst] = useState({name:'', category_id:'', amount:'', day_of_month:'1', months:'3', start:todayStr(), payee:''});
   const [sched, setSched] = useState(null);
   const [edit, setEdit] = useState(null);   // full-edit an existing recurring row
   const [newCat, setNewCat] = useState('');
@@ -1997,6 +1998,24 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
     if(error){ showToast('Save failed: '+error.message); return; }
     setF({name:'',category_id:'',amount:'',frequency:'monthly',day_of_week:'5',day_of_month:'1',payee:''});
     showToast('Recurring expense added'); reload();
+  };
+  // installment: a finite monthly charge over N months (e.g. equipment over 3 months)
+  const addInstallment = async()=>{
+    if(!inst.name||!inst.category_id||!inst.amount||!inst.months){ showToast('Enter a name, category, amount, and number of months'); return; }
+    const n = parseInt(inst.months); if(!(n>=1)){ showToast('Months must be 1 or more'); return; }
+    const dom = parseInt(inst.day_of_month);
+    // end_date = the day-of-month in the (n-1)th month after start, so exactly n payments run
+    const sd = new Date(inst.start+'T00:00');
+    const endM = new Date(sd.getFullYear(), sd.getMonth()+(n-1), 1);
+    const endDom = Math.min(dom, lastDay(endM.getFullYear(), endM.getMonth()+1));
+    const end = `${endM.getFullYear()}-${pad(endM.getMonth()+1)}-${pad(endDom)}`;
+    const { error } = await sb.from('recurring_expenses').insert({
+      corporation_id:corpId, category_id:inst.category_id, name:inst.name, payee:inst.payee||null,
+      amount:parseFloat(inst.amount), frequency:'monthly', day_of_month:dom,
+      start_date:inst.start, end_date:end, installment_total:n });
+    if(error){ showToast('Save failed: '+error.message); return; }
+    setInst({name:'',category_id:'',amount:'',day_of_month:'1',months:'3',start:todayStr(),payee:''});
+    showToast(`Installment added: ${n} payments`); reload();
   };
   const toggle = async r=>{
     await sb.from('recurring_expenses').update({active:!r.active}).eq('id',r.id); reload();
@@ -2159,15 +2178,45 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
         <button className="btn btn-gold" style={{flex:'0 0 auto'}} onClick={add}>Add</button>
       </div>
     </div>}
+    {isOwner && <div className="card">
+      <h3>New Installment</h3>
+      <div className="hint" style={{marginTop:0,marginBottom:10}}>For something paid over a fixed number of months, like equipment split into 3 payments. It runs monthly and stops automatically after the last payment.</div>
+      <div className="form-row">
+        <input placeholder="Name (e.g. Fryer, 3-month plan)" value={inst.name} onChange={e=>setInst({...inst,name:e.target.value})}/>
+        <select value={inst.category_id} onChange={e=>setInst({...inst,category_id:e.target.value})}>
+          <option value="">Category</option>
+          {(meta?meta.categories:[]).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <input className="w-sm" type="number" step="0.01" placeholder="Amount / month" value={inst.amount} onChange={e=>setInst({...inst,amount:e.target.value})}/>
+      </div>
+      <div className="form-row">
+        <div><label className="hint" style={{marginTop:0}}># of months</label>
+          <input className="w-sm" type="number" min="1" placeholder="3" value={inst.months} onChange={e=>setInst({...inst,months:e.target.value})}/></div>
+        <div><label className="hint" style={{marginTop:0}}>Charge on</label>
+          <select className="w-sm" value={inst.day_of_month} onChange={e=>setInst({...inst,day_of_month:e.target.value})}>
+            {Array.from({length:31},(_,i)=><option key={i+1} value={i+1}>Day {i+1}</option>)}
+            <option value="99">Last day</option>
+          </select></div>
+        <div><label className="hint" style={{marginTop:0}}>Starts</label>
+          <input type="date" value={inst.start} onChange={e=>setInst({...inst,start:e.target.value})}/></div>
+        <input placeholder="Memo (optional)" value={inst.payee} onChange={e=>setInst({...inst,payee:e.target.value})}/>
+        <button className="btn btn-gold" style={{flex:'0 0 auto'}} onClick={addInstallment}>Add</button>
+      </div>
+      {inst.amount && inst.months && parseInt(inst.months)>=1 &&
+        <div className="hint" style={{marginTop:4}}>Total over {parseInt(inst.months)} month{parseInt(inst.months)>1?'s':''}: <b>{fmt$(parseFloat(inst.amount||0)*parseInt(inst.months))}</b></div>}
+    </div>}
     <div className="card">
       <h3>Registered Recurring Expenses</h3>
       {rows.length===0 ? <div className="faint">None</div> :
       <table className="t">
         <thead><tr><th>Name</th><th>Category</th><th>Schedule</th><th className="num">Amount</th><th></th></tr></thead>
         <tbody>{rows.map(r=><tr key={r.id} style={{opacity:r.active?1:.45}}>
-          <td>{r.name}{r.payee && <span className="faint"> · {r.payee}</span>}</td>
+          <td>{r.name}{r.payee && <span className="faint"> · {r.payee}</span>}
+            {r.installment_total && <span className="badge gold" style={{marginLeft:6}}>Installment</span>}</td>
           <td>{catName(r.category_id)}</td>
-          <td>{r.frequency==='weekly' ? 'Weekly · '+DOW[r.day_of_week] : 'Monthly · '+(r.day_of_month===99?'Last day':'Day '+r.day_of_month)}</td>
+          <td>{r.frequency==='weekly' ? 'Weekly · '+DOW[r.day_of_week] : 'Monthly · '+(r.day_of_month===99?'Last day':'Day '+r.day_of_month)}
+            {r.installment_total && <div className="faint" style={{fontSize:11}}>{r.installment_total} payments · ends {r.end_date}</div>}
+          </td>
           <td className="num">{fmt$(Number(r.amount))}
             {r.next_amount!=null && r.next_amount_from && <div className="faint" style={{fontSize:11}}>→ {fmt$(Number(r.next_amount))} from {r.next_amount_from}</div>}
           </td>

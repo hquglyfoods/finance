@@ -1,17 +1,14 @@
-# Ugly Finance Tool - recurring expense: Edit vs Schedule raise
+# Ugly Finance Tool - installments
 
-Recurring Expenses (in Settings) now separates two actions:
-- EDIT: fix the rule itself - name, category, amount, and especially the SCHEDULE
-  (frequency / day of week / day of month). Use this when you picked the wrong
-  frequency or day. It also has a Delete button. Changes apply going forward; past
-  generated entries are kept.
-- SCHEDULE RAISE: set a future amount/rate change on a date (e.g. a lease increase).
-  The current amount runs until the effective date, then the new amount takes over.
-  (This is the old "Change" button, renamed and clarified.)
+Run 29_installments.sql first.
 
-Also:
-- New recurring expenses default to Monthly, Day 1.
-- The "Payee" field is renamed "Memo" everywhere in recurring (it was already being
-  used as a memo).
+- New "New Installment" section under Recurring Expenses (in Settings): for anything
+  paid over a fixed number of months, like equipment split into 3 payments.
+- You enter: name, category, amount per month, number of months, the day it charges,
+  and the start date. It shows the total (amount x months) before you add.
+- It runs monthly and STOPS automatically after the last payment (the end date is
+  computed for you). The recurring cron already respects the end date, so no extra
+  step is needed.
+- In the list, installments show an "Installment" badge and "N payments - ends DATE".
 
-No SQL this round.
+SQL this round: 29_installments.sql (required).
