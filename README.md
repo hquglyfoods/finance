@@ -1,24 +1,22 @@
-# Ugly Finance Tool - manual & recurring expenses show even on board (Excel) days
+# Ugly Finance Tool - fix the root cause of Insights getting stuck on "Loading..."
 
-You entered Lease, Loans, and Other Obligations manually on Jul 1, but Insights didn't
-show them. Cause: Jul 1 also has the Excel "board" final import (Others, Supplies), and
-the rule "a board day replaces non-board rows" was hiding ALL of them, including your
-manual entries. That was too broad.
+Two real root causes found and fixed (beyond the earlier safety-timeout band-aids):
 
-Fix: the board import now supersedes ONLY the auto-estimated sources it's meant to
-replace - the Slack expense bot, Toast POS, and inventory sync. It no longer hides:
-- manual entries (what you typed in Daily Entry),
-- recurring bills,
-- payroll (ADP bot).
-These are never part of the Excel import, so they always count and always show, even on
-a day that has board data.
+1) EMPTY STORE SELECTION = permanent spinner. On first render, if the corp list hadn't
+   loaded yet, the selected store id was undefined. The loader bailed out with an early
+   `return` WITHOUT clearing the loading flag, so the page sat on "Loading..." forever
+   (the store id never got set afterward because it was only computed once). Now: if no
+   store is selected the loader clears loading instead of hanging, AND a new effect picks
+   the first available store as soon as the list loads.
 
-Applied in all three places that use the rule: the P&L math (month/year/all-time), the
-Daily day-by-day list, and Compare Stores. Verified on a Jul 1 with board Others/Supplies
-+ manual Lease $25,000 + Loan $3,775 + a duplicate Slack line: the manual and board rows
-all show and sum correctly, and only the duplicate Slack line is hidden.
+2) RACE BETWEEN RELOADS. Rapidly changing store/month/view (or a background refresh
+   landing mid-load) could supersede an in-flight load. The old per-run "dead" flag could
+   leave loading set if runs overlapped just so. Replaced with a generation counter:
+   only the LATEST run controls the loading flag, and the latest run ALWAYS clears it -
+   on success, on error, or via the 4s safety timeout. Same fix applied to the Compare
+   Stores loader.
 
-Once deployed, your Jul 1 manual expenses (incl. Lease $25,000) will appear, and the Mall
-Commission will recalculate correctly against the now-present Lease.
+Verified: normal load clears; rapid store switching clears; rapid month switching
+clears; no stuck spinner in any case.
 
 No SQL this round.

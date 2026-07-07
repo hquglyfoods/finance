@@ -1127,6 +1127,9 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
   },[]);
   // when navigated from a Home store card, focus that store's daily detail
   useEffect(()=>{ if(presetCorp && presetCorp.id){ setCorpId(presetCorp.id); setView('daily'); } },[presetCorp]);
+  // If no store is selected yet (e.g. corps loaded after first render), pick the first
+  // available one, so the loader can run instead of sitting on a spinner.
+  useEffect(()=>{ if(!corpId && editable[0]) setCorpId(editable[0].id); },[editable, corpId]);
 
   // shared data holders
   const [pl, setPl] = useState(null);
@@ -1143,25 +1146,31 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
   const [cmpDate, setCmpDate] = useState(()=>todayStr());
 
   const _loadKeyRef = React.useRef('');
-  useEffect(()=>{ if(!corpId) return; let dead=false;
-    // Only show the loading spinner when the actual view changed (store, month, year,
-    // view mode). A background refresh (returning to the app) reloads silently so the
-    // screen doesn't flicker while the user is looking at it.
+  const _genRef = React.useRef(0);
+  useEffect(()=>{
+    // If there's no store selected yet, don't sit on a spinner forever.
+    if(!corpId){ setLoading(false); return; }
+    const gen = ++_genRef.current;          // this run's generation
+    const isCurrent = ()=> _genRef.current===gen;   // superseded when a newer run starts
+    // Only show the spinner when the actual view changed (store, month, year, view mode).
+    // A background refresh (returning to the app) reloads silently so the screen doesn't
+    // flicker while the user is looking at it.
     const key = [corpId,y,m,view,yearMode].join('|');
     const silent = (key === _loadKeyRef.current);
     _loadKeyRef.current = key;
     if(!silent) setLoading(true);
-    // Safety net: whatever happens (thrown error, dropped promise, slow network, a
-    // superseded run), never leave the page stuck on "Loading..." forever. If loading
-    // hasn't cleared in 4s, clear it so whatever data arrived is shown.
-    const safety = setTimeout(()=>{ if(!dead) setLoading(false); }, 4000);
+    // Safety net: never leave the page stuck on "Loading..." If this is still the latest
+    // run after 4s, clear the spinner no matter what (thrown error, slow/hung network).
+    const safety = setTimeout(()=>{ if(isCurrent()) setLoading(false); }, 4000);
+    // Helper: apply a state setter only if this run hasn't been superseded.
+    const ok = ()=> isCurrent();
     (async()=>{
      try{
-      const mt = await loadCorpMeta(corpId); if(dead) return; setMeta(mt);
+      const mt = await loadCorpMeta(corpId); if(!ok()) return; setMeta(mt);
 
       if(view==='month'){
         const [raw, rawLY] = await Promise.all([loadMonthRaw(corpId,y,m), loadMonthRaw(corpId,y-1,m)]);
-        if(dead) return;
+        if(!ok()) return;
         setPl(computePL(mt,raw));
         // If this is the current month in progress, compare last year only through the
         // same day-of-month (fair same-period YoY), not last year's whole month.
@@ -1182,7 +1191,7 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
           fetchAllRows(()=>sb.from('expenses').select('date,amount,category_id,status,source').eq('corporation_id',corpId).gte('date',startD).lte('date',endD).order('date')),
           sb.from('rate_schedule').select('rate_type,rate,effective_from').eq('corporation_id',corpId),
         ]);
-        if(dead) return;
+        if(!ok()) return;
         const pts=[]; let cy=sy,cm=sm;
         const _n=new Date(), curY=_n.getFullYear(), curM=_n.getMonth()+1;
         for(let i=0;i<12;i++){ const pref=`${cy}-${pad(cm)}`;
@@ -1195,7 +1204,7 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
       }
       else if(view==='daily'){
         const [raw, rawLY] = await Promise.all([loadMonthRaw(corpId,y,m), loadMonthRaw(corpId,y-1,m)]);
-        if(dead) return;
+        if(!ok()) return;
         setPl(computePL(mt,raw));
         const chBy={}; mt.channels.forEach(c=>chBy[c.id]=c);
         const catBy={}; mt.categories.forEach(c=>catBy[c.id]=c);
@@ -1225,32 +1234,35 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
       else if(view==='year'){
         if(yearMode==='3y'){
           const [a,b,c] = await Promise.all([loadYearPL(corpId,mt,y), loadYearPL(corpId,mt,y-1), loadYearPL(corpId,mt,y-2)]);
-          if(dead) return; setYearMonths(a); setYearMonthsPrev(b); setYearMonthsPrev2(c);
+          if(!ok()) return; setYearMonths(a); setYearMonthsPrev(b); setYearMonthsPrev2(c);
         } else {
-          const yr = await loadYearPL(corpId,mt,y); if(dead) return; setYearMonths(yr);
+          const yr = await loadYearPL(corpId,mt,y); if(!ok()) return; setYearMonths(yr);
         }
       }
       else if(view==='alltime'){
-        const at = await loadAllTimePL(corpId,mt); if(dead) return; setAllTime(at);
+        const at = await loadAllTimePL(corpId,mt); if(!ok()) return; setAllTime(at);
       }
-     }catch(e){ if(!dead) console.error('Insights load failed', e); }
-     finally{ clearTimeout(safety); if(!dead) setLoading(false); }
+     }catch(e){ if(ok()) console.error('Insights load failed', e); }
+     finally{ clearTimeout(safety); if(ok()) setLoading(false); }
     })();
-    return ()=>{dead=true; clearTimeout(safety);};
+    return ()=>{ clearTimeout(safety); };
   },[corpId,y,m,view,yearMode,refresh]);
 
   // load side-by-side comparison for the selected stores + chosen period
   // (period is the shared top tab: daily->day, month, year, alltime)
   const cmpPeriod = view==='daily' ? 'day' : view;
   const _cmpKeyRef = React.useRef('');
-  useEffect(()=>{ if(!compareStores) return; let dead=false;
+  const _cmpGenRef = React.useRef(0);
+  useEffect(()=>{ if(!compareStores) return;
+    const gen = ++_cmpGenRef.current;
+    const ok = ()=> _cmpGenRef.current===gen;
     const key = [cmpIds.join(','),y,m,cmpPeriod,cmpDate].join('|');
     const silent = (key === _cmpKeyRef.current);
     _cmpKeyRef.current = key;
     if(!silent) setCmpData(null);
-    // Same protections as the main loader: never leave "Loading..." stuck if a query
-    // throws, and clear after 4s no matter what.
-    const safety = setTimeout(()=>{ if(!dead) setCmpData(prev=>prev||[]); }, 4000);
+    // Never leave the compare view stuck loading: if still current after 4s, show
+    // whatever we have (or an empty state) instead of an endless spinner.
+    const safety = setTimeout(()=>{ if(ok()) setCmpData(prev=>prev||[]); }, 4000);
     (async()=>{
      try{
       const ids = cmpIds.slice(0,3);
@@ -1295,11 +1307,11 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
         }
         return { id, code:corp.code, name:corp.name, pl, lySales };
       }));
-      if(!dead) setCmpData(out);
-     }catch(e){ if(!dead){ console.error('Compare load failed', e); setCmpData([]); } }
+      if(ok()) setCmpData(out);
+     }catch(e){ if(ok()){ console.error('Compare load failed', e); setCmpData([]); } }
      finally{ clearTimeout(safety); }
     })();
-    return ()=>{dead=true; clearTimeout(safety);};
+    return ()=>{ clearTimeout(safety); };
   },[compareStores, cmpIds, y, m, cmpPeriod, cmpDate, refresh]);
 
   if(!editable.length) return <div className="card">No corporations available for your account.</div>;
