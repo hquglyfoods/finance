@@ -1,13 +1,21 @@
-# Ugly Finance Tool - home card alignment + (already included) HQ/UMMA sync fix
+# Ugly Finance Tool - edit/delete approved expenses from Insights Daily
 
-1) Home cards now keep the same height whether or not a store has last-week data.
-   The "vs last [day]" line always renders; when there is no data for the same weekday
-   last week it shows a faint "No sales last [day]" placeholder, and the 7-day
-   sparkline area is always reserved. So HQ/UMMA cards no longer float up.
+In Insights -> Daily, open a day with the arrow (v). Every expense line that came from
+Slack or manual entry now has:
+- Edit: inline form to fix the category, amount, date, or memo. Save updates the
+  expense and the view refreshes.
+- X (delete): removes the expense after a confirmation.
 
-2) Reminder: the inventory-sync fix in this build covers BOTH UMMA and HQ - they sync
-   through the same function, so the old "window starts yesterday" bug also delayed
-   today's HQ (QuickBooks) revenue by a day. With this build, today's orders/invoices
-   are picked up on the next hourly sync.
+Rules:
+- Owner only.
+- Board-imported lines (historical snapshot) are protected - no Edit/X on those.
+- The day totals, month KPIs, and everything downstream recompute automatically after
+  a change.
+
+Also in this build (from the previous rounds, deploy if you have not yet):
+- Home cards: identical heights in every case; pending moved to a top-right pill badge.
+- inventory-sync: today's UMMA orders and HQ QuickBooks invoices sync the same day,
+  plus a diagnostic JSON response (sourcesSeen / ummaRevenueByChannel).
+- Web push: key loader fix, push-test diagnostics, webhook hardening + logging.
 
 No SQL this round.

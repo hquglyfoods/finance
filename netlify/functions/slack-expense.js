@@ -160,8 +160,12 @@ exports.handler = async (event) => {
     || (cats || [])[0];
   if (!cat) return { statusCode: 200, body: 'no category' };
 
-  const date = new Date(Number(ev.ts) * 1000);
-  const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  // Expense date must be the STORE's local date, not the server's (Netlify runs in
+  // UTC, so a message posted late evening in New York would otherwise book to the
+  // next day). en-CA locale formats as YYYY-MM-DD.
+  const tz = process.env.STORE_TIMEZONE || 'America/New_York';
+  const iso = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' })
+    .format(new Date(Number(ev.ts) * 1000));
 
   const memoBits = [];
   if (parsed.summary) memoBits.push(parsed.summary);

@@ -454,6 +454,8 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   .home-card .hc-amt{font-family:var(--font-d);font-weight:800;font-size:20px;margin-bottom:6px}
   .home-card .hc-amt .cur{font-size:11px}
   .home-card .hc-status{flex-direction:column;gap:3px;font-size:11px;margin-bottom:7px}
+  .hc-pend-badge{font-size:9.5px;padding:2px 7px;top:11px}
+  .home-card .hc-cmp{font-size:10.5px;height:15px;line-height:15px}
   .home-card .progress{margin-bottom:5px}
   .home-card .progress-lbl{font-size:10.5px;line-height:1.2}
   .home-card .hc-enter{margin-top:9px;padding:7px;font-size:11.5px}
@@ -490,7 +492,7 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .home-card .hc-enter:hover{background:var(--gold-dim);box-shadow:0 2px 6px rgba(0,0,0,0.08)}
 .home-card .hc-amt{font-family:var(--font-d);font-weight:800;font-size:25px;letter-spacing:-0.02em;margin-bottom:12px}
 .home-card .hc-amt .cur{font-family:var(--font-d);font-weight:600;font-size:13px;color:var(--text3);letter-spacing:0}
-.home-card .hc-cmp{font-size:12px;margin:2px 0 8px;font-family:var(--font-m);min-height:17px}
+.home-card .hc-cmp{font-size:12px;margin:2px 0 8px;font-family:var(--font-m);height:17px;line-height:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .home-card .hc-cmp .pos{color:var(--green);font-weight:700}
 .home-card .hc-cmp .neg{color:var(--red);font-weight:700}
 .home-card .hc-spark{display:flex;align-items:flex-end;gap:3px;height:34px;margin-bottom:10px}
@@ -500,6 +502,9 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--border);margin-right:6px;vertical-align:0}
 .dot.ok{background:var(--green)} .dot.warn{background:var(--gold)}
 .hc-check{position:absolute;top:16px;right:16px;color:var(--gold);font-size:16px}
+.hc-pend-badge{position:absolute;top:14px;right:38px;display:flex;align-items:center;gap:5px;
+  font-size:11px;font-weight:700;color:#9A6A12;background:#FBF0D9;border:1px solid #EFDCAE;
+  border-radius:20px;padding:3px 9px;font-family:var(--font-m);white-space:nowrap}
 .progress{height:5px;border-radius:3px;background:var(--border-soft);overflow:hidden;margin-bottom:8px}
 .progress .fill{height:100%;background:var(--gold);border-radius:3px;transition:width .3s}
 .progress-lbl{font-size:11.5px;color:var(--text3)}
@@ -954,7 +959,7 @@ function YoYDelta({cur, prev}){
 }
 
 // ================= DASHBOARD =================
-function Dashboard({corps, canEditIds, presetCorp}){
+function Dashboard({corps, canEditIds, presetCorp, isOwner}){
   const editable = corps.filter(c=>canEditIds.has(c.id));
   const [corpId, setCorpId] = useState(editable[0] && editable[0].id);
   const now = new Date();
@@ -963,6 +968,7 @@ function Dashboard({corps, canEditIds, presetCorp}){
   const [view, setView] = useState('daily');   // daily | month | year | compare | alltime
   const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refresh, setRefresh] = useState(0);   // bump to reload after edit/delete
   // when navigated from a Home store card, focus that store's daily detail
   useEffect(()=>{ if(presetCorp && presetCorp.id){ setCorpId(presetCorp.id); setView('daily'); } },[presetCorp]);
 
@@ -1025,7 +1031,7 @@ function Dashboard({corps, canEditIds, presetCorp}){
           const boardExpDates=new Set(rawX.expenses.filter(e=>e.source==='board'&&e.status==='confirmed').map(e=>e.date));
           rawX.expenses.forEach(e=>{ if(e.status!=='confirmed')return; if(lockedE&&e.source!=='board')return; if(!lockedE&&e.source!=='board'&&boardExpDates.has(e.date))return;
             const d=parseInt(e.date.slice(8)); if(days[d]){ days[d].exp+=Number(e.amount);
-              days[d].items.push({cat:(catBy[e.category_id]||{}).name||'?', amount:Number(e.amount), payee:e.payee, memo:e.memo, source:e.source, by:e.entered_by, slack_user:e.slack_user}); } });
+              days[d].items.push({id:e.id, category_id:e.category_id, date:e.date, cat:(catBy[e.category_id]||{}).name||'?', amount:Number(e.amount), payee:e.payee, memo:e.memo, source:e.source, by:e.entered_by, slack_user:e.slack_user}); } });
           return days;
         };
         const cur=buildDays(raw,y), prev=buildDays(rawLY,y-1);
@@ -1048,7 +1054,7 @@ function Dashboard({corps, canEditIds, presetCorp}){
       setLoading(false);
     })();
     return ()=>{dead=true};
-  },[corpId,y,m,view]);
+  },[corpId,y,m,view,refresh]);
 
   // load side-by-side comparison for the selected stores + month
   useEffect(()=>{ if(view!=='stores') return; let dead=false; setCmpData(null);
@@ -1093,7 +1099,7 @@ function Dashboard({corps, canEditIds, presetCorp}){
       <StoreCompareView editable={editable} cmpIds={cmpIds} toggleCmp={toggleCmp} data={cmpData} y={y} m={m}/> :
       loading ? <Spinner/> :
       view==='month'   ? <MonthView pl={pl} yoy={yoy} trend={trend} y={y} m={m}/> :
-      view==='daily'   ? <DailyView rows={dayRows} pl={pl} y={y} m={m}/> :
+      view==='daily'   ? <DailyView rows={dayRows} pl={pl} y={y} m={m} isOwner={isOwner} categories={(meta&&meta.categories)||[]} onChanged={()=>setRefresh(x=>x+1)}/> :
       view==='year'    ? <YearView months={yearMonths} y={y}/> :
       view==='alltime' ? <AllTimeView data={allTime}/> :
                          <CompareView cur={yearMonths} prev={yearMonthsPrev} prev2={yearMonthsPrev2} y={y}/>}
@@ -1367,8 +1373,38 @@ function MonthView({pl, yoy, trend, y, m}){
 }
 
 // ---- DAILY VIEW (per-day rev/exp/net, vs last year, with expense detail) ----
-function DailyView({rows, pl, y, m}){
+function DailyView({rows, pl, y, m, isOwner, categories, onChanged}){
   const [open, setOpen] = useState(null);
+  const [editId, setEditId] = useState(null);
+  const [ef, setEf] = useState({amount:'', category_id:'', memo:''});
+  const [busy, setBusy] = useState(false);
+  const [toast, showToast] = useToast();
+
+  const startEdit = (it)=>{
+    setEditId(it.id);
+    setEf({amount:String(it.amount), category_id:it.category_id||'', memo:it.memo||'', date:it.date||''});
+  };
+  const saveEdit = async ()=>{
+    const amt = parseFloat(ef.amount);
+    if(isNaN(amt) || amt<=0){ showToast('Enter a valid amount'); return; }
+    if(!ef.date){ showToast('Pick a date'); return; }
+    setBusy(true);
+    const { error } = await sb.from('expenses').update({
+      amount:+amt.toFixed(2), category_id:ef.category_id||null, memo:(ef.memo||'').slice(0,300), date:ef.date,
+    }).eq('id', editId);
+    setBusy(false);
+    if(error){ showToast('Save failed: '+error.message); return; }
+    setEditId(null); showToast('Updated'); onChanged && onChanged();
+  };
+  const delItem = async (it)=>{
+    if(!confirm(`Delete this expense?\n${it.cat} · ${fmt$(it.amount)}${it.memo?`\n"${it.memo}"`:''}`)) return;
+    setBusy(true);
+    const { error } = await sb.from('expenses').delete().eq('id', it.id);
+    setBusy(false);
+    if(error){ showToast('Delete failed: '+error.message); return; }
+    showToast('Deleted'); onChanged && onChanged();
+  };
+
   if(!rows.length) return <div className="card faint">No data for {MONTHS[m-1]} {y}.</div>;
   const tot=rows.reduce((a,r)=>({rev:a.rev+r.rev,exp:a.exp+r.exp,lyRev:a.lyRev+r.lyRev,lyExp:a.lyExp+r.lyExp}),{rev:0,exp:0,lyRev:0,lyExp:0});
   const net=tot.rev-tot.exp, lyNet=tot.lyRev-tot.lyExp;
@@ -1402,10 +1438,35 @@ function DailyView({rows, pl, y, m}){
               </tr>
               {isOpen && r.items.length>0 && <tr><td colSpan={7} style={{background:'var(--panel2)',padding:0}}>
                 <table className="t" style={{margin:0}}><tbody>
-                  {r.items.map((it,i)=><tr key={i}>
+                  {r.items.map((it,i)=> editId===it.id
+                    ? <tr key={i}><td colSpan={4} style={{paddingLeft:20,paddingTop:10,paddingBottom:10}}>
+                        <div className="form-row" style={{marginBottom:8}}>
+                          <select className="w-md" value={ef.category_id} onChange={e=>setEf({...ef,category_id:e.target.value})}>
+                            {(categories||[]).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                          <input className="w-sm" type="number" step="0.01" inputMode="decimal" value={ef.amount}
+                            onChange={e=>setEf({...ef,amount:e.target.value})} placeholder="Amount"/>
+                          <input className="w-sm" type="date" value={ef.date}
+                            onChange={e=>setEf({...ef,date:e.target.value})}/>
+                        </div>
+                        <div className="form-row" style={{marginBottom:8}}>
+                          <input value={ef.memo} onChange={e=>setEf({...ef,memo:e.target.value})} placeholder="Memo"/>
+                        </div>
+                        <div style={{display:'flex',gap:8}}>
+                          <button className="btn btn-sm btn-gold" disabled={busy} onClick={saveEdit}>Save</button>
+                          <button className="btn btn-sm" disabled={busy} onClick={()=>setEditId(null)}>Cancel</button>
+                        </div>
+                      </td></tr>
+                    : <tr key={i}>
                     <td style={{paddingLeft:20}}>{it.cat} <span className="badge" style={{background:'var(--panel)',fontSize:10}}>{it.source}</span></td>
                     <td className="faint" style={{fontSize:12.5}}>{it.memo||''}{it.payee?` · ${it.payee}`:''}{it.slack_user?` · @${it.slack_user}`:''}</td>
                     <td className="num mono" style={{width:110}}>{fmt$(it.amount)}</td>
+                    <td style={{width:isOwner&&it.id&&it.source!=='board'?96:1,textAlign:'right',whiteSpace:'nowrap'}}>
+                      {isOwner && it.id && it.source!=='board' && <>
+                        <button className="btn btn-sm" disabled={busy} onClick={()=>startEdit(it)}>Edit</button>
+                        <button className="btn btn-sm btn-danger" disabled={busy} style={{marginLeft:5}} onClick={()=>delItem(it)}>✕</button>
+                      </>}
+                    </td>
                   </tr>)}
                 </tbody></table>
               </td></tr>}
@@ -1415,8 +1476,9 @@ function DailyView({rows, pl, y, m}){
             <td className={'num '+(net>=0?'pos':'neg')}>{fmt$(net)}</td><td></td></tr>
         </tbody>
       </table>
-      <div className="hint">Tap the arrow on a day to see every expense (category, note, payee, source) for auditing who spent what.</div>
+      <div className="hint">Tap the arrow on a day to see every expense (category, note, payee, source){isOwner?'; Edit or ✕ a line to fix or remove it':''}.</div>
     </div>
+    {toast && <div className="toast">{toast}</div>}
   </>;
 }
 
@@ -3546,6 +3608,7 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose
         const wkMax = Math.max(1, ...week.map(d=>d.amount));
         return <div key={c.id} className={'home-card'+(done?' done':'')} onClick={()=>goInsights(c.id)}>
           {done && <div className="hc-check">✓</div>}
+          {p.pending>0 && <div className="hc-pend-badge" style={{right:done?38:14}}><span className="dot warn"></span>{p.pending} pending</div>}
           <div className="hc-code hc-code-big">{c.code}</div>
           <div className="hc-amt"><span className="cur">$</span>{p.sales.toLocaleString('en-US',{maximumFractionDigits:0})}<span className="cur"> today</span></div>
           <div className="hc-cmp">
@@ -3561,7 +3624,6 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose
                   style={{height:Math.max(8,Math.round(d.amount/wkMax*100))+'%'}} title={`${DOW[d.dow]} ${fmt$k(d.amount)}`}></div>)
               : null}
           </div>
-          {p.pending>0 && <div className="hc-status"><span><span className="dot warn"></span>{p.pending} pending</span></div>}
           <div className="hc-actions">
             <button className="hc-btn income" onClick={e=>{e.stopPropagation(); goEntry(c.id,'income');}}>Income</button>
             <button className="hc-btn expense" onClick={e=>{e.stopPropagation(); goEntry(c.id,'expense');}}>Expense</button>
@@ -3807,7 +3869,7 @@ function App(){
     home:      <Home corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} goEntry={goEntry} goInsights={goInsights} goClose={goClose} goApprovals={goApprovals}/>,
     approvals: <Approvals corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner}/>,
     entry:     <Entry corps={storeCorps} canEditIds={canEditIds} profile={profile} presetCorp={entryCorp} presetMode={entryMode}/>,
-    insights:  <Dashboard corps={storeCorps} canEditIds={canEditIds} presetCorp={insightsCorp}/>,
+    insights:  <Dashboard corps={storeCorps} canEditIds={canEditIds} presetCorp={insightsCorp} isOwner={isOwner}/>,
     cash:      <CashPage corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner}/>,
     close:     <ClosePage corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} preset={closePreset}/>,
     investor:  <InvestorPortal corps={isOwner?storeCorps:viewCorps}/>,
