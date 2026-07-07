@@ -1080,15 +1080,17 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
   const [compareStores, setCompareStores] = useState(false);
   const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(true);
+  const loadingRef = React.useRef(true);
+  React.useEffect(()=>{ loadingRef.current = loading; },[loading]);
   const [refresh, setRefresh] = useState(0);   // bump to reload after edit/delete
   // Auto-refresh when the user returns to the app (switched tabs/apps, e.g. came back
   // from checking Slack), and periodically while it stays open, so new data (payroll,
-  // expenses booked elsewhere) shows without a manual reload. Throttled so rapid
-  // focus/blur doesn't spam queries.
+  // expenses booked elsewhere) shows without a manual reload. Throttled, and it never
+  // interrupts an in-progress load (which previously could leave it stuck loading).
   useEffect(()=>{
-    let last=Date.now();
-    const bump=()=>{ if(document.visibilityState!=='visible') return; const now=Date.now();
-      if(now-last<15000) return; last=now; setRefresh(x=>x+1); };
+    let last=Date.now();   // start the clock now so the initial focus doesn't refetch
+    const bump=()=>{ if(document.visibilityState!=='visible') return; if(loadingRef.current) return;
+      const now=Date.now(); if(now-last<15000) return; last=now; setRefresh(x=>x+1); };
     window.addEventListener('focus', bump);
     document.addEventListener('visibilitychange', bump);
     const iv=setInterval(bump, 90000);
@@ -1112,7 +1114,12 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
   const [cmpDate, setCmpDate] = useState(()=>todayStr());
 
   useEffect(()=>{ if(!corpId) return; let dead=false; setLoading(true);
+    // Safety net: whatever happens (thrown error, dropped promise, slow network, a
+    // superseded run), never leave the page stuck on "Loading..." forever. If loading
+    // hasn't cleared in 4s, clear it so whatever data arrived is shown.
+    const safety = setTimeout(()=>{ if(!dead) setLoading(false); }, 4000);
     (async()=>{
+     try{
       const mt = await loadCorpMeta(corpId); if(dead) return; setMeta(mt);
 
       if(view==='month'){
@@ -1178,9 +1185,10 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
       else if(view==='alltime'){
         const at = await loadAllTimePL(corpId,mt); if(dead) return; setAllTime(at);
       }
-      setLoading(false);
+     }catch(e){ if(!dead) console.error('Insights load failed', e); }
+     finally{ clearTimeout(safety); if(!dead) setLoading(false); }
     })();
-    return ()=>{dead=true};
+    return ()=>{dead=true; clearTimeout(safety);};
   },[corpId,y,m,view,yearMode,refresh]);
 
   // load side-by-side comparison for the selected stores + chosen period
