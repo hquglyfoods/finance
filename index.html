@@ -444,11 +444,12 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .home-card .hc-name{font-family:var(--font-d);font-size:16px;font-weight:700;letter-spacing:-0.01em;margin:4px 0 12px;line-height:1.25;
   min-height:2.5em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .home-card .progress-lbl{margin-bottom:0}
-.home-card .hc-actions{margin-top:auto;display:flex;gap:6px;padding-top:4px}
-.home-card .hc-btn{flex:1;padding:9px 4px;border-radius:8px;border:none;font-weight:700;font-size:13px;cursor:pointer;color:#FFFFFF;box-shadow:0 1px 3px rgba(0,0,0,0.12);transition:filter .15s, box-shadow .15s}
-.home-card .hc-btn:hover{filter:brightness(1.06);box-shadow:0 2px 6px rgba(0,0,0,0.18)}
-.home-card .hc-btn.income{background:var(--green)}
-.home-card .hc-btn.expense{background:var(--red)}
+.home-card .hc-actions{margin-top:auto;display:flex;gap:7px;padding-top:4px}
+.home-card .hc-btn{flex:1;padding:9px 4px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;border:1px solid transparent;transition:background .15s, border-color .15s}
+.home-card .hc-btn.income{background:var(--green-dim);color:var(--green);border-color:rgba(46,125,79,0.22)}
+.home-card .hc-btn.income:hover{background:#DCEDE2;border-color:rgba(46,125,79,0.4)}
+.home-card .hc-btn.expense{background:var(--red-dim);color:var(--red);border-color:rgba(192,57,43,0.22)}
+.home-card .hc-btn.expense:hover{background:#F6DFDB;border-color:rgba(192,57,43,0.4)}
 .home-card .hc-enter{margin-top:auto;width:100%;padding:10px;border-radius:8px;border:1px solid var(--gold-soft);background:var(--panel);color:var(--gold-strong);font-weight:600;font-size:13px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,0.04);transition:background .15s, box-shadow .15s}
 .home-card .hc-enter:hover{background:var(--gold-dim);box-shadow:0 2px 6px rgba(0,0,0,0.08)}
 .home-card .hc-amt{font-family:var(--font-d);font-weight:800;font-size:25px;letter-spacing:-0.02em;margin-bottom:12px}
@@ -1977,6 +1978,7 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
   const [inst, setInst] = useState({name:'', category_id:'', amount:'', day_of_month:'1', months:'3', start:todayStr(), payee:''});
   const [sched, setSched] = useState(null);
   const [edit, setEdit] = useState(null);   // full-edit an existing recurring row
+  const [catOpen, setCatOpen] = useState(false);   // Expense Categories folded by default
   const [newCat, setNewCat] = useState('');
   const [toast, showToast] = useToast();
 
@@ -2004,18 +2006,25 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
     if(!inst.name||!inst.category_id||!inst.amount||!inst.months){ showToast('Enter a name, category, amount, and number of months'); return; }
     const n = parseInt(inst.months); if(!(n>=1)){ showToast('Months must be 1 or more'); return; }
     const dom = parseInt(inst.day_of_month);
-    // end_date = the day-of-month in the (n-1)th month after start, so exactly n payments run
     const sd = new Date(inst.start+'T00:00');
-    const endM = new Date(sd.getFullYear(), sd.getMonth()+(n-1), 1);
-    const endDom = Math.min(dom, lastDay(endM.getFullYear(), endM.getMonth()+1));
-    const end = `${endM.getFullYear()}-${pad(endM.getMonth()+1)}-${pad(endDom)}`;
+    // first charge = the day-of-month on or after the start date. If that day has
+    // already passed in the start month, the first payment is next month.
+    const domIn = (y,mo)=> dom===99 ? lastDay(y,mo) : Math.min(dom, lastDay(y,mo));
+    let fy=sd.getFullYear(), fmo=sd.getMonth()+1;         // 1-based month
+    if(sd.getDate() > domIn(fy,fmo)){ fmo++; if(fmo>12){fmo=1;fy++;} }
+    const firstDom = domIn(fy,fmo);
+    const first = `${fy}-${pad(fmo)}-${pad(firstDom)}`;
+    // last charge = (n-1) months after the first charge
+    const lm = new Date(fy, (fmo-1)+(n-1), 1);
+    const ly=lm.getFullYear(), lmo=lm.getMonth()+1;
+    const last = `${ly}-${pad(lmo)}-${pad(domIn(ly,lmo))}`;
     const { error } = await sb.from('recurring_expenses').insert({
       corporation_id:corpId, category_id:inst.category_id, name:inst.name, payee:inst.payee||null,
       amount:parseFloat(inst.amount), frequency:'monthly', day_of_month:dom,
-      start_date:inst.start, end_date:end, installment_total:n });
+      start_date:first, end_date:last, installment_total:n });
     if(error){ showToast('Save failed: '+error.message); return; }
     setInst({name:'',category_id:'',amount:'',day_of_month:'1',months:'3',start:todayStr(),payee:''});
-    showToast(`Installment added: ${n} payments`); reload();
+    showToast(`Installment added: ${n} payment${n>1?'s':''}, first on ${first}`); reload();
   };
   const toggle = async r=>{
     await sb.from('recurring_expenses').update({active:!r.active}).eq('id',r.id); reload();
@@ -2126,31 +2135,36 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
         <CorpTabs corps={editable} sel={corpId} onSel={setCorpId}/>
       </div>
     </div>
-    {isOwner && <div className="card">
-      <h3>Expense Categories</h3>
-      <div className="hint" style={{marginTop:0,marginBottom:10}}>Create a category for anything you want as its own line on the P&L, like Accounting, Toast Fee, or Trash Removal.</div>
-      <div className="form-row">
-        <input placeholder="Category name (e.g. Accounting, Toast Fee, Trash Removal)" value={newCat} onChange={e=>setNewCat(e.target.value)}/>
-        <button className="btn" style={{flex:'0 0 auto'}} onClick={addCategory}>Add Category</button>
-      </div>
-      {meta && meta.categories.length>0 && <table className="t" style={{marginTop:14}}><tbody>
-        {meta.categories.map(c=><tr key={c.id} style={{opacity:c.active?1:0.5}}>
-          <td>{c.name}
-            {c.protected && <span className="badge gold">Auto</span>}
-            {!c.active && <span className="badge" style={{background:'var(--panel2)'}}>Hidden</span>}
-            {c.investor_group && <span className="faint" style={{fontSize:11}}> · shown as "{c.investor_group}" to investors</span>}
-          </td>
-          <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
-            {c.active
-              ? <>
-                  {!c.protected && <button className="btn btn-sm" onClick={()=>renameCategory(c)}>Rename</button>}
-                  {!c.protected && <button className="btn btn-sm btn-danger" style={{marginLeft:6}} onClick={()=>deleteCategory(c)}>Delete</button>}
-                  {c.protected && <span className="faint" style={{fontSize:12}}>protected</span>}
-                </>
-              : <button className="btn btn-sm" onClick={()=>restoreCategory(c)}>Restore</button>}
-          </td>
-        </tr>)}
-      </tbody></table>}
+    {isOwner && <div className="card wc-card">
+      <button className="wc-head" onClick={()=>setCatOpen(o=>!o)}>
+        <span className="wc-title">Expense Categories {meta && meta.categories.length>0 && <span className="wc-count">{meta.categories.length}</span>}</span>
+        <span className="wc-chev">{catOpen?'▲':'▾'}</span>
+      </button>
+      {catOpen && <div style={{padding:'0 18px 18px'}}>
+        <div className="hint" style={{marginTop:0,marginBottom:10}}>Create a category for anything you want as its own line on the P&L, like Accounting, Toast Fee, or Trash Removal.</div>
+        <div className="form-row">
+          <input placeholder="Category name (e.g. Accounting, Toast Fee, Trash Removal)" value={newCat} onChange={e=>setNewCat(e.target.value)}/>
+          <button className="btn" style={{flex:'0 0 auto'}} onClick={addCategory}>Add Category</button>
+        </div>
+        {meta && meta.categories.length>0 && <table className="t" style={{marginTop:14}}><tbody>
+          {meta.categories.map(c=><tr key={c.id} style={{opacity:c.active?1:0.5}}>
+            <td>{c.name}
+              {c.protected && <span className="badge gold">Auto</span>}
+              {!c.active && <span className="badge" style={{background:'var(--panel2)'}}>Hidden</span>}
+              {c.investor_group && <span className="faint" style={{fontSize:11}}> · shown as "{c.investor_group}" to investors</span>}
+            </td>
+            <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+              {c.active
+                ? <>
+                    {!c.protected && <button className="btn btn-sm" onClick={()=>renameCategory(c)}>Rename</button>}
+                    {!c.protected && <button className="btn btn-sm btn-danger" style={{marginLeft:6}} onClick={()=>deleteCategory(c)}>Delete</button>}
+                    {c.protected && <span className="faint" style={{fontSize:12}}>protected</span>}
+                  </>
+                : <button className="btn btn-sm" onClick={()=>restoreCategory(c)}>Restore</button>}
+            </td>
+          </tr>)}
+        </tbody></table>}
+      </div>}
     </div>}
     {isOwner && <div className="card">
       <h3>New Recurring Expense</h3>
@@ -2202,8 +2216,17 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
         <input placeholder="Memo (optional)" value={inst.payee} onChange={e=>setInst({...inst,payee:e.target.value})}/>
         <button className="btn btn-gold" style={{flex:'0 0 auto'}} onClick={addInstallment}>Add</button>
       </div>
-      {inst.amount && inst.months && parseInt(inst.months)>=1 &&
-        <div className="hint" style={{marginTop:4}}>Total over {parseInt(inst.months)} month{parseInt(inst.months)>1?'s':''}: <b>{fmt$(parseFloat(inst.amount||0)*parseInt(inst.months))}</b></div>}
+      {inst.amount && inst.months && parseInt(inst.months)>=1 && (()=>{
+        const n=parseInt(inst.months); const dom=parseInt(inst.day_of_month);
+        const sd=new Date((inst.start||todayStr())+'T00:00');
+        const domIn=(y,mo)=> dom===99 ? lastDay(y,mo) : Math.min(dom, lastDay(y,mo));
+        let fy=sd.getFullYear(), fmo=sd.getMonth()+1;
+        if(sd.getDate() > domIn(fy,fmo)){ fmo++; if(fmo>12){fmo=1;fy++;} }
+        const first=`${fy}-${pad(fmo)}-${pad(domIn(fy,fmo))}`;
+        const lm=new Date(fy,(fmo-1)+(n-1),1); const ly=lm.getFullYear(), lmo=lm.getMonth()+1;
+        const last=`${ly}-${pad(lmo)}-${pad(domIn(ly,lmo))}`;
+        return <div className="hint" style={{marginTop:4}}>Total over {n} month{n>1?'s':''}: <b>{fmt$(parseFloat(inst.amount||0)*n)}</b> · first charge <b>{first}</b>, last <b>{last}</b></div>;
+      })()}
     </div>}
     <div className="card">
       <h3>Registered Recurring Expenses</h3>
@@ -2215,7 +2238,7 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
             {r.installment_total && <span className="badge gold" style={{marginLeft:6}}>Installment</span>}</td>
           <td>{catName(r.category_id)}</td>
           <td>{r.frequency==='weekly' ? 'Weekly · '+DOW[r.day_of_week] : 'Monthly · '+(r.day_of_month===99?'Last day':'Day '+r.day_of_month)}
-            {r.installment_total && <div className="faint" style={{fontSize:11}}>{r.installment_total} payments · ends {r.end_date}</div>}
+            {r.installment_total && <div className="faint" style={{fontSize:11}}>{r.installment_total} payment{r.installment_total>1?'s':''} · {r.start_date} → {r.end_date}</div>}
           </td>
           <td className="num">{fmt$(Number(r.amount))}
             {r.next_amount!=null && r.next_amount_from && <div className="faint" style={{fontSize:11}}>→ {fmt$(Number(r.next_amount))} from {r.next_amount_from}</div>}
