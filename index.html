@@ -382,6 +382,20 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .ss-margin{font-size:12px;color:var(--gold-strong);margin-top:3px;font-weight:600}
 .stmt-notes{margin:18px 26px 0;background:var(--panel2);border-left:3px solid var(--gold);border-radius:0 8px 8px 0;padding:14px 16px;font-size:13.5px;color:var(--text2);white-space:pre-wrap}
 .stmt-notes-lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--gold-strong);font-weight:700;margin-bottom:5px}
+.stmt-bigpic{padding:20px 26px 4px}
+.stmt-yoy{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+.syoy-item{background:var(--panel2);border:1px solid var(--border-soft);border-radius:10px;padding:13px 15px}
+.syoy-lbl{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px}
+.syoy-row{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.syoy-now{font-family:var(--font-d);font-size:20px;font-weight:700;letter-spacing:-0.01em}
+.syoy-prev{font-size:12px;color:var(--text3);font-family:var(--font-m)}
+.stmt-ytd{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--border-soft);border-radius:10px;overflow:hidden;margin-bottom:18px}
+.sytd-item{background:var(--panel);padding:13px 16px;text-align:center}
+.sytd-lbl{font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+.sytd-val{font-family:var(--font-d);font-size:18px;font-weight:700}
+.stmt-trend{margin-top:6px}
+.stmt-trend-h{font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;font-weight:600}
+@media(max-width:640px){ .stmt-yoy{grid-template-columns:1fr} .stmt-bigpic{padding:16px 18px 4px} }
 .stmt-cols{display:grid;grid-template-columns:1fr 1fr;gap:26px;padding:22px 26px 8px}
 .stmt-block-h{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--text2);font-weight:700;padding-bottom:8px;border-bottom:1px solid var(--border);margin-bottom:4px}
 .stmt-table{width:100%;border-collapse:collapse}
@@ -3083,7 +3097,56 @@ function ClosePage({corps, canEditIds, profile, isOwner, preset}){
 // Renders one monthly statement in the exact layout investors see. Used by the
 // investor portal and by the Close & Publish preview so the owner sees precisely
 // what will be published.
-function StatementView({corpName, year, month, summary, notes, files, publishedAt, onDownload, previewLabel}){
+// A calm, investor-facing trend chart: sales as bars, net profit as a line, over the
+// trailing 12 published months. Designed to read as reassuring and clear rather than
+// dense. `series` = [{label, sales, net}] oldest->newest.
+function InvestorTrend({series}){
+  const [sel,setSel]=React.useState(null);
+  if(!series || series.length<2) return null;
+  const W=Math.max(520, series.length*46), H=200, padL=52, padR=14, padB=30, padT=18;
+  const plotH=H-padB-padT;
+  const maxSales=Math.max(1,...series.map(p=>p.sales));
+  const step=niceStep(maxSales,4); const axisMax=Math.ceil(maxSales/step)*step;
+  const barY=v=>padT+plotH*(1-v/axisMax); const baseY=padT+plotH;
+  const nets=series.map(p=>p.net); const maxNet=Math.max(0,...nets), minNet=Math.min(0,...nets);
+  const netSpan=(maxNet-minNet)||1; const netY=v=>padT+plotH*(1-(v-minNet)/netSpan);
+  const gap=(W-padL-padR)/series.length; const cx=i=>padL+gap*i+gap/2;
+  const bw=Math.min(24,gap*0.5);
+  const grid=[]; for(let g=0; g<=axisMax+1e-6; g+=step) grid.push(g);
+  return <div className="chart-wrap">
+    <svg width={W} height={H} onMouseLeave={()=>setSel(null)} style={{maxWidth:'100%'}}>
+      {grid.map((g,i)=><g key={i}>
+        <line x1={padL} x2={W-padR} y1={barY(g)} y2={barY(g)} stroke={i===0?'#E7E4DD':'#F0EEE9'} strokeWidth="1"/>
+        <text x={padL-8} y={barY(g)+3} fontSize="9.5" fill="#948B7C" textAnchor="end" fontFamily="IBM Plex Mono">{fmt$k(g)}</text>
+      </g>)}
+      {minNet<0 && <line x1={padL} x2={W-padR} y1={netY(0)} y2={netY(0)} stroke="#D8D3C9" strokeWidth="1" strokeDasharray="3 3"/>}
+      {series.map((p,i)=>{ const x=cx(i), h=baseY-barY(p.sales), on=sel===i;
+        return <g key={i} onPointerDown={()=>setSel(i)} onMouseEnter={()=>setSel(i)} style={{cursor:'pointer'}}>
+          <rect x={x-gap/2} y={padT} width={gap} height={plotH} fill="transparent"/>
+          <rect x={x-bw/2} y={barY(p.sales)} width={bw} height={Math.max(0,h)} fill={on?'#B08A1E':'#D9C079'} rx="2"/>
+          <text x={x} y={H-10} fontSize="9.5" fill="#948B7C" textAnchor="middle" fontFamily="IBM Plex Mono">{p.label}</text>
+        </g>;
+      })}
+      <polyline fill="none" stroke="#2E7D4F" strokeWidth="2" pointerEvents="none"
+        points={series.map((p,i)=>`${cx(i)},${netY(p.net)}`).join(' ')}/>
+      {series.map((p,i)=><circle key={i} cx={cx(i)} cy={netY(p.net)} r={sel===i?4.5:3} fill={p.net>=0?'#2E7D4F':'#C0392B'} pointerEvents="none"/>)}
+      {sel!==null && (()=>{ const p=series[sel], x=cx(sel), tw=132, th=44;
+        const tx=Math.min(Math.max(x-tw/2,padL),W-padR-tw), ty=Math.max(padT, barY(p.sales)-th-8);
+        return <g pointerEvents="none">
+          <rect x={tx} y={ty} width={tw} height={th} rx="6" fill="#2A2620" opacity="0.96"/>
+          <text x={tx+11} y={ty+18} fontSize="11" fill="#F4D77E" fontFamily="IBM Plex Mono">Revenue {fmt$k(p.sales)}</text>
+          <text x={tx+11} y={ty+33} fontSize="11" fill={p.net>=0?'#8FD3AC':'#E88'} fontFamily="IBM Plex Mono">Net {fmt$k(p.net)}</text>
+        </g>; })()}
+    </svg>
+    <div className="legend">
+      <span><span className="sw" style={{background:'#D9C079'}}></span>Revenue</span>
+      <span><span className="sw" style={{background:'#2E7D4F'}}></span>Net profit</span>
+      <span className="faint">Trailing published months</span>
+    </div>
+  </div>;
+}
+
+function StatementView({corpName, year, month, summary, notes, files, publishedAt, onDownload, previewLabel, trend, yoy, ytd, showBigPicture}){
   const s = summary||{};
   const rev = (s.revenue||[]).filter(x=>x.amount!==0);
   const exp = (s.expenses||[]).filter(x=>x.amount!==0);
@@ -3103,6 +3166,31 @@ function StatementView({corpName, year, month, summary, notes, files, publishedA
         <div className={'ss-val '+((s.net_profit||0)>=0?'pos':'neg')}>{fmt$(s.net_profit)}</div>
         {margin!==null && <div className="ss-margin">{fmtPct(margin)} margin</div>}</div>
     </div>
+    {showBigPicture && (trend||yoy||ytd) && <div className="stmt-bigpic">
+      {yoy && <div className="stmt-yoy">
+        <div className="syoy-item">
+          <div className="syoy-lbl">Revenue vs {MONTHS[month-1]} {year-1}</div>
+          <div className="syoy-row"><span className="syoy-now">{fmt$(summary.total_sales,0)}</span>
+            <span className="syoy-prev">was {fmt$(yoy.total_sales,0)}</span>
+            <YoYDelta cur={summary.total_sales} prev={yoy.total_sales} bare/></div>
+        </div>
+        <div className="syoy-item">
+          <div className="syoy-lbl">Net profit vs {MONTHS[month-1]} {year-1}</div>
+          <div className="syoy-row"><span className="syoy-now">{fmt$(summary.net_profit,0)}</span>
+            <span className="syoy-prev">was {fmt$(yoy.net_profit,0)}</span>
+            <YoYDelta cur={summary.net_profit} prev={yoy.net_profit} bare/></div>
+        </div>
+      </div>}
+      {ytd && <div className="stmt-ytd">
+        <div className="sytd-item"><div className="sytd-lbl">{year} Revenue to date</div><div className="sytd-val">{fmt$(ytd.sales,0)}</div></div>
+        <div className="sytd-item"><div className="sytd-lbl">{year} Net to date</div><div className={'sytd-val '+(ytd.net>=0?'pos':'neg')}>{fmt$(ytd.net,0)}</div></div>
+        <div className="sytd-item"><div className="sytd-lbl">{year} Margin to date</div><div className="sytd-val">{fmtPct(ytd.sales?ytd.net/ytd.sales:null)}</div></div>
+      </div>}
+      {trend && trend.length>=2 && <div className="stmt-trend">
+        <div className="stmt-trend-h">Revenue &amp; net profit, trailing {trend.length} months</div>
+        <InvestorTrend series={trend}/>
+      </div>}
+    </div>}
     {notes && <div className="stmt-notes"><div className="stmt-notes-lbl">Note from HQ</div>{notes}</div>}
     <div className="stmt-cols">
       <div className="stmt-block">
@@ -3139,7 +3227,7 @@ function InvestorPortal({corps}){
       setReports(null);
       const mc = await sb.from('monthly_close').select('*').eq('corporation_id',corpId)
         .eq('status','published').order('year',{ascending:false}).order('month',{ascending:false});
-      const rows = mc.data||[];
+      const rows = (mc.data||[]).slice().sort((a,b)=> b.year!==a.year ? b.year-a.year : b.month-a.month);
       const ids = rows.map(r=>r.id);
       let filesBy = {};
       if(ids.length){
@@ -3165,11 +3253,28 @@ function InvestorPortal({corps}){
     </div>
     {reports===null ? <Spinner/> : reports.length===0 ?
       <div className="card faint">No reports published yet.</div> :
-      reports.map(r=>{
+      (()=>{
         const corp = corps.find(c=>c.id===corpId);
-        return <StatementView key={r.id} corpName={corp?corp.name:''} year={r.year} month={r.month}
-          summary={r.summary||{}} notes={r.notes} files={r.files} publishedAt={r.published_at} onDownload={download}/>;
-      })}
+        // Build the big-picture context from all published months (reports is newest-first).
+        const byKey = {}; reports.forEach(r=>{ byKey[`${r.year}-${r.month}`] = r; });
+        // trailing-12 series for the newest report, oldest->newest
+        const newest = reports[0];
+        const trailing = [];
+        let ty=newest.year, tm=newest.month;
+        for(let i=0;i<12;i++){ const r=byKey[`${ty}-${tm}`];
+          if(r) trailing.unshift({label:`${String(ty).slice(2)}/${pad(tm)}`, sales:(r.summary&&r.summary.total_sales)||0, net:(r.summary&&r.summary.net_profit)||0});
+          tm--; if(tm<1){tm=12;ty--;} }
+        const yoyRep = byKey[`${newest.year-1}-${newest.month}`];
+        const yoy = yoyRep ? {total_sales:(yoyRep.summary&&yoyRep.summary.total_sales)||0, net_profit:(yoyRep.summary&&yoyRep.summary.net_profit)||0} : null;
+        // YTD for the newest report's year, only months up to the newest published month
+        let ytdS=0, ytdN=0, ytdAny=false;
+        reports.forEach(r=>{ if(r.year===newest.year && r.month<=newest.month){ ytdS+=(r.summary&&r.summary.total_sales)||0; ytdN+=(r.summary&&r.summary.net_profit)||0; ytdAny=true; } });
+        const ytd = ytdAny ? {sales:ytdS, net:ytdN} : null;
+        return reports.map((r,idx)=>
+          <StatementView key={r.id} corpName={corp?corp.name:''} year={r.year} month={r.month}
+            summary={r.summary||{}} notes={r.notes} files={r.files} publishedAt={r.published_at} onDownload={download}
+            trend={idx===0?trailing:null} yoy={idx===0?yoy:null} ytd={idx===0?ytd:null} showBigPicture={idx===0}/>);
+      })()}
   </div>;
 }
 

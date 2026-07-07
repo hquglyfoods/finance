@@ -1,22 +1,22 @@
-# Ugly Finance Tool - fix the root cause of Insights getting stuck on "Loading..."
+# Ugly Finance Tool - investor monthly report: the big picture (part 1 of 2)
 
-Two real root causes found and fixed (beyond the earlier safety-timeout band-aids):
+The investor Reports view now leads with a "big picture" block on the most recent
+published month, built entirely from published data (nothing internal is exposed):
 
-1) EMPTY STORE SELECTION = permanent spinner. On first render, if the corp list hadn't
-   loaded yet, the selected store id was undefined. The loader bailed out with an early
-   `return` WITHOUT clearing the loading flag, so the page sat on "Loading..." forever
-   (the store id never got set afterward because it was only computed once). Now: if no
-   store is selected the loader clears loading instead of hanging, AND a new effect picks
-   the first available store as soon as the list loads.
+- 12-MONTH TREND chart: revenue as bars, net profit as a line, over the trailing
+  published months. Calm, tap-for-values, investor-friendly styling.
+- YEAR-OVER-YEAR: this month's revenue and net profit vs the same month last year, each
+  with the prior figure and the % change.
+- YEAR TO DATE: revenue, net, and margin for the current year through the latest
+  published month.
 
-2) RACE BETWEEN RELOADS. Rapidly changing store/month/view (or a background refresh
-   landing mid-load) could supersede an in-flight load. The old per-run "dead" flag could
-   leave loading set if runs overlapped just so. Replaced with a generation counter:
-   only the LATEST run controls the loading flag, and the latest run ALWAYS clears it -
-   on success, on error, or via the 4s safety timeout. Same fix applied to the Compare
-   Stores loader.
+Only the newest report shows this big-picture block; older months keep the clean
+single-month statement, so scrolling back stays simple.
 
-Verified: normal load clears; rapid store switching clears; rapid month switching
-clears; no stuck spinner in any case.
+Verified with 14 published months: newest = July 2026, 12 trend bars, YoY "vs July 2025",
+YTD 2026 = revenue $1,203,000 / net $173,000 / margin 14.4%.
 
-No SQL this round.
+Next (part 2): the Annual (year-end) closing + annual investor report. Coming in a
+follow-up build.
+
+No SQL this round (uses existing published monthly_close snapshots).
