@@ -148,6 +148,9 @@ a{color:var(--gold);text-decoration:none}
 .autoapprove-opt .aa-label{font-weight:700;font-size:14px}
 .autoapprove-opt .aa-current{margin-left:auto;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}
 .autoapprove-opt .aa-desc{margin-top:4px;font-size:12.5px;color:var(--text2);line-height:1.45}
+.cal-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.cal-nav{flex:0 0 auto;width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);font-size:18px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+.cal-nav:hover{border-color:var(--gold);color:var(--gold)}
 .settings-tab.on{background:var(--gold-dim);border-color:var(--gold-soft);color:var(--gold-strong)}
 .corp-tab{padding:7px 14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text2);font-weight:500;font-size:13px;cursor:pointer}
 .corp-tab.on{border-color:var(--gold-soft);color:var(--gold-strong);background:var(--gold-dim)}
@@ -2594,7 +2597,13 @@ function CashPage({corps, canEditIds, profile, isOwner}){
     </div>}
     <div className="grid2">
       <div className="card">
-        <h3>Cash Calendar</h3>
+        <div className="cal-head">
+          <button type="button" className="cal-nav" aria-label="Previous month"
+            onClick={()=>{ if(m===1){ setY(y-1); setM(12); } else setM(m-1); }}>&#8249;</button>
+          <h3 style={{margin:0}}>Cash Calendar &middot; {MONTHS[m-1]} {y}</h3>
+          <button type="button" className="cal-nav" aria-label="Next month"
+            onClick={()=>{ if(m===12){ setY(y+1); setM(1); } else setM(m+1); }}>&#8250;</button>
+        </div>
         <div className="cal">
           {DOW.map(d=><div key={d} className="dow">{d}</div>)}
           {cells.map((d,i)=>{
