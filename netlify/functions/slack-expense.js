@@ -278,14 +278,30 @@ exports.handler = async (event) => {
   try { parsed = await parseWithClaude(text, images, cats || [], learnings || []); }
   catch (e) { console.log('SLACK_PARSE_FAILED', e.message, 'images:', images.length); return { statusCode: 200, body: 'parse failed: ' + e.message }; }
 
+  // Diagnostic: log exactly what Claude returned. A photo that produces no expense is
+  // dropped by one of the guards below; this line shows WHICH result caused it (classified
+  // as non-expense vs no readable amount) instead of the message vanishing silently.
+  console.log('SLACK_PARSED', JSON.stringify({
+    not_an_expense: parsed.not_an_expense === true,
+    amount: Number(parsed.amount || 0),
+    category: parsed.category || null,
+    confident: parsed.confident === true,
+    summary: (parsed.summary || '').slice(0, 120),
+    images: images.length,
+  }));
+
   // Non-expense messages (coin box / cash count reports, sales/deposit reports,
   // attendance notes) must NOT be booked as expenses.
   if (parsed.not_an_expense === true || (Number(parsed.amount || 0) === 0 && parsed.confident === false && !images.length)) {
+    console.log('SLACK_SKIP_NOT_EXPENSE', JSON.stringify({ not_an_expense: parsed.not_an_expense === true, amount: Number(parsed.amount || 0), confident: parsed.confident === true, images: images.length }));
     return { statusCode: 200, body: 'not an expense, skipped' };
   }
 
   const amount = Number(parsed.amount || 0);
-  if (amount <= 0) return { statusCode: 200, body: 'no positive amount, skipped' };
+  if (amount <= 0) {
+    console.log('SLACK_SKIP_ZERO_AMOUNT', JSON.stringify({ amount, confident: parsed.confident === true, images: images.length, summary: (parsed.summary || '').slice(0, 80) }));
+    return { statusCode: 200, body: 'no positive amount, skipped' };
+  }
   const cat = (cats || []).find(c => c.name === parsed.category)
     || (cats || []).find(c => c.code === 'others')
     || (cats || [])[0];
@@ -311,7 +327,7 @@ exports.handler = async (event) => {
   const status = familiar ? 'confirmed' : 'pending';
   if (familiar) memoBits.push('[auto-approved: matches a past approval]');
 
-  await admin.from('expenses').insert({
+  const { error: insErr } = await admin.from('expenses').insert({
     corporation_id: corp.id, category_id: cat.id, date: iso,
     amount: +amount.toFixed(2), memo: memoBits.join(' ').slice(0, 300),
     source: 'slack', status, method: 'cash',
@@ -319,6 +335,8 @@ exports.handler = async (event) => {
   });
   // A Supabase database webhook on expenses INSERT (status=pending) fires
   // push-notify to owner/assistant. No direct call needed here.
+  if (insErr) { console.log('SLACK_INSERT_FAILED', insErr.message || String(insErr)); return { statusCode: 200, body: 'insert failed: ' + (insErr.message || '') }; }
+  console.log('SLACK_INSERTED', JSON.stringify({ amount: +amount.toFixed(2), category: cat.name, status, date: iso }));
 
   return { statusCode: 200, body: familiar ? 'ok (auto-confirmed)' : 'ok (pending)' };
 };
