@@ -302,6 +302,30 @@ exports.handler = async (event) => {
     console.log('SLACK_SKIP_ZERO_AMOUNT', JSON.stringify({ amount, confident: parsed.confident === true, images: images.length, summary: (parsed.summary || '').slice(0, 80) }));
     return { statusCode: 200, body: 'no positive amount, skipped' };
   }
+
+  // Amount-window dedup. An employee sometimes posts the receipt PHOTO and then, in a
+  // SEPARATE message, the same purchase as text. Those are two different Slack messages
+  // (different slack_ts), so the exact-ts dedup near the top can't catch them. Rule: a new
+  // expense is a duplicate when the SAME store already has a Slack expense of the SAME
+  // amount (to the cent) within 12 hours. The window is measured on real event time via
+  // slack_ts, so it also catches a re-post that crosses midnight. Tradeoff (accepted): two
+  // genuinely separate purchases of the identical amount at one store within 12h will be
+  // treated as one; the skip is logged so it can be added manually if that ever happens.
+  const DEDUP_WINDOW_SECS = 12 * 3600;
+  const evSec = Number(ev.ts);
+  const centAmount = +amount.toFixed(2);
+  const { data: sameAmt } = await admin.from('expenses')
+    .select('id, slack_ts, date')
+    .eq('corporation_id', corp.id).eq('source', 'slack').eq('amount', centAmount)
+    .order('slack_ts', { ascending: false }).limit(25);
+  const dupWin = (sameAmt || []).find(r => r.slack_ts
+    && Number.isFinite(Number(r.slack_ts))
+    && Math.abs(evSec - Number(r.slack_ts)) <= DEDUP_WINDOW_SECS);
+  if (dupWin) {
+    console.log('SLACK_DUP_AMOUNT_WINDOW', JSON.stringify({ amount: centAmount, corp: corpCode, matched_id: dupWin.id, matched_ts: dupWin.slack_ts, new_ts: ev.ts }));
+    return { statusCode: 200, body: 'duplicate amount within 12h, skipped' };
+  }
+
   const cat = (cats || []).find(c => c.name === parsed.category)
     || (cats || []).find(c => c.code === 'others')
     || (cats || [])[0];
