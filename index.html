@@ -210,15 +210,24 @@ a{color:var(--gold);text-decoration:none}
 .rev-pct{font-size:11px;color:var(--text3);font-family:var(--font-m);margin-top:3px;text-align:right}
 .cell-margin{display:none}
 .chev-td{width:40px;text-align:right}
+/* Amt: default (desktop) shows the exact value; the rounded version is hidden. Mobile
+   daily table flips this to save width. */
+.amt-round{display:none}
+.amt-exact{display:inline}
 /* small last-year revenue shown under the Sales figure on mobile (e.g. '25 $44,080);
    desktop shows last-year revenue in its own column instead */
 .ly-under{display:none;font-size:9.5px;color:var(--text3);font-family:var(--font-m);margin-top:1px;line-height:1}
-/* expanded expense lines: long notes truncate with an ellipsis and expand on tap,
-   so column widths stay stable no matter how long a description is */
-.memo-cell{color:var(--text2);font-size:12.5px}
-.memo-cell .memo-txt{display:block;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
-.memo-cell .memo-txt.open{white-space:normal;overflow:visible;max-width:none;word-break:break-word}
-.amt-cell{width:110px}
+/* expanded expense line: a clean flex row - name/badge (and optional note) on the left,
+   amount and actions aligned on the right. Reads the same on desktop and mobile; long
+   names wrap without shoving the amount around. */
+.exp-line-td{padding:0 !important;background:var(--panel2)}
+.exp-line{display:flex;align-items:center;gap:10px;padding:10px 14px 10px 20px;border-bottom:1px solid var(--border-soft)}
+.exp-line-main{flex:1;min-width:0}
+.exp-line-name{font-size:13.5px;color:var(--text);line-height:1.3}
+.exp-line-memo{font-size:12px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.exp-line-memo.open{white-space:normal;word-break:break-word}
+.exp-line-amt{font-size:13.5px;font-weight:600;white-space:nowrap;text-align:right}
+.exp-line-act{display:flex;gap:6px;flex-shrink:0}
 /* store comparison */
 .cmp-chips{display:flex;gap:8px;flex-wrap:wrap}
 .cmp-period{display:inline-flex;gap:2px;background:var(--panel2);border-radius:9px;padding:3px;margin-bottom:12px}
@@ -459,16 +468,16 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   table.t.daily-t td:first-child,table.t.daily-t th:first-child{padding-left:2px}
   /* the daily card gets slimmer side padding so the 4-column table fits comfortably */
   .daily-card{padding-left:10px;padding-right:10px}
-  .daily-t .cents{display:none}
+  .daily-t .amt-exact{display:none}
+  .daily-t .amt-round{display:inline}
   .daily-t .chev-td{width:26px}
   table.t.daily-t .chev-td .btn{padding:3px 8px;font-size:11px;box-shadow:none}
-  /* expanded expense lines on mobile: hide the long description column entirely, and let
-     the category name wrap to two lines so long names don't widen the table */
+  /* expanded expense lines on mobile: hide the long note, tighten spacing so each line
+     stays compact and the amount/actions align */
+  .exp-line{padding:9px 12px 9px 16px;gap:8px}
+  .exp-line-memo{display:none}
+  .exp-line-name{font-size:12.5px}
   table.t.exp-detail-t{min-width:0;width:100%}
-  .exp-detail-t .memo-cell{display:none}
-  .exp-detail-t .exp-name-cell{white-space:normal;word-break:break-word;overflow-wrap:anywhere;line-height:1.25;padding-left:14px;padding-right:6px;font-size:12px;max-width:160px}
-  .exp-detail-t .amt-cell{width:76px;white-space:nowrap;font-size:12px}
-  .exp-detail-t .exp-act-cell{width:88px}
   /* Monthly P&L table: margin column tucks under Net */
   .ypl-t .margin-col{display:none}
   .cell-margin{display:block;font-size:9.5px;color:var(--text3);font-family:var(--font-m);margin-top:1px;line-height:1}
@@ -538,7 +547,7 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   .kpis.kpis-3 .kpi{padding:11px 10px;min-width:0}
   .kpis.kpis-3 .k-lbl{font-size:9px;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .kpis.kpis-3 .k-val{font-size:16px;white-space:nowrap}
-  .kpis.kpis-3 .k-sub{font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .kpis.kpis-3 .k-sub{font-size:9.5px;white-space:normal;line-height:1.25;word-break:keep-all}
   .kpis.kpis-2{grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px}
   .kpis.kpis-2 .kpi{padding:12px 13px}
   .kpis.kpis-2 .k-val{font-size:17px}
@@ -705,13 +714,15 @@ const fmt$ = (v, dec=2) => {
   const s = Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:dec, maximumFractionDigits:dec});
   return (neg?'-$':'$') + s;
 };
-// Amount with the cents wrapped in a span, so tight mobile tables can hide just the
-// cents via CSS (.cents) while desktop keeps the full precision. Display only; all
+// Amount split so tight mobile tables can hide the cents via CSS (.cents) while desktop
+// keeps full precision. The visible part is the ROUNDED whole dollars (so $23.50 reads as
+// $24, not $23, when cents are hidden); the hidden .cents span carries the exact decimals
+// and, when shown, overrides the rounded dollars with the true value. Display only; all
 // math stays exact.
 function Amt({v}){
-  const s = fmt$(v); const i = s.lastIndexOf('.');
-  if (i < 0) return s;
-  return <>{s.slice(0,i)}<span className="cents">{s.slice(i)}</span></>;
+  const exact = fmt$(v);                 // e.g. "$23.50" (true value, shown on desktop)
+  const rounded = fmt$(v, 0);            // e.g. "$24"    (rounded, shown when cents hidden)
+  return <><span className="amt-round">{rounded}</span><span className="amt-exact">{exact}</span></>;
 }
 // compact currency for tight KPI cards: $1.95M, $226.3K, $980
 const fmt$k = (v) => {
@@ -1754,7 +1765,7 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
   const throughDay = isCurMonth ? _now.getDate() : 31;
   const tot=rows.reduce((a,r)=> r.d>throughDay ? a : ({rev:a.rev+r.rev,exp:a.exp+r.exp,lyRev:a.lyRev+r.lyRev,lyExp:a.lyExp+r.lyExp}),{rev:0,exp:0,lyRev:0,lyExp:0});
   const net=tot.rev-tot.exp, lyNet=tot.lyRev-tot.lyExp;
-  const cmpLabel = isCurMonth ? `vs ${y-1} (through the ${ordinal(throughDay)})` : `vs ${y-1}`;
+  const cmpLabel = isCurMonth ? `vs ${y-1} (to ${ordinal(throughDay)})` : `vs ${y-1}`;
 
   // ---- Rule-based insights for the month shown -----------------------------
   // Uses only this month's daily rows (each has rev/exp/items). Kept simple and
@@ -1875,23 +1886,23 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
                           <button className="btn btn-sm" disabled={busy} onClick={()=>setEditId(null)}>Cancel</button>
                         </div>
                       </td></tr>
-                    : <tr key={i}>
-                    <td className="exp-name-cell" style={{paddingLeft:20}}>{it.cat} <span className="badge" style={{background:'var(--panel)',fontSize:10}}>{it.source}</span></td>
-                    <td className="memo-cell">{(()=>{ const txt=[it.memo||'', it.payee?`· ${it.payee}`:'', it.slack_user?`· @${it.slack_user}`:''].filter(Boolean).join(' ');
-                      if(!txt) return '';
-                      const key = it.id || (r.d+'-'+i);
-                      const isFull = memoOpen===key;
-                      return <span className={'memo-txt'+(isFull?' open':'')} title={txt}
-                        onClick={()=>setMemoOpen(isFull?null:key)}>{txt}</span>; })()}
-                    </td>
-                    <td className="num mono amt-cell">{fmt$(it.amount)}</td>
-                    <td className="exp-act-cell" style={{width:isOwner&&it.id?96:1,textAlign:'right',whiteSpace:'nowrap'}}>
-                      {isOwner && it.id && <>
-                        <button className="btn btn-sm" disabled={busy} onClick={()=>startEdit(it)}>Edit</button>
-                        <button className="btn btn-sm btn-danger" disabled={busy} style={{marginLeft:5}} onClick={()=>delItem(it)}>✕</button>
-                      </>}
-                    </td>
-                  </tr>)}
+                    : <tr key={i} className="exp-line-row"><td colSpan={7} className="exp-line-td">
+                      <div className="exp-line">
+                        <div className="exp-line-main">
+                          <div className="exp-line-name">{it.cat} <span className="badge" style={{background:'var(--panel)',fontSize:10}}>{it.source}</span></div>
+                          {(()=>{ const txt=[it.memo||'', it.payee?`· ${it.payee}`:'', it.slack_user?`· @${it.slack_user}`:''].filter(Boolean).join(' ');
+                            if(!txt) return null;
+                            const key = it.id || (r.d+'-'+i); const isFull = memoOpen===key;
+                            return <div className={'exp-line-memo'+(isFull?' open':'')} title={txt}
+                              onClick={()=>setMemoOpen(isFull?null:key)}>{txt}</div>; })()}
+                        </div>
+                        <div className="exp-line-amt mono">{fmt$(it.amount)}</div>
+                        {isOwner && it.id && <div className="exp-line-act">
+                          <button className="btn btn-sm" disabled={busy} onClick={()=>startEdit(it)}>Edit</button>
+                          <button className="btn btn-sm btn-danger" disabled={busy} onClick={()=>delItem(it)}>✕</button>
+                        </div>}
+                      </div>
+                    </td></tr>)}
                 </tbody></table>
               </td></tr>}
             </React.Fragment>; })}
