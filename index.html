@@ -208,6 +208,23 @@ a{color:var(--gold);text-decoration:none}
 .rev-bar-wrap{height:6px;background:var(--panel3);border-radius:4px;overflow:hidden}
 .rev-bar{height:100%;background:var(--gold);border-radius:4px;min-width:2px}
 .rev-pct{font-size:11px;color:var(--text3);font-family:var(--font-m);margin-top:3px;text-align:right}
+/* mobile-friendly comparison: deltas under values + a toggle for last-year columns.
+   Desktop keeps the full columns; these only activate under the mobile breakpoint. */
+.cell-delta{display:none}
+.cell-margin{display:none}
+.chev-td{width:40px;text-align:right}
+/* expanded expense lines: long notes truncate with an ellipsis and expand on tap,
+   so column widths stay stable no matter how long a description is */
+.memo-cell{color:var(--text2);font-size:12.5px}
+.memo-cell .memo-txt{display:block;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.memo-cell .memo-txt.open{white-space:normal;overflow:visible;max-width:none;word-break:break-word}
+.amt-cell{width:110px}
+/* faint last-year sales shown on days with no data yet (mobile only; desktop has the
+   full last-year column) */
+.ly-ghost{display:none}
+.lg-yr{font-size:9px;margin-left:2px;vertical-align:super}
+.ly-toggle{display:none;background:var(--panel2);border:1px solid var(--border);border-radius:14px;padding:4px 11px;font-size:11.5px;font-weight:600;color:var(--text2);cursor:pointer}
+.ly-toggle.on{background:var(--gold-dim);border-color:var(--gold-soft);color:var(--gold-strong)}
 /* store comparison */
 .cmp-chips{display:flex;gap:8px;flex-wrap:wrap}
 .cmp-period{display:inline-flex;gap:2px;background:var(--panel2);border-radius:9px;padding:3px;margin-bottom:12px}
@@ -432,6 +449,32 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   /* wide tables scroll inside their card instead of stretching the page */
   .card{overflow-x:auto;-webkit-overflow-scrolling:touch;padding:15px 16px;margin-bottom:12px}
   table.t{min-width:max-content}
+  /* Daily table on mobile: hide the last-year amount columns by default so the whole
+     row fits on screen; deltas under Sales/Expenses carry the comparison. The
+     "{year} amounts" toggle brings the columns back. */
+  .daily-t .ly-col{display:none}
+  .daily-t.show-ly .ly-col{display:table-cell}
+  /* tighten the daily table so a row fits the screen without side-scrolling:
+     smaller type, tighter padding, whole-dollar display (cents hidden, math unchanged),
+     narrower expand-chevron column */
+  table.t.daily-t{font-size:12px}
+  table.t.daily-t td,table.t.daily-t th{padding:8px 5px}
+  table.t.daily-t td.mono,table.t.daily-t th{white-space:nowrap}
+  .daily-t .cents{display:none}
+  .daily-t .chev-td{width:26px}
+  table.t.daily-t .chev-td .btn{padding:3px 8px;font-size:11px;box-shadow:none}
+  /* days without this-year data show last year's sales faintly for planning */
+  .ly-ghost{display:inline;color:var(--text3);font-style:italic}
+  .ghost-dash{display:none}
+  .memo-cell .memo-txt{max-width:120px}
+  .daily-t .amt-cell{width:80px}
+  .cell-delta{display:block;font-size:9.5px;font-family:var(--font-m);margin-top:1px;line-height:1}
+  .cell-delta.pos{color:#2E7D4F}
+  .cell-delta.neg{color:#C0392B}
+  .ly-toggle{display:inline-flex}
+  /* Monthly P&L table: margin column tucks under Net */
+  .ypl-t .margin-col{display:none}
+  .cell-margin{display:block;font-size:9.5px;color:var(--text3);font-family:var(--font-m);margin-top:1px;line-height:1}
   /* view tabs: horizontal scroll if they don't fit */
   .viewbar{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap}
   .viewtab{white-space:nowrap;flex:0 0 auto}
@@ -665,6 +708,14 @@ const fmt$ = (v, dec=2) => {
   const s = Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:dec, maximumFractionDigits:dec});
   return (neg?'-$':'$') + s;
 };
+// Amount with the cents wrapped in a span, so tight mobile tables can hide just the
+// cents via CSS (.cents) while desktop keeps the full precision. Display only; all
+// math stays exact.
+function Amt({v}){
+  const s = fmt$(v); const i = s.lastIndexOf('.');
+  if (i < 0) return s;
+  return <>{s.slice(0,i)}<span className="cents">{s.slice(i)}</span></>;
+}
 // compact currency for tight KPI cards: $1.95M, $226.3K, $980
 const fmt$k = (v) => {
   if (v === null || v === undefined || isNaN(v)) return '-';
@@ -1664,6 +1715,8 @@ function MonthView({pl, yoy, trend, y, m}){
 function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
   const [open, setOpen] = useState(null);
   const [revOpen, setRevOpen] = useState(false);   // "Revenue by channel" card, collapsed by default
+  const [showLY, setShowLY] = useState(false);     // mobile: show last-year amount columns
+  const [memoOpen, setMemoOpen] = useState(null);  // which expense line's memo is expanded
   const [editId, setEditId] = useState(null);
   const [ef, setEf] = useState({amount:'', category_id:'', memo:''});
   const [busy, setBusy] = useState(false);
@@ -1780,24 +1833,33 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
       </ul>
     </div>}
     <div className="card">
-      <h3>{MONTHS[m-1]} {y} · Day by Day <span className="faint" style={{fontWeight:400,fontSize:13}}>vs {y-1}</span></h3>
-      <table className="t">
-        <thead><tr><th>Date</th><th className="num">Sales</th><th className="num faint">{y-1}</th>
-          <th className="num">Expenses</th><th className="num faint">{y-1}</th><th className="num">Net</th><th></th></tr></thead>
+      <h3 style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
+        <span>{MONTHS[m-1]} {y} · Day by Day <span className="faint" style={{fontWeight:400,fontSize:13}}>vs {y-1}</span></span>
+        <button className={'ly-toggle'+(showLY?' on':'')} onClick={()=>setShowLY(v=>!v)}>{y-1} amounts</button>
+      </h3>
+      <table className={'t daily-t'+(showLY?' show-ly':'')}>
+        <thead><tr><th>Date</th><th className="num">Sales</th><th className="num faint ly-col">{y-1}</th>
+          <th className="num">Expenses</th><th className="num faint ly-col">{y-1}</th><th className="num">Net</th><th></th></tr></thead>
         <tbody>
           {rows.map(r=>{ const dnet=r.rev-r.exp; const has=r.rev!==0||r.exp!==0; const isOpen=open===r.d;
+            const dRev = (r.rev&&r.lyRev) ? (r.rev-r.lyRev)/r.lyRev*100 : null;
+            const dExp = (r.exp&&r.lyExp) ? (r.exp-r.lyExp)/r.lyExp*100 : null;
             return <React.Fragment key={r.d}>
               <tr className={(()=>{const wd=new Date(r.date+'T00:00').getDay();return wd===0||wd===6?'is-weekend':'';})()} style={{opacity:has?1:0.35}}>
                 <td className="mono">{pad(r.d)} {DOW[new Date(r.date+'T00:00').getDay()]}
                   {r.d===bestDay && <span className="day-star best" title="Best sales day">★</span>}
                   {r.d===slowDay && r.d!==bestDay && <span className="day-star slow" title="Slowest sales day">★</span>}
                 </td>
-                <td className="num mono">{r.rev?fmt$(r.rev):'-'}</td>
-                <td className="num mono faint">{r.lyRev?fmt$(r.lyRev,0):'-'}</td>
-                <td className="num mono">{r.exp?fmt$(r.exp):'-'}</td>
-                <td className="num mono faint">{r.lyExp?fmt$(r.lyExp,0):'-'}</td>
-                <td className={'num mono '+(dnet>0?'pos':dnet<0?'neg':'')}>{has?fmt$(dnet):'-'}</td>
-                <td style={{width:40,textAlign:'right'}}>
+                <td className="num mono">{r.rev?<Amt v={r.rev}/>:(r.lyRev?<><span className="ghost-dash">-</span><span className="ly-ghost">{fmt$(r.lyRev,0)}<span className="lg-yr">&rsquo;{String(y-1).slice(2)}</span></span></>:'-')}
+                  {dRev!=null && <div className={'cell-delta '+(dRev>=0?'pos':'neg')}>{dRev>=0?'+':''}{dRev.toFixed(0)}%</div>}
+                </td>
+                <td className="num mono faint ly-col">{r.lyRev?fmt$(r.lyRev,0):'-'}</td>
+                <td className="num mono">{r.exp?<Amt v={r.exp}/>:'-'}
+                  {dExp!=null && <div className={'cell-delta '+(dExp<=0?'pos':'neg')}>{dExp>=0?'+':''}{dExp.toFixed(0)}%</div>}
+                </td>
+                <td className="num mono faint ly-col">{r.lyExp?fmt$(r.lyExp,0):'-'}</td>
+                <td className={'num mono '+(dnet>0?'pos':dnet<0?'neg':'')}>{has?<Amt v={dnet}/>:'-'}</td>
+                <td className="chev-td">
                   {r.items.length>0 && <button className="btn btn-sm" onClick={()=>setOpen(isOpen?null:r.d)}>{isOpen?'▲':'▾'}</button>}
                 </td>
               </tr>
@@ -1824,8 +1886,14 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
                       </td></tr>
                     : <tr key={i}>
                     <td style={{paddingLeft:20}}>{it.cat} <span className="badge" style={{background:'var(--panel)',fontSize:10}}>{it.source}</span></td>
-                    <td className="faint" style={{fontSize:12.5}}>{it.memo||''}{it.payee?` · ${it.payee}`:''}{it.slack_user?` · @${it.slack_user}`:''}</td>
-                    <td className="num mono" style={{width:110}}>{fmt$(it.amount)}</td>
+                    <td className="memo-cell">{(()=>{ const txt=[it.memo||'', it.payee?`· ${it.payee}`:'', it.slack_user?`· @${it.slack_user}`:''].filter(Boolean).join(' ');
+                      if(!txt) return '';
+                      const key = it.id || (r.d+'-'+i);
+                      const isFull = memoOpen===key;
+                      return <span className={'memo-txt'+(isFull?' open':'')} title={txt}
+                        onClick={()=>setMemoOpen(isFull?null:key)}>{txt}</span>; })()}
+                    </td>
+                    <td className="num mono amt-cell">{fmt$(it.amount)}</td>
                     <td style={{width:isOwner&&it.id?96:1,textAlign:'right',whiteSpace:'nowrap'}}>
                       {isOwner && it.id && <>
                         <button className="btn btn-sm" disabled={busy} onClick={()=>startEdit(it)}>Edit</button>
@@ -1836,8 +1904,8 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
                 </tbody></table>
               </td></tr>}
             </React.Fragment>; })}
-          <tr className="total"><td>Total</td><td className="num">{fmt$(tot.rev)}</td><td className="num faint">{fmt$(tot.lyRev,0)}</td>
-            <td className="num">{fmt$(tot.exp)}</td><td className="num faint">{fmt$(tot.lyExp,0)}</td>
+          <tr className="total"><td>Total</td><td className="num">{fmt$(tot.rev)}</td><td className="num faint ly-col">{fmt$(tot.lyRev,0)}</td>
+            <td className="num">{fmt$(tot.exp)}</td><td className="num faint ly-col">{fmt$(tot.lyExp,0)}</td>
             <td className={'num '+(net>=0?'pos':'neg')}>{fmt$(net)}</td><td></td></tr>
         </tbody>
       </table>
@@ -1869,19 +1937,23 @@ function YearView({months, y, yearMode, onYearMode, prev, prev2}){
     <div className="card"><h3>{y} by Month</h3><TrendChart points={trendPts}/></div>
     <div className="card">
       <h3>{y} Monthly P&L</h3>
-      <table className="t">
-        <thead><tr><th>Month</th><th className="num">Sales</th><th className="num">Expenses</th><th className="num">Net</th><th className="num">Margin</th></tr></thead>
+      <table className="t ypl-t">
+        <thead><tr><th>Month</th><th className="num">Sales</th><th className="num">Expenses</th><th className="num">Net</th><th className="num margin-col">Margin</th></tr></thead>
         <tbody>
           {months.map(x=>{ const has=x.pl.totalSales!==0||x.pl.totalExpenses!==0;
             return <tr key={x.m} style={{opacity:has?1:0.35}}>
               <td>{MONTHS[x.m-1]}</td>
               <td className="num mono">{has?fmt$(x.pl.totalSales,0):'-'}</td>
               <td className="num mono">{has?fmt$(x.pl.totalExpenses,0):'-'}</td>
-              <td className={'num mono '+(x.pl.net>=0?'pos':'neg')}>{has?fmt$(x.pl.net,0):'-'}</td>
-              <td className="num mono faint">{has?fmtPct(x.pl.margin):'-'}</td>
+              <td className={'num mono '+(x.pl.net>=0?'pos':'neg')}>{has?fmt$(x.pl.net,0):'-'}
+                {has && x.pl.margin!=null && <div className="cell-margin">{fmtPct(x.pl.margin)}</div>}
+              </td>
+              <td className="num mono faint margin-col">{has?fmtPct(x.pl.margin):'-'}</td>
             </tr>; })}
           <tr className="total"><td>Total</td><td className="num">{fmt$(tot.s,0)}</td><td className="num">{fmt$(tot.e,0)}</td>
-            <td className={'num '+(tot.n>=0?'pos':'neg')}>{fmt$(tot.n,0)}</td><td className="num">{fmtPct(tot.s?tot.n/tot.s:null)}</td></tr>
+            <td className={'num '+(tot.n>=0?'pos':'neg')}>{fmt$(tot.n,0)}
+              <div className="cell-margin">{fmtPct(tot.s?tot.n/tot.s:null)}</div>
+            </td><td className="num margin-col">{fmtPct(tot.s?tot.n/tot.s:null)}</td></tr>
         </tbody>
       </table>
     </div>

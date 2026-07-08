@@ -1,12 +1,30 @@
-# Ugly Finance Tool - tap a Home store card for today's revenue breakdown
+# Ugly Finance Tool - mobile Insights fits on one screen
 
-Tapping a store card on Home now opens a popup with that store's revenue for today,
-broken down by channel (Card, Cash, Uber Eats, DoorDash, GrubHub, etc.), each with its
-amount, a share bar, and percent of the day's total, largest first. The popup header
-shows the store and today's total.
+The Daily table needed constant left-right scrolling on a phone. This build makes it fit
+the screen. Desktop is unchanged.
 
-A "Open full breakdown" button at the bottom jumps to the store's full Insights view
-(the old behavior of tapping the card). Tap outside or the X to close.
+DAILY (mobile):
+- The last-year amount columns are hidden by default; a small "{last year} amounts"
+  toggle above the table brings them back when you want the actual dollar figures.
+- Instead, every Sales and Expenses value carries a small always-visible delta under it
+  (e.g. -30%), green/red. For expenses, lower than last year counts as green.
+- The row itself is tightened (smaller type, tighter padding, whole-dollar display in the
+  list - cents are hidden on the phone list only; all math and desktop stay 1-cent
+  exact) and the expand arrow column is narrower. Result: the full row fits a 390px
+  screen with no side-scrolling.
+- Days with no sales yet this year now show LAST YEAR's sales faintly in the Sales
+  column with a small 'YY marker (e.g. $9,936'25), so you can see at a glance how busy a
+  coming day is likely to be. Mobile only; desktop already has the full column.
 
-Verified: card tap opens the popup, shows today's total and per-channel split with correct
-amounts/percentages, and closes cleanly.
+EXPANDED EXPENSE LINES (all screens):
+- Long descriptions no longer blow up the column layout. Notes truncate with an ellipsis
+  on one line; tap the note to expand the full text in place (tap again to collapse).
+
+YEARLY (mobile):
+- Monthly P&L: the Margin column tucks under Net as a small percentage, so that table
+  fits too.
+
+Verified on a 390px viewport: table width 361px vs 362px card (fits), deltas render,
+toggle restores the last-year columns, ghost last-year sales show on empty days, memo
+truncation + tap-to-expand works, totals row stays aligned. Desktop verified unchanged
+(full columns, cents, no deltas, no toggle, no ghost).
