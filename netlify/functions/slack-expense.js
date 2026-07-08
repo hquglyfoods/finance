@@ -82,12 +82,28 @@ function matchesLearning(summary, categoryCode, categoryName, learnings) {
 
 async function downloadImage(url) {
   const res = await fetch(url, { headers: { Authorization: 'Bearer ' + process.env.SLACK_BOT_TOKEN } });
-  if (!res.ok) return null;
+  if (!res.ok) { console.log('SLACK_IMG_HTTP', res.status, url.slice(0, 80)); return null; }
   const ct = res.headers.get('content-type') || 'image/jpeg';
-  if (!ct.startsWith('image/')) return null;
+  if (!ct.startsWith('image/')) { console.log('SLACK_IMG_NOT_IMAGE', ct); return null; }
   const buf = Buffer.from(await res.arrayBuffer());
-  if (buf.length > 4_500_000) return null; // keep request small
+  if (buf.length > 4_500_000) { console.log('SLACK_IMG_TOO_BIG', buf.length); return null; }
   return { media_type: ct.split(';')[0], data: buf.toString('base64') };
+}
+
+// iPhone photos are often 5-10MB, which blows past our size cap, so the full-resolution
+// url_private_download gets dropped. Slack auto-generates smaller thumbnails; try those
+// first (largest first) and only fall back to the full file. First success wins.
+async function collectImage(f) {
+  const candidates = [
+    f.thumb_1024, f.thumb_960, f.thumb_800, f.thumb_720,
+    f.url_private_download, f.url_private,
+  ].filter(Boolean);
+  for (const url of candidates) {
+    const img = await downloadImage(url);
+    if (img) return img;
+  }
+  console.log('SLACK_IMG_DOWNLOAD_FAILED', f.id, f.filetype, f.size, 'candidates:', candidates.length);
+  return null;
 }
 
 async function parseWithClaude(text, images, categories, learnings) {
@@ -174,15 +190,23 @@ exports.handler = async (event) => {
     .select('signal, category_name, category_code').eq('corporation_id', corp.id)
     .order('created_at', { ascending: false }).limit(40);
 
-  // collect up to 3 images
+  // collect up to 3 images. iPhone photos can be large, so collectImage prefers Slack's
+  // smaller auto-thumbnails and only falls back to the full file.
+  const rawFiles = ev.files || [];
+  console.log('SLACK_FILES', JSON.stringify(rawFiles.map(f => ({
+    id: f.id, mimetype: f.mimetype, filetype: f.filetype, size: f.size,
+    has_thumb: !!(f.thumb_1024 || f.thumb_960 || f.thumb_800), has_dl: !!f.url_private_download,
+  }))));
   const images = [];
-  for (const f of (ev.files || []).slice(0, 3)) {
-    if (f.mimetype && f.mimetype.startsWith('image/') && f.url_private_download) {
-      const img = await downloadImage(f.url_private_download);
-      if (img) images.push(img);
-    }
+  for (const f of rawFiles.slice(0, 3)) {
+    const isImage = (f.mimetype && f.mimetype.startsWith('image/')) ||
+      ['jpg', 'jpeg', 'png', 'heic', 'heif', 'webp', 'gif'].includes((f.filetype || '').toLowerCase());
+    if (!isImage) { console.log('SLACK_IMG_SKIP_NONIMAGE', f.mimetype, f.filetype); continue; }
+    const img = await collectImage(f);
+    if (img) images.push(img);
   }
   const text = (ev.text || '').trim();
+  console.log('SLACK_PARSE_INPUT', JSON.stringify({ has_text: !!text, image_count: images.length }));
   if (!text && !images.length) return { statusCode: 200, body: 'nothing to parse' };
 
   let parsed;

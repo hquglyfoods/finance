@@ -217,17 +217,20 @@ a{color:var(--gold);text-decoration:none}
 /* small last-year revenue shown under the Sales figure on mobile (e.g. '25 $44,080);
    desktop shows last-year revenue in its own column instead */
 .ly-under{display:none;font-size:9.5px;color:var(--text3);font-family:var(--font-m);margin-top:1px;line-height:1}
-/* expanded expense line: a clean flex row - name/badge (and optional note) on the left,
-   amount and actions aligned on the right. Reads the same on desktop and mobile; long
-   names wrap without shoving the amount around. */
-.exp-line-td{padding:0 !important;background:var(--panel2)}
-.exp-line{display:flex;align-items:center;gap:10px;padding:10px 14px 10px 20px;border-bottom:1px solid var(--border-soft)}
+/* expanded expense list: each line is name (ellipsis, tap for badge+note) + amount +
+   a ⋯ edit button, always contained on screen. Editing happens in a popup so the row
+   width never changes. */
+.exp-detail{background:var(--panel2)}
+.exp-line{display:flex;align-items:center;gap:10px;padding:11px 14px 11px 20px;border-bottom:1px solid var(--border-soft)}
+.exp-line:last-child{border-bottom:none}
 .exp-line-main{flex:1;min-width:0}
-.exp-line-name{font-size:13.5px;color:var(--text);line-height:1.3}
-.exp-line-memo{font-size:12px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
-.exp-line-memo.open{white-space:normal;word-break:break-word}
-.exp-line-amt{font-size:13.5px;font-weight:600;white-space:nowrap;text-align:right}
-.exp-line-act{display:flex;gap:6px;flex-shrink:0}
+.exp-line-name{font-size:13.5px;color:var(--text);line-height:1.3;display:flex;align-items:center;gap:7px;cursor:pointer;min-width:0}
+.exp-line-name .exp-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.exp-src{flex-shrink:0;background:var(--panel) !important;font-size:10px}
+.exp-line-memo{font-size:12px;color:var(--text3);margin-top:3px;line-height:1.35;word-break:break-word}
+.exp-line-amt{font-size:13.5px;font-weight:600;white-space:nowrap;text-align:right;flex-shrink:0}
+.exp-edit-btn{flex-shrink:0;background:var(--panel);border:1px solid var(--border);border-radius:7px;width:30px;height:30px;font-size:16px;line-height:1;color:var(--text2);cursor:pointer;padding:0}
+.exp-edit-btn:hover{border-color:var(--gold);color:var(--gold-strong)}
 /* store comparison */
 .cmp-chips{display:flex;gap:8px;flex-wrap:wrap}
 .cmp-period{display:inline-flex;gap:2px;background:var(--panel2);border-radius:9px;padding:3px;margin-bottom:12px}
@@ -268,6 +271,7 @@ a{color:var(--gold);text-decoration:none}
 .kpi .k-lbl{font-size:11.5px;color:var(--text3);font-weight:500;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px}
 .kpi .k-val{font-family:var(--font-m);font-size:21px;font-weight:500}
 .kpi .k-sub{font-size:12px;color:var(--text2);margin-top:3px}
+.k-cmp{display:block;color:var(--text3)}
 .insight-card{margin-bottom:22px}
 .insight-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}
 .insight-list li{display:flex;align-items:flex-start;gap:9px;font-size:13.5px;color:var(--text);line-height:1.4}
@@ -342,6 +346,15 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .cal .day.tappable{cursor:pointer}
 .cal .day.tappable:hover{border-color:var(--gold);box-shadow:0 2px 6px rgba(0,0,0,0.08)}
 .cal .day .note-dot{position:absolute;bottom:3px;right:4px;font-size:10px;color:var(--red)}
+/* first-run notification prompt */
+.notif-prompt-overlay{position:fixed;inset:0;background:rgba(20,18,14,0.45);display:flex;align-items:center;justify-content:center;z-index:400;padding:24px}
+.notif-prompt{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:26px 22px 20px;max-width:340px;width:100%;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,0.25)}
+.np-bell{font-size:38px;line-height:1;margin-bottom:12px}
+.np-title{font-size:19px;font-weight:700;color:var(--text);margin-bottom:8px}
+.np-body{font-size:14px;color:var(--text2);line-height:1.45;margin-bottom:20px}
+.np-primary{width:100%;background:var(--gold);color:#fff;border:none;border-radius:11px;padding:13px;font-size:15px;font-weight:600;cursor:pointer}
+.np-primary:disabled{opacity:.6}
+.np-later{width:100%;background:none;border:none;color:var(--text3);font-size:14px;padding:12px 0 2px;cursor:pointer}
 .day-memo{background:rgba(196,57,43,0.08);border:1px solid var(--red-soft);border-radius:8px;padding:10px 12px;margin-top:10px;font-size:13px;color:var(--text);line-height:1.4}
 .day-memo-lbl{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--red);font-weight:700;margin-bottom:3px}
 .modal-overlay{position:fixed;inset:0;background:rgba(30,26,20,0.45);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px}
@@ -472,12 +485,10 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   .daily-t .amt-round{display:inline}
   .daily-t .chev-td{width:26px}
   table.t.daily-t .chev-td .btn{padding:3px 8px;font-size:11px;box-shadow:none}
-  /* expanded expense lines on mobile: hide the long note, tighten spacing so each line
-     stays compact and the amount/actions align */
-  .exp-line{padding:9px 12px 9px 16px;gap:8px}
-  .exp-line-memo{display:none}
+  /* expanded expense lines on mobile: tighter padding; name ellipsis keeps it on screen */
+  .exp-line{padding:10px 12px 10px 16px;gap:8px}
   .exp-line-name{font-size:12.5px}
-  table.t.exp-detail-t{min-width:0;width:100%}
+  .exp-line-amt{font-size:12.5px}
   /* Monthly P&L table: margin column tucks under Net */
   .ypl-t .margin-col{display:none}
   .cell-margin{display:block;font-size:9.5px;color:var(--text3);font-family:var(--font-m);margin-top:1px;line-height:1}
@@ -547,7 +558,8 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   .kpis.kpis-3 .kpi{padding:11px 10px;min-width:0}
   .kpis.kpis-3 .k-lbl{font-size:9px;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .kpis.kpis-3 .k-val{font-size:16px;white-space:nowrap}
-  .kpis.kpis-3 .k-sub{font-size:9.5px;white-space:normal;line-height:1.25;word-break:keep-all}
+  .kpis.kpis-3 .k-sub{font-size:9.5px;white-space:normal;line-height:1.3}
+  .kpis.kpis-3 .k-cmp{font-size:9px}
   .kpis.kpis-2{grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px}
   .kpis.kpis-2 .kpi{padding:12px 13px}
   .kpis.kpis-2 .k-val{font-size:17px}
@@ -1725,14 +1737,14 @@ function MonthView({pl, yoy, trend, y, m}){
 function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
   const [open, setOpen] = useState(null);
   const [revOpen, setRevOpen] = useState(false);   // "Revenue by channel" card, collapsed by default
-  const [memoOpen, setMemoOpen] = useState(null);  // which expense line's memo is expanded
-  const [editId, setEditId] = useState(null);
+  const [badgeOpen, setBadgeOpen] = useState(null); // which expense line shows its source badge
+  const [editModal, setEditModal] = useState(null); // expense item being edited in a popup
   const [ef, setEf] = useState({amount:'', category_id:'', memo:''});
   const [busy, setBusy] = useState(false);
   const [toast, showToast] = useToast();
 
-  const startEdit = (it)=>{
-    setEditId(it.id);
+  const openEdit = (it)=>{
+    setEditModal(it);
     setEf({amount:String(it.amount), category_id:it.category_id||'', memo:it.memo||'', date:it.date||''});
   };
   const saveEdit = async ()=>{
@@ -1742,10 +1754,10 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
     setBusy(true);
     const { error } = await sb.from('expenses').update({
       amount:+amt.toFixed(2), category_id:ef.category_id||null, memo:(ef.memo||'').slice(0,300), date:ef.date,
-    }).eq('id', editId);
+    }).eq('id', editModal.id);
     setBusy(false);
     if(error){ showToast('Save failed: '+error.message); return; }
-    setEditId(null); showToast('Updated'); onChanged && onChanged();
+    setEditModal(null); showToast('Updated'); onChanged && onChanged();
   };
   const delItem = async (it)=>{
     if(!confirm(`Delete this expense?\n${it.cat} · ${fmt$(it.amount)}${it.memo?`\n"${it.memo}"`:''}`)) return;
@@ -1753,7 +1765,7 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
     const { error } = await sb.from('expenses').delete().eq('id', it.id);
     setBusy(false);
     if(error){ showToast('Delete failed: '+error.message); return; }
-    showToast('Deleted'); onChanged && onChanged();
+    setEditModal(null); showToast('Deleted'); onChanged && onChanged();
   };
 
   if(!rows.length) return <div className="card faint">No data for {MONTHS[m-1]} {y}.</div>;
@@ -1809,11 +1821,11 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
   return <>
     <div className="kpis kpis-3">
       <div className="kpi"><div className="k-lbl">Sales</div><div className="k-val">{fmt$(tot.rev)}</div>
-        <div className="k-sub"><YoYDelta cur={tot.rev} prev={tot.lyRev} bare/> {cmpLabel}</div></div>
+        <div className="k-sub"><YoYDelta cur={tot.rev} prev={tot.lyRev} bare/><span className="k-cmp">{cmpLabel}</span></div></div>
       <div className="kpi"><div className="k-lbl">Expenses</div><div className="k-val">{fmt$(tot.exp)}</div>
-        <div className="k-sub"><YoYDelta cur={tot.exp} prev={tot.lyExp} bare invert/> {cmpLabel}</div></div>
+        <div className="k-sub"><YoYDelta cur={tot.exp} prev={tot.lyExp} bare invert/><span className="k-cmp">{cmpLabel}</span></div></div>
       <div className="kpi"><div className="k-lbl">Net</div><div className={'k-val '+(net>=0?'pos':'neg')}>{fmt$(net)}</div>
-        <div className="k-sub"><YoYDelta cur={net} prev={lyNet} bare/> {cmpLabel}</div></div>
+        <div className="k-sub"><YoYDelta cur={net} prev={lyNet} bare/><span className="k-cmp">{cmpLabel}</span></div></div>
     </div>
     {pl && pl.channelRows && (()=>{
       const chans = pl.channelRows.filter(c=>c.counts_in_total && Number(c.amount)>0)
@@ -1866,44 +1878,24 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
                 </td>
               </tr>
               {isOpen && r.items.length>0 && <tr><td colSpan={7} style={{background:'var(--panel2)',padding:0}}>
-                <table className="t exp-detail-t" style={{margin:0}}><tbody>
-                  {r.items.map((it,i)=> editId===it.id
-                    ? <tr key={i}><td colSpan={4} style={{paddingLeft:20,paddingTop:10,paddingBottom:10}}>
-                        <div className="form-row" style={{marginBottom:8}}>
-                          <select className="w-md" value={ef.category_id} onChange={e=>setEf({...ef,category_id:e.target.value})}>
-                            {(categories||[]).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-                          </select>
-                          <input className="w-sm" type="number" step="0.01" inputMode="decimal" value={ef.amount}
-                            onChange={e=>setEf({...ef,amount:e.target.value})} placeholder="Amount"/>
-                          <input className="w-sm" type="date" value={ef.date}
-                            onChange={e=>setEf({...ef,date:e.target.value})}/>
+                <div className="exp-detail">
+                  {r.items.map((it,i)=>{
+                    const key = it.id || (r.d+'-'+i);
+                    const showBadge = badgeOpen===key;
+                    const note=[it.memo||'', it.payee?`· ${it.payee}`:'', it.slack_user?`· @${it.slack_user}`:''].filter(Boolean).join(' ');
+                    return <div key={i} className="exp-line">
+                      <div className="exp-line-main">
+                        <div className="exp-line-name" onClick={()=>setBadgeOpen(showBadge?null:key)}>
+                          <span className="exp-nm">{it.cat}</span>
+                          {showBadge && <span className="badge exp-src">{it.source}</span>}
                         </div>
-                        <div className="form-row" style={{marginBottom:8}}>
-                          <input value={ef.memo} onChange={e=>setEf({...ef,memo:e.target.value})} placeholder="Memo"/>
-                        </div>
-                        <div style={{display:'flex',gap:8}}>
-                          <button className="btn btn-sm btn-gold" disabled={busy} onClick={saveEdit}>Save</button>
-                          <button className="btn btn-sm" disabled={busy} onClick={()=>setEditId(null)}>Cancel</button>
-                        </div>
-                      </td></tr>
-                    : <tr key={i} className="exp-line-row"><td colSpan={7} className="exp-line-td">
-                      <div className="exp-line">
-                        <div className="exp-line-main">
-                          <div className="exp-line-name">{it.cat} <span className="badge" style={{background:'var(--panel)',fontSize:10}}>{it.source}</span></div>
-                          {(()=>{ const txt=[it.memo||'', it.payee?`· ${it.payee}`:'', it.slack_user?`· @${it.slack_user}`:''].filter(Boolean).join(' ');
-                            if(!txt) return null;
-                            const key = it.id || (r.d+'-'+i); const isFull = memoOpen===key;
-                            return <div className={'exp-line-memo'+(isFull?' open':'')} title={txt}
-                              onClick={()=>setMemoOpen(isFull?null:key)}>{txt}</div>; })()}
-                        </div>
-                        <div className="exp-line-amt mono">{fmt$(it.amount)}</div>
-                        {isOwner && it.id && <div className="exp-line-act">
-                          <button className="btn btn-sm" disabled={busy} onClick={()=>startEdit(it)}>Edit</button>
-                          <button className="btn btn-sm btn-danger" disabled={busy} onClick={()=>delItem(it)}>✕</button>
-                        </div>}
+                        {note && showBadge && <div className="exp-line-memo">{note}</div>}
                       </div>
-                    </td></tr>)}
-                </tbody></table>
+                      <div className="exp-line-amt mono">{fmt$(it.amount)}</div>
+                      {isOwner && it.id && <button className="exp-edit-btn" disabled={busy} onClick={()=>openEdit(it)} aria-label="Edit">⋯</button>}
+                    </div>;
+                  })}
+                </div>
               </td></tr>}
             </React.Fragment>; })}
           <tr className="total"><td>Total</td>
@@ -1913,8 +1905,33 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
             <td className={'num '+(net>=0?'pos':'neg')}>{fmt$(net)}</td><td></td></tr>
         </tbody>
       </table>
-      <div className="hint"><span className="day-star best">★</span> best sales day · <span className="day-star slow">★</span> slowest. Tap the arrow on a day to see every expense (category, note, payee, source){isOwner?'; Edit or ✕ a line to fix or remove it':''}.</div>
+      <div className="hint"><span className="day-star best">★</span> best sales day · <span className="day-star slow">★</span> slowest. Tap the arrow on a day to see every expense; tap a name for its source and note{isOwner?'; tap ⋯ to edit or delete':''}.</div>
     </div>
+    {editModal && <div className="modal-overlay" onClick={()=>setEditModal(null)}>
+      <div className="modal" onClick={e=>e.stopPropagation()}>
+        <div className="modal-head">
+          <div><div className="modal-title">Edit expense</div>
+            <div className="faint" style={{fontSize:12.5}}>{editModal.source} entry</div></div>
+          <button className="modal-x" onClick={()=>setEditModal(null)}>✕</button>
+        </div>
+        <label className="hint">Category</label>
+        <select className="w-full" style={{width:'100%',marginBottom:10}} value={ef.category_id} onChange={e=>setEf({...ef,category_id:e.target.value})}>
+          {(categories||[]).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <div style={{display:'flex',gap:8,marginBottom:10}}>
+          <div style={{flex:1}}><label className="hint">Amount</label>
+            <input type="number" step="0.01" inputMode="decimal" style={{width:'100%'}} value={ef.amount} onChange={e=>setEf({...ef,amount:e.target.value})}/></div>
+          <div style={{flex:1}}><label className="hint">Date</label>
+            <input type="date" style={{width:'100%'}} value={ef.date} onChange={e=>setEf({...ef,date:e.target.value})}/></div>
+        </div>
+        <label className="hint">Note</label>
+        <input style={{width:'100%',marginBottom:14}} value={ef.memo} onChange={e=>setEf({...ef,memo:e.target.value})} placeholder="Optional note"/>
+        <div style={{display:'flex',gap:8}}>
+          <button className="btn btn-gold" style={{flex:1}} disabled={busy} onClick={saveEdit}>Save</button>
+          <button className="btn btn-danger" disabled={busy} onClick={()=>delItem(editModal)}>Delete</button>
+        </div>
+      </div>
+    </div>}
     {toast && <div className="toast">{toast}</div>}
   </>;
 }
@@ -4293,6 +4310,60 @@ const NAV = [
   {id:'alerts',    label:'Install', full:'Install App',     ic:'⬇', roles:['owner','assistant','investor']},
 ];
 
+// First-run notification prompt: shown ONCE when the app is opened as an installed PWA
+// (Android or iOS) and the user hasn't decided on notifications yet. "Turn on" requests
+// permission and registers the push subscription; either button (or tapping outside)
+// dismisses it permanently so it never nags again.
+function NotifPrompt({profile}){
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(()=>{
+    if(!profile) return;
+    if(profile.role==='investor') return;                 // investors don't get store alerts
+    if(localStorage.getItem('ft_notif_prompted')==='1') return; // already asked once
+    if(!isStandalone()) return;                           // only inside the installed app
+    if(!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    if(typeof Notification==='undefined') return;
+    if(Notification.permission!=='default') return;       // already granted or denied
+    const t = setTimeout(()=>setShow(true), 800);         // let the app settle first
+    return ()=>clearTimeout(t);
+  },[profile]);
+
+  const dismiss = ()=>{ localStorage.setItem('ft_notif_prompted','1'); setShow(false); };
+
+  const enable = async ()=>{
+    setBusy(true);
+    try{
+      const perm = await Notification.requestPermission();
+      if(perm==='granted'){
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlB64ToUint8(window.__VAPID_PUBLIC__),
+        });
+        const json = sub.toJSON();
+        await sb.from('push_subscriptions').upsert({
+          endpoint: json.endpoint, profile_id: profile.id, role: profile.role, subscription: json,
+        }, { onConflict: 'endpoint' });
+      }
+    }catch(e){ /* if anything fails, they can still enable it later from Settings */ }
+    setBusy(false);
+    dismiss();
+  };
+
+  if(!show) return null;
+  return <div className="notif-prompt-overlay" onClick={dismiss}>
+    <div className="notif-prompt" onClick={e=>e.stopPropagation()}>
+      <div className="np-bell">🔔</div>
+      <div className="np-title">Turn on notifications?</div>
+      <div className="np-body">Get a heads-up when there's something to approve, a daily board is posted, or cash needs a pickup.</div>
+      <button className="np-primary" disabled={busy} onClick={enable}>{busy?'…':'Turn on notifications'}</button>
+      <button className="np-later" disabled={busy} onClick={dismiss}>Maybe later</button>
+    </div>
+  </div>;
+}
+
 function App(){
   const [session,setSession] = useState(undefined);
   const [profile,setProfile] = useState(null);
@@ -4393,6 +4464,7 @@ function App(){
   const moreNav = nav.filter(n=>!CORE.includes(n.id));
 
   return <div className="shell">
+    <NotifPrompt profile={profile}/>
     <div className="side">
       <div className="brand">Ugly <em>Finance</em></div>
       <div className="brand-sub">Finance Tool</div>
