@@ -319,13 +319,27 @@ exports.handler = async (event) => {
   if (!parsed.confident) memoBits.push('[low confidence, please verify]');
   if (images.length) memoBits.push(`(${images.length} receipt photo${images.length > 1 ? 's' : ''})`);
 
-  // SEMI-AUTO: auto-confirm only when Claude is confident AND we've approved this kind
-  // of expense before (same category as a past approval). Anything new or uncertain
-  // stays pending for manual approval, which is also what trains the system.
+  // Auto-approval mode is owner-controlled from the app (Settings > Slack) and stored in
+  // app_settings. Default 'off' so that during rollout EVERY Slack expense lands as
+  // pending for manual approval (and fires the pending push). The owner flips this to
+  // 'semi' or 'full' once they trust the capture.
+  //   off  -> never auto-confirm; everything pending
+  //   semi -> auto-confirm only when confident AND it matches a past approval (learning)
+  //   full -> auto-confirm whenever confident; only unreadable/low-confidence stay pending
+  const { data: modeRow } = await admin.from('app_settings').select('value').eq('key', 'slack_autoapprove_mode').maybeSingle();
+  const autoMode = ((modeRow && modeRow.value) || 'off').toLowerCase();
+
   const familiar = parsed.confident === true
     && matchesLearning(parsed.summary, cat.code, cat.name, learnings || []);
-  const status = familiar ? 'confirmed' : 'pending';
-  if (familiar) memoBits.push('[auto-approved: matches a past approval]');
+  let autoApprove = false;
+  if (autoMode === 'full') autoApprove = parsed.confident === true;
+  else if (autoMode === 'semi') autoApprove = familiar;
+  // 'off' or any unrecognized value: never auto-approve.
+  const status = autoApprove ? 'confirmed' : 'pending';
+  if (autoApprove) memoBits.push(autoMode === 'full'
+    ? '[auto-approved: full mode]'
+    : '[auto-approved: matches a past approval]');
+  console.log('SLACK_AUTOMODE', JSON.stringify({ mode: autoMode, familiar, autoApprove, status }));
 
   const { error: insErr } = await admin.from('expenses').insert({
     corporation_id: corp.id, category_id: cat.id, date: iso,

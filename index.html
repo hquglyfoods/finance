@@ -140,6 +140,14 @@ a{color:var(--gold);text-decoration:none}
 .settings-tabs{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:20px;padding-bottom:4px;scrollbar-width:none}
 .settings-tabs::-webkit-scrollbar{display:none}
 .settings-tab{flex:0 0 auto;white-space:nowrap;padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text2);font-weight:600;font-size:13px;cursor:pointer}
+.autoapprove-opt{display:block;width:100%;text-align:left;padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:var(--panel);color:var(--text);cursor:pointer}
+.autoapprove-opt:hover:not(:disabled){border-color:var(--gold)}
+.autoapprove-opt:disabled{cursor:default;opacity:.7}
+.autoapprove-opt.on{border-color:var(--gold);background:var(--gold-dim)}
+.autoapprove-opt .aa-row{display:flex;align-items:center;gap:8px}
+.autoapprove-opt .aa-label{font-weight:700;font-size:14px}
+.autoapprove-opt .aa-current{margin-left:auto;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}
+.autoapprove-opt .aa-desc{margin-top:4px;font-size:12.5px;color:var(--text2);line-height:1.45}
 .settings-tab.on{background:var(--gold-dim);border-color:var(--gold-soft);color:var(--gold-strong)}
 .corp-tab{padding:7px 14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text2);font-weight:500;font-size:13px;cursor:pointer}
 .corp-tab.on{border-color:var(--gold-soft);color:var(--gold-strong);background:var(--gold-dim)}
@@ -3979,10 +3987,55 @@ function OwnersManager({corps, canEditIds}){
   </div>;
 }
 
+// ============ SLACK RECEIPT AUTO-APPROVAL (owner-controlled) ============
+// Reads/writes app_settings.slack_autoapprove_mode. The Netlify slack-expense function
+// reads the same value at capture time to decide pending vs auto-confirmed.
+function SlackAutoApprove({profile}){
+  const isOwner = profile.role==='owner';
+  const [mode,setMode] = useState(null);
+  const [busy,setBusy] = useState(false);
+  const [err,setErr]   = useState('');
+  useEffect(()=>{ let live=true; (async()=>{
+    const { data } = await sb.from('app_settings').select('value').eq('key','slack_autoapprove_mode').maybeSingle();
+    if(live) setMode((data&&data.value)||'off');
+  })(); return ()=>{ live=false; }; },[]);
+  const save = async (m)=>{
+    if(!isOwner || busy || m===mode) return;
+    setBusy(true); setErr('');
+    const { error } = await sb.from('app_settings').upsert(
+      { key:'slack_autoapprove_mode', value:m, updated_at:new Date().toISOString(), updated_by:profile.id },
+      { onConflict:'key' });
+    if(error) setErr(error.message||'Could not save.'); else setMode(m);
+    setBusy(false);
+  };
+  const OPTIONS = [
+    ['off','Off','Every Slack receipt goes to Approvals as pending. Nothing is auto-confirmed. Use this while you are still checking the capture.'],
+    ['semi','Semi','Auto-confirm only receipts that match a kind of expense you have approved before. Anything new or unfamiliar stays pending.'],
+    ['full','Full','Auto-confirm every receipt Claude reads with confidence. Only unreadable or low-confidence ones stay pending.'],
+  ];
+  return <div className="card">
+    <h3>Slack receipt auto-approval</h3>
+    <div className="sub" style={{marginBottom:12}}>What happens when a receipt is posted in the Slack expense channels. Applies to all stores.</div>
+    {mode===null ? <div className="sub">Loading...</div> :
+      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+        {OPTIONS.map(([id,label,desc])=>
+          <button key={id} type="button" disabled={!isOwner||busy}
+            className={'autoapprove-opt'+(mode===id?' on':'')} onClick={()=>save(id)}>
+            <div className="aa-row"><span className="aa-label">{label}</span>{mode===id && <span className="aa-current">Current</span>}</div>
+            <div className="aa-desc">{desc}</div>
+          </button>)}
+      </div>}
+    {!isOwner && <div className="hint" style={{marginTop:10}}>Only the Owner can change this.</div>}
+    {err && <div className="hint" style={{marginTop:10,color:'var(--red)'}}>{err}</div>}
+  </div>;
+}
+
 // ================= SETTINGS =================
 function Settings({corps, canEditIds, profile, isOwner, session}){
   const [sub, setSub] = useState('recurring');
-  const TABS = [['recurring','Recurring'],['rates','Rates'],['owners','Investors'],['accounts','Accounts'],['device','App & Alerts'],['diag','Diagnostics']];
+  const TABS = [['recurring','Recurring'],['rates','Rates'],['owners','Investors'],['accounts','Accounts'],
+    ...(isOwner?[['slack','Slack']]:[]),
+    ['device','App & Alerts'],['diag','Diagnostics']];
   return <div>
     <div className="page-head">
       <div><div className="eyebrow">Settings</div><h2>Settings</h2></div>
@@ -3995,6 +4048,7 @@ function Settings({corps, canEditIds, profile, isOwner, session}){
     {sub==='rates' && <RatesManager corps={corps} canEditIds={canEditIds}/>}
     {sub==='owners' && <OwnersManager corps={corps} canEditIds={canEditIds}/>}
     {sub==='accounts' && <Admin corps={corps} session={session} embedded={true}/>}
+    {sub==='slack' && isOwner && <SlackAutoApprove profile={profile}/>}
     {sub==='device' && <PwaCard profile={profile}/>}
     {sub==='diag' && <ToastDiag session={session}/>}
   </div>;
