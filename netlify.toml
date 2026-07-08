@@ -5,6 +5,12 @@
 [functions]
   node_bundler = "esbuild"
 
+# jimp is a large pure-JS image library; let esbuild ship it from node_modules instead of
+# trying to bundle it (safer for its dynamic requires). Used by slack-expense to resize
+# large receipt photos down under the Anthropic image size limit.
+[functions."slack-expense"]
+  external_node_modules = ["jimp"]
+
 # Hourly: Toast store sales + tips (AD/BW/FH)
 [functions."toast-sync"]
   schedule = "@hourly"

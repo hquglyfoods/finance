@@ -25,6 +25,7 @@
 
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
+const { Jimp } = require('jimp');
 
 function verifySlack(event) {
   const ts = event.headers['x-slack-request-timestamp'];
@@ -80,29 +81,80 @@ function matchesLearning(summary, categoryCode, categoryName, learnings) {
   return false;
 }
 
-async function downloadImage(url) {
+// Anthropic's API rejects images whose base64 payload exceeds 5MB. base64 inflates the
+// raw bytes by ~33%, so we keep the RAW download under ~3.6MB (about 4.8MB base64) when
+// using an image as-is. Slack's auto-thumbnails are almost always well under this.
+const MAX_RAW_BYTES = 3_600_000;
+
+// Fetch raw bytes (no size cap) plus content-type. Used both for small images we pass
+// through and for large originals we resize before sending.
+async function fetchBytes(url) {
   const res = await fetch(url, { headers: { Authorization: 'Bearer ' + process.env.SLACK_BOT_TOKEN } });
   if (!res.ok) { console.log('SLACK_IMG_HTTP', res.status, url.slice(0, 80)); return null; }
-  const ct = res.headers.get('content-type') || 'image/jpeg';
-  if (!ct.startsWith('image/')) { console.log('SLACK_IMG_NOT_IMAGE', ct); return null; }
+  const ct = (res.headers.get('content-type') || 'image/jpeg').split(';')[0];
   const buf = Buffer.from(await res.arrayBuffer());
-  if (buf.length > 4_500_000) { console.log('SLACK_IMG_TOO_BIG', buf.length); return null; }
-  return { media_type: ct.split(';')[0], data: buf.toString('base64') };
+  return { ct, buf };
 }
 
-// iPhone photos are often 5-10MB, which blows past our size cap, so the full-resolution
-// url_private_download gets dropped. Slack auto-generates smaller thumbnails; try those
-// first (largest first) and only fall back to the full file. First success wins.
+// Downscale any Jimp-readable image (jpeg/png/gif/bmp/tiff) to fit comfortably under the
+// API limit: cap the long edge at 1600px and encode JPEG at quality 80. Returns a
+// ready-to-send {media_type,data} or null if the bytes can't be decoded (e.g. HEIC).
+async function resizeToFit(buf) {
+  try {
+    const img = await Jimp.read(buf);
+    const w = img.bitmap.width, h = img.bitmap.height;
+    const longEdge = Math.max(w, h);
+    if (longEdge > 1600) {
+      if (w >= h) img.resize({ w: 1600 }); else img.resize({ h: 1600 });
+    }
+    let quality = 80;
+    let out = await img.getBuffer('image/jpeg', { quality });
+    // If still too big, step the quality down until it fits (rare for receipts).
+    while (out.length > MAX_RAW_BYTES && quality > 40) {
+      quality -= 15;
+      out = await img.getBuffer('image/jpeg', { quality });
+    }
+    if (out.length > MAX_RAW_BYTES) { console.log('SLACK_IMG_RESIZE_STILL_BIG', out.length); return null; }
+    console.log('SLACK_IMG_RESIZED', w + 'x' + h, '->', img.bitmap.width + 'x' + img.bitmap.height, out.length + 'B', 'q' + quality);
+    return { media_type: 'image/jpeg', data: out.toString('base64') };
+  } catch (e) {
+    console.log('SLACK_IMG_RESIZE_FAILED', e.message);
+    return null;
+  }
+}
+
+// Turn one downloaded blob into an API-ready image: pass it through if it's already a
+// small, Claude-supported type; otherwise resize/re-encode it with Jimp.
+async function toApiImage(ct, buf) {
+  const supported = /^image\/(jpeg|png|gif|webp)$/.test(ct);
+  if (supported && buf.length <= MAX_RAW_BYTES) {
+    return { media_type: ct, data: buf.toString('base64') };
+  }
+  // Too big, or a type Claude won't take (or that Jimp can re-encode). Resize it.
+  // (webp/heic that Jimp can't decode will return null and we move to the next candidate.)
+  return await resizeToFit(buf);
+}
+
+// iPhone/Android photos are often 5-12MB. Slack auto-generates smaller JPEG thumbnails;
+// try those first (largest first). If a thumbnail is missing or itself too big, fall back
+// to the original and RESIZE it locally so a large photo still gets through. First success
+// wins.
 async function collectImage(f) {
   const candidates = [
-    f.thumb_1024, f.thumb_960, f.thumb_800, f.thumb_720,
+    f.thumb_1024, f.thumb_960, f.thumb_800, f.thumb_720, f.thumb_640, f.thumb_480,
     f.url_private_download, f.url_private,
   ].filter(Boolean);
+  console.log('SLACK_IMG_TRY', JSON.stringify({
+    id: f.id, filetype: f.filetype, mimetype: f.mimetype, size: f.size, candidates: candidates.length,
+  }));
   for (const url of candidates) {
-    const img = await downloadImage(url);
+    const got = await fetchBytes(url);
+    if (!got) continue;
+    if (!got.ct.startsWith('image/')) { console.log('SLACK_IMG_NOT_IMAGE', got.ct, url.slice(0, 80)); continue; }
+    const img = await toApiImage(got.ct, got.buf);
     if (img) return img;
   }
-  console.log('SLACK_IMG_DOWNLOAD_FAILED', f.id, f.filetype, f.size, 'candidates:', candidates.length);
+  console.log('SLACK_IMG_DOWNLOAD_FAILED', f.id, f.filetype, f.size, 'tried:', candidates.length);
   return null;
 }
 
@@ -144,7 +196,7 @@ async function parseWithClaude(text, images, categories, learnings) {
     },
     body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 400, messages: [{ role: 'user', content }] }),
   });
-  if (!res.ok) throw new Error('Claude API ' + res.status);
+  if (!res.ok) { const errBody = await res.text().catch(()=> ''); throw new Error('Claude API ' + res.status + ' ' + errBody.slice(0, 200)); }
   const data = await res.json();
   const txt = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
   const clean = txt.replace(/```json|```/g, '').trim();
@@ -167,8 +219,21 @@ exports.handler = async (event) => {
 
   // ACK fast; Slack retries if we take too long. We do the work inline but keep it lean.
   const ev = body.event || {};
+  // Diagnostic: log every incoming message event's shape so we can see why photo-only
+  // posts might get dropped (subtype, whether files are attached, etc.).
+  console.log('SLACK_EVENT', JSON.stringify({
+    type: ev.type, subtype: ev.subtype || null, bot_id: ev.bot_id || null,
+    channel: ev.channel, has_text: !!(ev.text && ev.text.trim()),
+    file_count: (ev.files || []).length, ts: ev.ts,
+  }));
   if (ev.type !== 'message' || ev.bot_id) return { statusCode: 200, body: 'ignored' };
-  if (ev.subtype && ev.subtype !== 'file_share') return { statusCode: 200, body: 'ignored' };
+  // Accept plain messages and file shares. A photo-only post can arrive with subtype
+  // 'file_share' OR (in some clients) with no subtype but a populated files array, so we
+  // only bail on subtypes that are clearly not user expense posts AND carry no files.
+  if (ev.subtype && ev.subtype !== 'file_share' && !(ev.files && ev.files.length)) {
+    console.log('SLACK_SKIP_SUBTYPE', ev.subtype);
+    return { statusCode: 200, body: 'ignored subtype' };
+  }
 
   const map = channelMap();
   const corpCode = map[ev.channel];
@@ -211,7 +276,7 @@ exports.handler = async (event) => {
 
   let parsed;
   try { parsed = await parseWithClaude(text, images, cats || [], learnings || []); }
-  catch (e) { return { statusCode: 200, body: 'parse failed: ' + e.message }; }
+  catch (e) { console.log('SLACK_PARSE_FAILED', e.message, 'images:', images.length); return { statusCode: 200, body: 'parse failed: ' + e.message }; }
 
   // Non-expense messages (coin box / cash count reports, sales/deposit reports,
   // attendance notes) must NOT be booked as expenses.

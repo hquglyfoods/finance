@@ -346,15 +346,6 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .cal .day.tappable{cursor:pointer}
 .cal .day.tappable:hover{border-color:var(--gold);box-shadow:0 2px 6px rgba(0,0,0,0.08)}
 .cal .day .note-dot{position:absolute;bottom:3px;right:4px;font-size:10px;color:var(--red)}
-/* first-run notification prompt */
-.notif-prompt-overlay{position:fixed;inset:0;background:rgba(20,18,14,0.45);display:flex;align-items:center;justify-content:center;z-index:400;padding:24px}
-.notif-prompt{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:26px 22px 20px;max-width:340px;width:100%;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,0.25)}
-.np-bell{font-size:38px;line-height:1;margin-bottom:12px}
-.np-title{font-size:19px;font-weight:700;color:var(--text);margin-bottom:8px}
-.np-body{font-size:14px;color:var(--text2);line-height:1.45;margin-bottom:20px}
-.np-primary{width:100%;background:var(--gold);color:#fff;border:none;border-radius:11px;padding:13px;font-size:15px;font-weight:600;cursor:pointer}
-.np-primary:disabled{opacity:.6}
-.np-later{width:100%;background:none;border:none;color:var(--text3);font-size:14px;padding:12px 0 2px;cursor:pointer}
 .day-memo{background:rgba(196,57,43,0.08);border:1px solid var(--red-soft);border-radius:8px;padding:10px 12px;margin-top:10px;font-size:13px;color:var(--text);line-height:1.4}
 .day-memo-lbl{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--red);font-weight:700;margin-bottom:3px}
 .modal-overlay{position:fixed;inset:0;background:rgba(30,26,20,0.45);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px}
@@ -4310,60 +4301,6 @@ const NAV = [
   {id:'alerts',    label:'Install', full:'Install App',     ic:'⬇', roles:['owner','assistant','investor']},
 ];
 
-// First-run notification prompt: shown ONCE when the app is opened as an installed PWA
-// (Android or iOS) and the user hasn't decided on notifications yet. "Turn on" requests
-// permission and registers the push subscription; either button (or tapping outside)
-// dismisses it permanently so it never nags again.
-function NotifPrompt({profile}){
-  const [show, setShow] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(()=>{
-    if(!profile) return;
-    if(profile.role==='investor') return;                 // investors don't get store alerts
-    if(localStorage.getItem('ft_notif_prompted')==='1') return; // already asked once
-    if(!isStandalone()) return;                           // only inside the installed app
-    if(!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-    if(typeof Notification==='undefined') return;
-    if(Notification.permission!=='default') return;       // already granted or denied
-    const t = setTimeout(()=>setShow(true), 800);         // let the app settle first
-    return ()=>clearTimeout(t);
-  },[profile]);
-
-  const dismiss = ()=>{ localStorage.setItem('ft_notif_prompted','1'); setShow(false); };
-
-  const enable = async ()=>{
-    setBusy(true);
-    try{
-      const perm = await Notification.requestPermission();
-      if(perm==='granted'){
-        const reg = await navigator.serviceWorker.ready;
-        const sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlB64ToUint8(window.__VAPID_PUBLIC__),
-        });
-        const json = sub.toJSON();
-        await sb.from('push_subscriptions').upsert({
-          endpoint: json.endpoint, profile_id: profile.id, role: profile.role, subscription: json,
-        }, { onConflict: 'endpoint' });
-      }
-    }catch(e){ /* if anything fails, they can still enable it later from Settings */ }
-    setBusy(false);
-    dismiss();
-  };
-
-  if(!show) return null;
-  return <div className="notif-prompt-overlay" onClick={dismiss}>
-    <div className="notif-prompt" onClick={e=>e.stopPropagation()}>
-      <div className="np-bell">🔔</div>
-      <div className="np-title">Turn on notifications?</div>
-      <div className="np-body">Get a heads-up when there's something to approve, a daily board is posted, or cash needs a pickup.</div>
-      <button className="np-primary" disabled={busy} onClick={enable}>{busy?'…':'Turn on notifications'}</button>
-      <button className="np-later" disabled={busy} onClick={dismiss}>Maybe later</button>
-    </div>
-  </div>;
-}
-
 function App(){
   const [session,setSession] = useState(undefined);
   const [profile,setProfile] = useState(null);
@@ -4464,7 +4401,6 @@ function App(){
   const moreNav = nav.filter(n=>!CORE.includes(n.id));
 
   return <div className="shell">
-    <NotifPrompt profile={profile}/>
     <div className="side">
       <div className="brand">Ugly <em>Finance</em></div>
       <div className="brand-sub">Finance Tool</div>
