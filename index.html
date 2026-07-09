@@ -2537,7 +2537,23 @@ function CashLedger({corps, canEditIds, profile}){
   };
 
   const save = async()=>{
-    const m = modal, amt = sumExpr(m.amount);
+    const m = modal;
+    // Opening balance can be negative (a corp may start with a cash deficit). It is a single
+    // number (not additive). A negative value is stored as an 'out' row so the balance nets down.
+    if(m.mode==='opening'){
+      const s = String(m.amount).trim();
+      const v = /^-?\d+(\.\d+)?$/.test(s) ? Math.round(parseFloat(s)*100)/100 : NaN;
+      if(isNaN(v) || v===0){ showToast('Enter an amount (can be negative)'); return; }
+      setBusy(true);
+      try{
+        const { error } = await sb.from('cash_ledger').insert({ corporation_id:m.corp, date:m.date, direction:(v<0?'out':'in'), kind:'opening_balance', amount:Math.abs(v), memo:m.memo||null, created_by:profile.id });
+        if(error) throw error;
+        setModal(null); showToast('Saved'); reload();
+      }catch(e){ showToast('Save failed: '+(e.message||e)); }
+      setBusy(false);
+      return;
+    }
+    const amt = sumExpr(m.amount);
     if(isNaN(amt) || amt<=0){ showToast('Enter an amount'); return; }
     setBusy(true);
     try{
@@ -2674,7 +2690,7 @@ function CashLedger({corps, canEditIds, profile}){
           <select style={{width:'100%',marginBottom:8}} value={modal.kind} onChange={e=>setModal({...modal,kind:e.target.value})}>{CL_OUT_KINDS.map(k=><option key={k[0]} value={k[0]}>{k[1]}</option>)}</select></>}
         <div style={{display:'flex',gap:8,marginBottom:8}}>
           <div style={{flex:1}}><label className="hint">Amount</label>
-            <input type="text" inputMode="text" style={{width:'100%'}} placeholder="0.00" value={modal.amount} onChange={e=>setModal({...modal,amount:e.target.value})}/></div>
+            <input type="text" inputMode="text" style={{width:'100%'}} placeholder={modal.mode==='opening'?'e.g. 500 or -500':'0.00'} value={modal.amount} onChange={e=>setModal({...modal,amount:e.target.value})}/></div>
           <div style={{flex:1}}><label className="hint">Date</label>
             <input type="date" style={{width:'100%'}} value={modal.date} onChange={e=>setModal({...modal,date:e.target.value})}/></div>
         </div>
