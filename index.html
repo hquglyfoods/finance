@@ -2503,7 +2503,8 @@ function CashLedger({corps, canEditIds, profile}){
   const [toast, showToast] = useToast();
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState(null);      // {mode,...}
-  const [filter, setFilter] = useState('all');    // 'all' | 'transfers' | corpId
+  const [storeSel, setStoreSel] = useState('all'); // 'all' | corpId  (which store's ledger)
+  const [mode, setMode] = useState('all');         // 'all' | 'transfers'
   const [catsByCorp, setCatsByCorp] = useState({});
 
   const reload = useCallback(async()=>{
@@ -2526,7 +2527,7 @@ function CashLedger({corps, canEditIds, profile}){
   };
 
   const openModal = (mode)=>{
-    const first = ledgerCorps[0] && ledgerCorps[0].id;
+    const first = (storeSel!=='all' ? storeSel : (ledgerCorps[0] && ledgerCorps[0].id));
     const base = { mode, corp:first, date:todayStr(), amount:'', memo:'' };
     if(mode==='in') base.kind='counted_cash';
     if(mode==='out'){ base.kind='bank_deposit'; base.includePL=false; base.category_id=''; loadCats(first); }
@@ -2597,7 +2598,7 @@ function CashLedger({corps, canEditIds, profile}){
     return out;
   };
 
-  const visRows = (rows||[]).filter(r=> filter==='all' ? true : filter==='transfers' ? !!r.transfer_group : r.corporation_id===filter);
+  const visRows = (rows||[]).filter(r=> (storeSel==='all' || r.corporation_id===storeSel) && (mode==='all' || (mode==='transfers' && !!r.transfer_group)));
   if(rows===null) return <div className="card"><div className="sub">Loading cash ledger...</div></div>;
 
   return <div className="card">
@@ -2619,13 +2620,18 @@ function CashLedger({corps, canEditIds, profile}){
     </div>
 
     <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8,alignItems:'center'}}>
-      <span className="hint" style={{marginTop:0}}>Filter:</span>
-      <button className={'btn btn-sm'+(filter==='all'?' btn-gold':'')} onClick={()=>setFilter('all')}>All</button>
-      <button className={'btn btn-sm'+(filter==='transfers'?' btn-gold':'')} onClick={()=>setFilter('transfers')}>Transfers / lending</button>
-      {ledgerCorps.map(c=><button key={c.id} className={'btn btn-sm'+(filter===c.id?' btn-gold':'')} onClick={()=>setFilter(c.id)}>{c.code||c.name}</button>)}
+      <span className="hint" style={{marginTop:0}}>Store:</span>
+      <button className={'btn btn-sm'+(storeSel==='all'?' btn-gold':'')} onClick={()=>setStoreSel('all')}>All</button>
+      {ledgerCorps.map(c=><button key={c.id} className={'btn btn-sm'+(storeSel===c.id?' btn-gold':'')} onClick={()=>setStoreSel(c.id)}>{c.code||c.name}</button>)}
     </div>
 
-    {filter==='transfers' && <div className="cash-lending">
+    <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8,alignItems:'center'}}>
+      <span className="hint" style={{marginTop:0}}>Show:</span>
+      <button className={'btn btn-sm'+(mode==='all'?' btn-gold':'')} onClick={()=>setMode('all')}>All entries</button>
+      <button className={'btn btn-sm'+(mode==='transfers'?' btn-gold':'')} onClick={()=>setMode('transfers')}>Transfers / lending</button>
+    </div>
+
+    {mode==='transfers' && <div className="cash-lending">
       {lending().length===0 ? <div className="faint">No outstanding inter-corp balances.</div>
         : lending().map((l,i)=><div key={i} className="cash-lend-row"><span>{corpName(l.from)} lent {corpName(l.to)}</span><span className="mono">{fmt$(l.amt)}</span></div>)}
     </div>}
@@ -2636,11 +2642,14 @@ function CashLedger({corps, canEditIds, profile}){
           <td className="rec-name">{corpName(r.corporation_id)} &middot; {clKindLabel(r.kind)}
             {r.counterparty_corp_id && <span className="faint"> ({r.direction==='out'?'to ':'from '}{corpName(r.counterparty_corp_id)})</span>}
             {r.expense_id && <span className="badge gold" style={{marginLeft:6}}>P&amp;L</span>}
+            {r.auto_source==='cash_count' && <span className="badge" style={{marginLeft:6}}>Auto</span>}
             {r.memo && <div className="faint" style={{fontSize:11}}>{r.memo}</div>}
           </td>
           <td className="rec-cat">{r.date}</td>
           <td className="num rec-amt" style={{color:r.direction==='in'?'var(--green)':'var(--red)'}}>{r.direction==='in'?'+':'\u2212'}{fmt$(Number(r.amount))}</td>
-          <td className="rec-act" style={{textAlign:'right'}}><button className="btn btn-sm btn-danger" disabled={busy} onClick={()=>del(r)}>&#10005;</button></td>
+          <td className="rec-act" style={{textAlign:'right'}}>{r.auto_source==='cash_count'
+            ? <span className="faint" style={{fontSize:11}}>Cash tab</span>
+            : <button className="btn btn-sm btn-danger" disabled={busy} onClick={()=>del(r)}>&#10005;</button>}</td>
         </tr>)}
       </tbody></table>}
 
