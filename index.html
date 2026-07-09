@@ -1332,24 +1332,38 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
         const nowD=new Date(); const curK=`${nowD.getFullYear()}-${pad(nowD.getMonth()+1)}`;
         const buildDays=(rawX, yy)=>{
           const nD=lastDay(yy,m); const days={};
-          for(let d=1;d<=nD;d++) days[d]={rev:0,exp:0,items:[]};
+          for(let d=1;d<=nD;d++) days[d]={rev:0,exp:0,items:[],card:0,tips:0,payroll:0};
           const mKey=`${yy}-${pad(m)}`;
           const lockedR=(mKey<curK) && rawX.revenue.some(r=>r.source==='board');
           const lockedE=(mKey<curK) && rawX.expenses.some(e=>e.source==='board'&&e.status==='confirmed');
           const boardRevDates=new Set(rawX.revenue.filter(r=>r.source==='board').map(r=>r.date));
           rawX.revenue.forEach(r=>{ if(lockedR&&r.source!=='board')return; if(!lockedR&&r.source!=='board'&&boardRevDates.has(r.date))return; const ch=chBy[r.channel_id]; if(!ch||!ch.counts_in_total)return;
-            const d=parseInt(r.date.slice(8)); if(days[d]) days[d].rev+=Number(r.amount)*Number(ch.total_multiplier||1); });
+            const d=parseInt(r.date.slice(8)); if(days[d]){ const amt=Number(r.amount)*Number(ch.total_multiplier||1); days[d].rev+=amt; if(ch.code==='card') days[d].card+=amt; } });
           const boardExpDates=new Set(rawX.expenses.filter(e=>e.source==='board'&&e.status==='confirmed').map(e=>e.date));
           rawX.expenses.forEach(e=>{ if(e.status!=='confirmed')return; const cc=catBy[e.category_id]; if(lockedE&&e.source!=='board'&&isBoardSuperseded(e,cc&&cc.code))return; if(!lockedE&&e.source!=='board'&&isBoardSuperseded(e,cc&&cc.code)&&boardExpDates.has(e.date))return;
             const d=parseInt(e.date.slice(8)); if(days[d]){ days[d].exp+=Number(e.amount);
+              if(cc&&cc.code==='tips') days[d].tips+=Number(e.amount);
+              if(cc&&cc.code==='payroll') days[d].payroll+=Number(e.amount);
               days[d].items.push({id:e.id, category_id:e.category_id, date:e.date, cat:(catBy[e.category_id]||{}).name||'?', amount:Number(e.amount), payee:e.payee, memo:e.memo, source:e.source, by:e.entered_by, slack_user:e.slack_user}); } });
           return days;
         };
         const cur=buildDays(raw,y), prev=buildDays(rawLY,y-1);
+        // Per-day computed rule lines: Credit Card Fee and Other Obligations (WC/SS). These
+        // rules are linear, so each day's value uses that day's card sales, tips, and payroll,
+        // and the daily values sum to the monthly P&L figure. Shown as read-only "Auto" lines.
+        const ccRule=(mt.rules||[]).find(r=>r.code==='cc_fee');
+        const obRule=(mt.rules||[]).find(r=>r.code==='other_obligations');
+        const dayAuto=(c)=>{
+          const vars={ ch_card:c.card, cat_tips:c.tips, cat_payroll:c.payroll, total_sales:c.rev };
+          const lines=[];
+          if(ccRule){ const a=evalExpr(ccRule.expr,vars); if(a) lines.push({name:ccRule.name, amount:a}); }
+          if(obRule){ const a=evalExpr(obRule.expr,vars); if(a) lines.push({name:obRule.name, amount:a}); }
+          return lines;
+        };
         const nD=lastDay(y,m); const out=[];
         for(let d=1;d<=nD;d++){ const c=cur[d], p=prev[d]||{rev:0,exp:0,items:[]};
           out.push({ d, date:`${y}-${pad(m)}-${pad(d)}`, rev:c.rev, exp:c.exp, items:c.items,
-            lyRev:p.rev, lyExp:p.exp }); }
+            lyRev:p.rev, lyExp:p.exp, autoLines:dayAuto(c) }); }
         setDayRows(out);
       }
       else if(view==='year'){
@@ -1890,10 +1904,10 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
                 <td className="num mono">{r.exp?<Amt v={r.exp}/>:'-'}</td>
                 <td className={'num mono '+(dnet>0?'pos':dnet<0?'neg':'')}>{has?<Amt v={dnet}/>:'-'}</td>
                 <td className="chev-td">
-                  {r.items.length>0 && <button className="btn btn-sm" onClick={()=>setOpen(isOpen?null:r.d)}>{isOpen?'▲':'▾'}</button>}
+                  {(r.items.length>0 || (r.autoLines&&r.autoLines.length>0)) && <button className="btn btn-sm" onClick={()=>setOpen(isOpen?null:r.d)}>{isOpen?'▲':'▾'}</button>}
                 </td>
               </tr>
-              {isOpen && r.items.length>0 && <tr><td colSpan={7} style={{background:'var(--panel2)',padding:0}}>
+              {isOpen && (r.items.length>0 || (r.autoLines&&r.autoLines.length>0)) && <tr><td colSpan={7} style={{background:'var(--panel2)',padding:0}}>
                 <div className="exp-detail">
                   {r.items.map((it,i)=>{
                     const key = it.id || (r.d+'-'+i);
@@ -1911,6 +1925,16 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
                       {isOwner && it.id && <button className="exp-edit-btn" disabled={busy} onClick={()=>openEdit(it)} aria-label="Edit">⋯</button>}
                     </div>;
                   })}
+                  {(r.autoLines||[]).map((a,ai)=><div key={'auto'+ai} className="exp-line">
+                    <div className="exp-line-main">
+                      <div className="exp-line-name">
+                        <span className="exp-nm">{a.name}</span>
+                        <span className="badge gold" style={{marginLeft:6}}>Auto</span>
+                      </div>
+                    </div>
+                    <div className="exp-line-amt mono">{fmt$(a.amount)}</div>
+                  </div>)}
+                  {r.autoLines&&r.autoLines.length>0 && <div className="hint" style={{padding:'6px 2px 0'}}>Auto lines are calculated (not entered) and counted in the monthly P&L, not in this day's entered total.</div>}
                 </div>
               </td></tr>}
             </React.Fragment>; })}
@@ -2765,12 +2789,14 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
   const [edit, setEdit] = useState(null);   // full-edit an existing recurring row
   const [catOpen, setCatOpen] = useState(false);   // Expense Categories folded by default
   const [showHidden, setShowHidden] = useState(false); // hide inactive categories by default
+  const [rulesOpen, setRulesOpen] = useState(false); // Automatic P&L rules panel folded by default
+  const [dragId, setDragId] = useState(null); // category being dragged
   const [newCat, setNewCat] = useState('');
   const [toast, showToast] = useToast();
 
   const reload = useCallback(async()=>{
     if(!corpId) return;
-    const mt = await loadCorpMeta(corpId); setMeta(mt);
+    const mt = await loadCorpMeta(corpId, true); setMeta(mt);
     const r = await sb.from('recurring_expenses').select('*').eq('corporation_id',corpId).order('created_at');
     setRows(r.data||[]);
   },[corpId]);
@@ -2883,18 +2909,12 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
   // Reorder categories. Renumbers display_order sequentially after the move so it stays
   // clean even if existing values are null or duplicated. Order drives the P&L line order
   // and the category dropdowns.
-  const moveCategory = async(cat, dir, visibleList)=>{
-    const vis = visibleList.slice();
-    const i = vis.findIndex(c=>c.id===cat.id);
-    const j = dir==='up' ? i-1 : i+1;
-    if(i<0 || j<0 || j>=vis.length) return;
-    const [it] = vis.splice(i,1);
-    vis.splice(j,0,it);
-    // Rebuild the full order: the visible items in their new order, then any items not in
-    // the visible list (hidden) after them, keeping their relative order.
-    const visIds = new Set(vis.map(c=>c.id));
+  // Shared renumber: place `orderedVisible` first (in the given order), then any items not
+  // shown (hidden) after, and write sequential display_order values (only where changed).
+  const persistOrder = async(orderedVisible)=>{
+    const visIds = new Set(orderedVisible.map(c=>c.id));
     const rest = (meta ? meta.categories : []).filter(c=>!visIds.has(c.id));
-    const full = [...vis, ...rest];
+    const full = [...orderedVisible, ...rest];
     for(let k=0;k<full.length;k++){
       if(full[k].display_order !== k+1){
         const { error } = await sb.from('expense_categories').update({display_order:k+1}).eq('id',full[k].id);
@@ -2902,6 +2922,26 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
       }
     }
     reload();
+  };
+  const moveCategory = async(cat, dir, visibleList)=>{
+    const vis = visibleList.slice();
+    const i = vis.findIndex(c=>c.id===cat.id);
+    const j = dir==='up' ? i-1 : i+1;
+    if(i<0 || j<0 || j>=vis.length) return;
+    const [it] = vis.splice(i,1);
+    vis.splice(j,0,it);
+    await persistOrder(vis);
+  };
+  const dropCategory = async(target, visibleList)=>{
+    const id = dragId; setDragId(null);
+    if(!id || id===target.id) return;
+    const vis = visibleList.slice();
+    const from = vis.findIndex(c=>c.id===id);
+    const to = vis.findIndex(c=>c.id===target.id);
+    if(from<0 || to<0) return;
+    const [it] = vis.splice(from,1);
+    vis.splice(to,0,it);
+    await persistOrder(vis);
   };
 
   // materialize due entries for the current month up to today
@@ -2960,8 +3000,14 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
           <button className="btn" style={{flex:'0 0 auto'}} onClick={addCategory}>Add Category</button>
         </div>
         {catList.length>0 && <table className="t" style={{marginTop:14}}><tbody>
-          {catList.map((c,idx)=><tr key={c.id} style={{opacity:c.active?1:0.5}}>
+          {catList.map((c,idx)=><tr key={c.id} draggable
+            onDragStart={()=>setDragId(c.id)}
+            onDragOver={e=>e.preventDefault()}
+            onDrop={()=>dropCategory(c,catList)}
+            onDragEnd={()=>setDragId(null)}
+            style={{opacity:dragId===c.id?0.4:(c.active?1:0.5), cursor:'grab'}}>
             <td style={{width:1,whiteSpace:'nowrap',paddingRight:8}}>
+              <span title="Drag to reorder" style={{color:'var(--text2)',marginRight:6,userSelect:'none'}}>⠿</span>
               <button className="btn btn-sm" disabled={idx===0} title="Move up" onClick={()=>moveCategory(c,'up',catList)}>▲</button>
               <button className="btn btn-sm" disabled={idx===catList.length-1} style={{marginLeft:4}} title="Move down" onClick={()=>moveCategory(c,'down',catList)}>▼</button>
             </td>
@@ -2986,6 +3032,23 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
         </button>}
       </div>;
       })()}
+    </div>}
+    {isOwner && <div className="card wc-card">
+      <button className="wc-head" onClick={()=>setRulesOpen(o=>!o)}>
+        <span className="wc-title">Automatic P&L Rules {meta && meta.rules.length>0 && <span className="wc-count">{meta.rules.length}</span>}</span>
+        <span className="wc-chev">{rulesOpen?'▲':'▾'}</span>
+      </button>
+      {rulesOpen && <div style={{padding:'0 18px 18px'}}>
+        <div className="hint" style={{marginTop:0,marginBottom:10}}>Formula-driven expense lines computed automatically on the P&L (shown with an "Auto" badge under Insights). Read-only here; edited in the database. Variables: ch_&lt;channel&gt; is that revenue channel, cat_&lt;category&gt; is that expense category, total_sales is revenue counted in total.</div>
+        {meta && meta.rules.length>0
+          ? <table className="t"><tbody>
+              {meta.rules.map(r=><tr key={r.id||r.code}>
+                <td>{r.name} <span className="badge gold">Auto</span></td>
+                <td className="mono" style={{fontSize:12,color:'var(--text2)'}}>{r.expr}</td>
+              </tr>)}
+            </tbody></table>
+          : <div className="faint">No automatic rules for this store.</div>}
+      </div>}
     </div>}
     {isOwner && <div className="card">
       <h3>New Recurring Expense</h3>
