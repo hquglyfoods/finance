@@ -41,6 +41,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);font-size:
 button{font-family:inherit;cursor:pointer}
 input,select,textarea{font-family:inherit;font-size:14px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:9px 11px;outline:none;width:100%;box-sizing:border-box}
 input[type=checkbox],input[type=radio]{width:auto;padding:0;margin:0;flex:0 0 auto;accent-color:var(--gold)}
+input[type=date],input[type=month],input[type=time],input[type=datetime-local]{-webkit-appearance:none;appearance:none;min-width:0;max-width:100%}
 input:focus,select:textarea:focus,select:focus,textarea:focus{border-color:var(--gold-soft)}
 input[type=number]{font-family:var(--font-m)}
 ::placeholder{color:var(--text3)}
@@ -509,6 +510,8 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   .cl-actions .btn{font-size:12px;padding:7px 9px}
   .cl-seg{padding:6px 8px}
   .cl-seg>button{padding:5px 9px;font-size:12px}
+  .modal-2col{flex-direction:column;gap:8px}
+  .modal-2col>div{width:100%}
   /* Expense Categories: fixed layout so the name truncates with an ellipsis and the
      controls/action buttons always stay on screen (no horizontal scroll). */
   /* Expense Categories on mobile: stack so the name truncates on its own line and the
@@ -2800,7 +2803,7 @@ function CashLedger({corps, canEditIds, profile}){
           <select style={{width:'100%',marginBottom:8}} value={modal.kind} onChange={e=>setModal({...modal,kind:e.target.value})}>{CL_IN_KINDS.map(k=><option key={k[0]} value={k[0]}>{k[1]}</option>)}</select></>}
         {modal.mode==='out' && <><label className="hint">Type</label>
           <select style={{width:'100%',marginBottom:8}} value={modal.kind} onChange={e=>{ const k=e.target.value; setModal({...modal, kind:k, includePL: k==='cash_expense' ? true : modal.includePL}); }}>{CL_OUT_KINDS.map(k=><option key={k[0]} value={k[0]}>{k[1]}</option>)}</select></>}
-        <div style={{display:'flex',gap:8,marginBottom:8}}>
+        <div className="modal-2col" style={{display:'flex',gap:8,marginBottom:8}}>
           <div style={{flex:1,minWidth:0}}><label className="hint">Amount</label>
             <input type="text" inputMode="text" style={{width:'100%'}} placeholder={modal.mode==='opening'?'e.g. 500 or -500':'0.00'} value={modal.amount} onChange={e=>setModal({...modal,amount:e.target.value})}/></div>
           <div style={{flex:1,minWidth:0}}><label className="hint">Date</label>
