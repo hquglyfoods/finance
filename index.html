@@ -479,12 +479,24 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   .cat-hidden-toggle{display:none}
   /* Expense Categories: fixed layout so the name truncates with an ellipsis and the
      controls/action buttons always stay on screen (no horizontal scroll). */
-  table.cat-list{table-layout:fixed;width:100%}
-  table.cat-list td.ctrl-td{width:104px;padding-right:4px}
-  table.cat-list td.nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  table.cat-list td.act-td{width:120px;white-space:normal !important}
-  table.cat-list td.act-td .btn-sm{margin:2px 0 2px 4px}
+  /* Expense Categories on mobile: stack so the name truncates on its own line and the
+     reorder arrows + Rename/Delete sit on a second line (no overlap, no horizontal scroll).
+     The drag handle is hidden since touch drag is not supported. */
+  table.cat-list,table.cat-list tbody{display:block;min-width:0}
+  table.cat-list tr{display:flex;flex-wrap:wrap;align-items:center;padding:8px 2px;border-bottom:1px solid var(--border-soft)}
+  table.cat-list td{display:block;border:none;padding:0;width:auto !important}
+  table.cat-list td.nm{order:1;flex:1 1 100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;font-size:13px;margin-bottom:6px}
+  table.cat-list td.ctrl-td{order:2;white-space:nowrap}
+  table.cat-list .cat-drag{display:none}
+  table.cat-list td.act-td{order:3;margin-left:auto;white-space:normal !important;text-align:right}
+  table.cat-list td.act-td .btn-sm{margin:0 0 0 6px}
   table.cat-list .inv-note{display:none}
+  /* Automatic P&L Rules on mobile: stack name over its formula, formula wraps. */
+  table.rules-list,table.rules-list tbody,table.rules-list tr,table.rules-list td{display:block;width:auto;min-width:0}
+  table.rules-list tr{border-bottom:1px solid var(--border-soft);padding:8px 2px}
+  table.rules-list td{border:none;padding:1px 0}
+  table.rules-list td.rule-nm{font-weight:600;font-size:12.5px}
+  table.rules-list td.rule-expr{white-space:normal;word-break:break-word}
   /* Registered Recurring Expenses: stack each row so long names/memos truncate and the
      action buttons wrap below instead of pushing the row off screen. */
   table.rec-list,table.rec-list tbody,table.rec-list tr,table.rec-list td{display:block;width:auto}
@@ -3034,7 +3046,7 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
             onDragEnd={()=>setDragId(null)}
             style={{opacity:dragId===c.id?0.4:(c.active?1:0.5), cursor:'grab'}}>
             <td className="ctrl-td" style={{width:1,whiteSpace:'nowrap',paddingRight:8}}>
-              <span title="Drag to reorder" style={{color:'var(--text2)',marginRight:6,userSelect:'none'}}>⠿</span>
+              <span className="cat-drag" title="Drag to reorder" style={{color:'var(--text2)',marginRight:6,userSelect:'none'}}>⠿</span>
               <button className="btn btn-sm" disabled={idx===0} title="Move up" onClick={()=>moveCategory(c,'up',catList)}>▲</button>
               <button className="btn btn-sm" disabled={idx===catList.length-1} style={{marginLeft:4}} title="Move down" onClick={()=>moveCategory(c,'down',catList)}>▼</button>
             </td>
@@ -3068,10 +3080,10 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
       {rulesOpen && <div style={{padding:'0 18px 18px'}}>
         <div className="hint" style={{marginTop:0,marginBottom:10}}>Formula-driven expense lines computed automatically on the P&L (shown with an "Auto" badge under Insights). Read-only here; edited in the database. Variables: ch_&lt;channel&gt; is that revenue channel, cat_&lt;category&gt; is that expense category, total_sales is revenue counted in total.</div>
         {meta && meta.rules.length>0
-          ? <table className="t"><tbody>
+          ? <table className="t rules-list"><tbody>
               {meta.rules.map(r=><tr key={r.id||r.code}>
-                <td>{r.name} <span className="badge gold">Auto</span></td>
-                <td className="mono" style={{fontSize:12,color:'var(--text2)'}}>{r.expr}</td>
+                <td className="rule-nm">{r.name} <span className="badge gold">Auto</span></td>
+                <td className="mono rule-expr" style={{fontSize:12,color:'var(--text2)'}}>{r.expr}</td>
               </tr>)}
             </tbody></table>
           : <div className="faint">No automatic rules for this store.</div>}
@@ -3160,50 +3172,60 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
           </td>
         </tr>)}</tbody>
       </table>}
-      {edit && <div className="card" style={{marginTop:14,background:'var(--panel2)'}}>
-        <h3>Edit recurring expense</h3>
-        <div className="hint" style={{marginTop:0,marginBottom:10}}>Fix the name, category, amount, or the schedule (e.g. you picked the wrong frequency or day). This changes the rule going forward; past entries are kept.</div>
-        <div className="form-row">
-          <input placeholder="Name" value={edit.name} onChange={e=>setEdit({...edit,name:e.target.value})}/>
-          <select value={edit.category_id} onChange={e=>setEdit({...edit,category_id:e.target.value})}>
-            <option value="">Category</option>
-            {(meta?meta.categories:[]).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <input className="w-sm" type="number" step="0.01" placeholder="Amount" value={edit.amount} onChange={e=>setEdit({...edit,amount:e.target.value})}/>
-        </div>
-        <div className="form-row">
-          <select className="w-sm" value={edit.frequency} onChange={e=>setEdit({...edit,frequency:e.target.value})}>
-            <option value="weekly">Weekly</option><option value="monthly">Monthly</option>
-          </select>
-          {edit.frequency==='weekly'
-            ? <select className="w-sm" value={edit.day_of_week} onChange={e=>setEdit({...edit,day_of_week:e.target.value})}>
-                {DOW.map((d,i)=><option key={i} value={i}>{d}</option>)}
-              </select>
-            : <select className="w-sm" value={edit.day_of_month} onChange={e=>setEdit({...edit,day_of_month:e.target.value})}>
-                {Array.from({length:31},(_,i)=><option key={i+1} value={i+1}>Day {i+1}</option>)}
-                <option value="99">Last day of month</option>
-              </select>}
-          <input placeholder="Memo (optional)" value={edit.payee} onChange={e=>setEdit({...edit,payee:e.target.value})}/>
-        </div>
-        <div style={{display:'flex',gap:8}}>
-          <button className="btn btn-gold btn-sm" onClick={updateRec}>Save changes</button>
-          <button className="btn btn-sm btn-danger" onClick={()=>deleteRec(rows.find(x=>x.id===edit.id))}>Delete</button>
-          <button className="btn btn-sm" onClick={()=>setEdit(null)}>Cancel</button>
+      {edit && <div className="modal-overlay" onClick={()=>setEdit(null)}>
+        <div className="modal" onClick={e=>e.stopPropagation()}>
+          <div className="modal-head">
+            <div className="modal-title">Edit recurring expense</div>
+            <button className="modal-x" onClick={()=>setEdit(null)}>✕</button>
+          </div>
+          <div className="hint" style={{marginTop:0,marginBottom:10}}>Fix the name, category, amount, or the schedule (e.g. wrong frequency or day). This changes the rule going forward; past entries are kept.</div>
+          <div className="form-row">
+            <input placeholder="Name" value={edit.name} onChange={e=>setEdit({...edit,name:e.target.value})}/>
+            <select value={edit.category_id} onChange={e=>setEdit({...edit,category_id:e.target.value})}>
+              <option value="">Category</option>
+              {(meta?meta.categories:[]).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <input className="w-sm" type="number" step="0.01" placeholder="Amount" value={edit.amount} onChange={e=>setEdit({...edit,amount:e.target.value})}/>
+          </div>
+          <div className="form-row">
+            <select className="w-sm" value={edit.frequency} onChange={e=>setEdit({...edit,frequency:e.target.value})}>
+              <option value="weekly">Weekly</option><option value="monthly">Monthly</option>
+            </select>
+            {edit.frequency==='weekly'
+              ? <select className="w-sm" value={edit.day_of_week} onChange={e=>setEdit({...edit,day_of_week:e.target.value})}>
+                  {DOW.map((d,i)=><option key={i} value={i}>{d}</option>)}
+                </select>
+              : <select className="w-sm" value={edit.day_of_month} onChange={e=>setEdit({...edit,day_of_month:e.target.value})}>
+                  {Array.from({length:31},(_,i)=><option key={i+1} value={i+1}>Day {i+1}</option>)}
+                  <option value="99">Last day of month</option>
+                </select>}
+            <input placeholder="Memo (optional)" value={edit.payee} onChange={e=>setEdit({...edit,payee:e.target.value})}/>
+          </div>
+          <div style={{display:'flex',gap:8,marginTop:4}}>
+            <button className="btn btn-gold btn-sm" onClick={updateRec}>Save changes</button>
+            <button className="btn btn-sm btn-danger" onClick={()=>deleteRec(rows.find(x=>x.id===edit.id))}>Delete</button>
+            <button className="btn btn-sm" onClick={()=>setEdit(null)}>Cancel</button>
+          </div>
         </div>
       </div>}
-      {sched && <div className="card" style={{marginTop:14,background:'var(--panel2)'}}>
-        <h3>Schedule an amount change</h3>
-        <div className="hint" style={{marginTop:0,marginBottom:10}}>Use this when the amount or rate changes on a future date (e.g. a lease raise). The current amount stays until the effective date, then recurring runs use the new amount. To just fix a mistake now, use Edit instead.</div>
-        <div className="form-row">
-          <div><label className="hint" style={{marginTop:0}}>New amount</label>
-            <input type="number" step="0.01" placeholder="0.00" value={sched.amount} onChange={e=>setSched({...sched,amount:e.target.value})}/></div>
-          <div><label className="hint" style={{marginTop:0}}>Effective from</label>
-            <input type="date" value={sched.from} onChange={e=>setSched({...sched,from:e.target.value})}/></div>
-        </div>
-        <div style={{display:'flex',gap:8}}>
-          <button className="btn btn-gold btn-sm" onClick={saveSched}>Save change</button>
-          <button className="btn btn-sm" onClick={()=>clearSched(sched.id)}>Remove scheduled change</button>
-          <button className="btn btn-sm" onClick={()=>setSched(null)}>Cancel</button>
+      {sched && <div className="modal-overlay" onClick={()=>setSched(null)}>
+        <div className="modal" onClick={e=>e.stopPropagation()}>
+          <div className="modal-head">
+            <div className="modal-title">Schedule an amount change</div>
+            <button className="modal-x" onClick={()=>setSched(null)}>✕</button>
+          </div>
+          <div className="hint" style={{marginTop:0,marginBottom:10}}>Use this when the amount changes on a future date (e.g. a lease raise). The current amount stays until the effective date, then recurring runs use the new amount. To just fix a mistake now, use Edit instead.</div>
+          <div className="form-row">
+            <div><label className="hint" style={{marginTop:0}}>New amount</label>
+              <input type="number" step="0.01" placeholder="0.00" value={sched.amount} onChange={e=>setSched({...sched,amount:e.target.value})}/></div>
+            <div><label className="hint" style={{marginTop:0}}>Effective from</label>
+              <input type="date" value={sched.from} onChange={e=>setSched({...sched,from:e.target.value})}/></div>
+          </div>
+          <div style={{display:'flex',gap:8,marginTop:4}}>
+            <button className="btn btn-gold btn-sm" onClick={saveSched}>Save change</button>
+            <button className="btn btn-sm" onClick={()=>clearSched(sched.id)}>Remove scheduled change</button>
+            <button className="btn btn-sm" onClick={()=>setSched(null)}>Cancel</button>
+          </div>
         </div>
       </div>}
     </div>
