@@ -770,6 +770,20 @@ function evalExpr(expr, vars){
   }catch(err){ return 0; }
 }
 
+// Amount fields accept a "+"-separated sum so a batch of receipts can be entered at once,
+// e.g. "12+15+16.5". Returns the cent-rounded total, or NaN if the text isn't a valid
+// additive expression. No limit on how many terms are added.
+function sumExpr(str){
+  if(str==null) return NaN;
+  const s = String(str).trim();
+  if(s==='') return NaN;
+  const parts = s.split('+').map(p=>p.trim());
+  if(parts.some(p=>!/^\d+(\.\d+)?$/.test(p))) return NaN;
+  let total = 0;
+  for(const p of parts) total += parseFloat(p);
+  return Math.round(total*100)/100;
+}
+
 function useToast(){
   const [msg, setMsg] = useState(null);
   const show = useCallback(t => { setMsg(t); setTimeout(()=>setMsg(null), 2600); },[]);
@@ -1750,7 +1764,7 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
     setEf({amount:String(it.amount), category_id:it.category_id||'', memo:it.memo||'', date:it.date||''});
   };
   const saveEdit = async ()=>{
-    const amt = parseFloat(ef.amount);
+    const amt = sumExpr(ef.amount);
     if(isNaN(amt) || amt<=0){ showToast('Enter a valid amount'); return; }
     if(!ef.date){ showToast('Pick a date'); return; }
     setBusy(true);
@@ -1922,7 +1936,8 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
         </select>
         <div style={{display:'flex',gap:8,marginBottom:10}}>
           <div style={{flex:1}}><label className="hint">Amount</label>
-            <input type="number" step="0.01" inputMode="decimal" style={{width:'100%'}} value={ef.amount} onChange={e=>setEf({...ef,amount:e.target.value})}/></div>
+            <input type="text" inputMode="text" style={{width:'100%'}} placeholder="e.g. 12+15+16" value={ef.amount} onChange={e=>setEf({...ef,amount:e.target.value})}/>
+            {String(ef.amount).includes('+') && !isNaN(sumExpr(ef.amount)) && <div className="hint" style={{marginTop:4,color:'var(--gold)'}}>= {fmt$(sumExpr(ef.amount))}</div>}</div>
           <div style={{flex:1}}><label className="hint">Date</label>
             <input type="date" style={{width:'100%'}} value={ef.date} onChange={e=>setEf({...ef,date:e.target.value})}/></div>
         </div>
@@ -2243,11 +2258,12 @@ function Entry({corps, canEditIds, profile, presetCorp, presetMode}){
   const addExp = async () => {
     if(!form.category_id){ showToast('Select a category'); return; }
     if(!form.memo || !form.memo.trim()){ showToast('Enter details for this expense'); return; }
-    if(!form.amount || isNaN(parseFloat(form.amount))){ showToast('Enter an amount'); return; }
+    const amt = sumExpr(form.amount);
+    if(isNaN(amt) || amt<=0){ showToast('Enter an amount'); return; }
     setBusy(true);
     const { error } = await sb.from('expenses').insert({
       corporation_id:corpId, category_id:form.category_id, date,
-      amount:parseFloat(form.amount), payee:form.payee||null, memo:form.memo.trim(),
+      amount:amt, payee:form.payee||null, memo:form.memo.trim(),
       method:form.method||'card',
       source:'manual', entered_by:profile.id });
     setBusy(false);
@@ -2360,9 +2376,10 @@ function Entry({corps, canEditIds, profile, presetCorp, presetMode}){
             <label className="hint" style={{marginTop:0}}>Amount <span style={{color:'var(--gold)'}}>*</span></label>
             <div className="amt-input">
               <span className="amt-prefix">$</span>
-              <input type="number" step="0.01" placeholder="0.00" value={form.amount}
+              <input type="text" inputMode="text" placeholder="0.00 or 12+15+16" value={form.amount}
                 onChange={e=>setForm({...form,amount:e.target.value})}/>
             </div>
+            {String(form.amount).includes('+') && !isNaN(sumExpr(form.amount)) && <div className="hint" style={{marginTop:4,color:'var(--gold)'}}>= {fmt$(sumExpr(form.amount))}</div>}
           </div>
           <div className="fr-col">
             <label className="hint" style={{marginTop:0}}>Payee (optional)</label>
