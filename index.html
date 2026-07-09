@@ -4958,7 +4958,15 @@ function App(){
   const [profile,setProfile] = useState(null);
   const [corps,setCorps] = useState([]);
   const [perms,setPerms] = useState([]);
-  const [tab,setTab] = useState(localStorage.getItem('ft_tab')||'home');
+  const [tab,setTab] = useState(()=>{
+    try{ const u=new URLSearchParams(location.search).get('tab'); if(u) return u; }catch(e){}
+    return localStorage.getItem('ft_tab')||'home';
+  });
+  // A push notification opens the app at /?tab=<dest>; consume it, then clean the URL so a
+  // later refresh doesn't re-force that tab.
+  useEffect(()=>{
+    try{ const sp=new URLSearchParams(location.search); if(sp.has('tab')||sp.has('n')) history.replaceState(null,'',location.pathname); }catch(e){}
+  },[]);
   const [entryCorp,setEntryCorp] = useState(null);
   const [entryMode,setEntryMode] = useState(null);
   const [insightsCorp,setInsightsCorp] = useState(null);

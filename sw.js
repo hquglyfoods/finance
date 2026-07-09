@@ -11,13 +11,14 @@ self.addEventListener('push', event => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch (e) { data = {}; }
   const title = data.title || 'Ugly Finance';
+  const url = data.tab ? ('/?tab=' + encodeURIComponent(data.tab)) : '/';
   const options = {
     body: data.body || '',
     icon: '/icons/icon-192.png',
     badge: '/icons/badge-96.png',
     tag: data.tag || 'ugly-finance',
     renotify: true,
-    data: { url: '/' },
+    data: { url },
   };
   event.waitUntil((async () => {
     await self.registration.showNotification(title, options);

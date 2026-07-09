@@ -83,6 +83,9 @@ exports.handler = async (event) => {
     return { statusCode: 200, body: JSON.stringify({ ok: false, ignored: true, reason }) };
   }
 
+  // Which app tab this alert points to (used by the bell and by push-click navigation).
+  const linkTab = table === 'expenses' ? 'approvals' : 'investor';
+
   // Log to the in-app notifications feed (the bell), so alerts show in-app too.
   try {
     await fetch(`${process.env.SUPABASE_URL}/rest/v1/notifications`, {
@@ -97,7 +100,7 @@ exports.handler = async (event) => {
         kind: table === 'expenses' ? 'pending' : 'published',
         target_role: table === 'expenses' ? 'staff' : 'investor',
         corporation_id: corpId || null,
-        link_tab: table === 'expenses' ? 'approvals' : 'investor',
+        link_tab: linkTab,
       }),
     });
   } catch (e) { /* non-fatal: push still sends */ }
@@ -136,7 +139,7 @@ exports.handler = async (event) => {
       badge = pendingCount;
     }
     try {
-      const r = await sendPush(sub, { title, body, badge, tag: table }, opts);
+      const r = await sendPush(sub, { title, body, badge, tag: table, tab: linkTab }, opts);
       if (r.gone) { await sbDelete(`push_subscriptions?endpoint=eq.${encodeURIComponent(row.endpoint)}`); removed++; }
       else if (r.ok) sent++;
       else errors.push('status ' + r.status);
