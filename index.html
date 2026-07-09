@@ -2764,6 +2764,7 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
   const [sched, setSched] = useState(null);
   const [edit, setEdit] = useState(null);   // full-edit an existing recurring row
   const [catOpen, setCatOpen] = useState(false);   // Expense Categories folded by default
+  const [showHidden, setShowHidden] = useState(false); // hide inactive categories by default
   const [newCat, setNewCat] = useState('');
   const [toast, showToast] = useToast();
 
@@ -2879,6 +2880,29 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
   const restoreCategory = async(cat)=>{
     await sb.from('expense_categories').update({active:true}).eq('id',cat.id); reload();
   };
+  // Reorder categories. Renumbers display_order sequentially after the move so it stays
+  // clean even if existing values are null or duplicated. Order drives the P&L line order
+  // and the category dropdowns.
+  const moveCategory = async(cat, dir, visibleList)=>{
+    const vis = visibleList.slice();
+    const i = vis.findIndex(c=>c.id===cat.id);
+    const j = dir==='up' ? i-1 : i+1;
+    if(i<0 || j<0 || j>=vis.length) return;
+    const [it] = vis.splice(i,1);
+    vis.splice(j,0,it);
+    // Rebuild the full order: the visible items in their new order, then any items not in
+    // the visible list (hidden) after them, keeping their relative order.
+    const visIds = new Set(vis.map(c=>c.id));
+    const rest = (meta ? meta.categories : []).filter(c=>!visIds.has(c.id));
+    const full = [...vis, ...rest];
+    for(let k=0;k<full.length;k++){
+      if(full[k].display_order !== k+1){
+        const { error } = await sb.from('expense_categories').update({display_order:k+1}).eq('id',full[k].id);
+        if(error){ showToast('Reorder failed: '+error.message); return; }
+      }
+    }
+    reload();
+  };
 
   // materialize due entries for the current month up to today
   const generate = async()=>{
@@ -2922,17 +2946,25 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
     </div>
     {isOwner && <div className="card wc-card">
       <button className="wc-head" onClick={()=>setCatOpen(o=>!o)}>
-        <span className="wc-title">Expense Categories {meta && meta.categories.length>0 && <span className="wc-count">{meta.categories.length}</span>}</span>
+        <span className="wc-title">Expense Categories {meta && meta.categories.filter(c=>c.active).length>0 && <span className="wc-count">{meta.categories.filter(c=>c.active).length}</span>}</span>
         <span className="wc-chev">{catOpen?'▲':'▾'}</span>
       </button>
-      {catOpen && <div style={{padding:'0 18px 18px'}}>
+      {catOpen && (()=>{
+        const allCats = (meta ? meta.categories : []);
+        const hiddenCount = allCats.filter(c=>!c.active).length;
+        const catList = allCats.filter(c=> showHidden ? true : c.active);
+        return <div style={{padding:'0 18px 18px'}}>
         <div className="hint" style={{marginTop:0,marginBottom:10}}>Create a category for anything you want as its own line on the P&L, like Accounting, Toast Fee, or Trash Removal.</div>
         <div className="form-row">
           <input placeholder="Category name (e.g. Accounting, Toast Fee, Trash Removal)" value={newCat} onChange={e=>setNewCat(e.target.value)}/>
           <button className="btn" style={{flex:'0 0 auto'}} onClick={addCategory}>Add Category</button>
         </div>
-        {meta && meta.categories.length>0 && <table className="t" style={{marginTop:14}}><tbody>
-          {meta.categories.map(c=><tr key={c.id} style={{opacity:c.active?1:0.5}}>
+        {catList.length>0 && <table className="t" style={{marginTop:14}}><tbody>
+          {catList.map((c,idx)=><tr key={c.id} style={{opacity:c.active?1:0.5}}>
+            <td style={{width:1,whiteSpace:'nowrap',paddingRight:8}}>
+              <button className="btn btn-sm" disabled={idx===0} title="Move up" onClick={()=>moveCategory(c,'up',catList)}>▲</button>
+              <button className="btn btn-sm" disabled={idx===catList.length-1} style={{marginLeft:4}} title="Move down" onClick={()=>moveCategory(c,'down',catList)}>▼</button>
+            </td>
             <td>{c.name}
               {c.protected && <span className="badge gold">Auto</span>}
               {!c.active && <span className="badge" style={{background:'var(--panel2)'}}>Hidden</span>}
@@ -2949,7 +2981,11 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
             </td>
           </tr>)}
         </tbody></table>}
-      </div>}
+        {hiddenCount>0 && <button className="btn btn-sm" style={{marginTop:12}} onClick={()=>setShowHidden(s=>!s)}>
+          {showHidden ? 'Hide hidden categories' : `Show ${hiddenCount} hidden categor${hiddenCount===1?'y':'ies'}`}
+        </button>}
+      </div>;
+      })()}
     </div>}
     {isOwner && <div className="card">
       <h3>New Recurring Expense</h3>
