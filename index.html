@@ -40,6 +40,7 @@ html,body{height:100%}
 body{background:var(--bg);color:var(--text);font-family:var(--font-b);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
 button{font-family:inherit;cursor:pointer}
 input,select,textarea{font-family:inherit;font-size:14px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:9px 11px;outline:none;width:100%}
+input[type=checkbox],input[type=radio]{width:auto;padding:0;margin:0;flex:0 0 auto;accent-color:var(--gold)}
 input:focus,select:textarea:focus,select:focus,textarea:focus{border-color:var(--gold-soft)}
 input[type=number]{font-family:var(--font-m)}
 ::placeholder{color:var(--text3)}
@@ -148,10 +149,24 @@ a{color:var(--gold);text-decoration:none}
 .autoapprove-opt .aa-label{font-weight:700;font-size:14px}
 .autoapprove-opt .aa-current{margin-left:auto;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}
 .autoapprove-opt .aa-desc{margin-top:4px;font-size:12.5px;color:var(--text2);line-height:1.45}
-.cash-bal-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px}
-.cash-bal{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--panel)}
+.cash-bal-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px}
+.cash-bal{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--panel);min-width:0}
 .cash-bal-name{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text2)}
-.cash-bal-amt{font-size:17px;font-weight:700;font-family:var(--font-m);margin-top:2px}
+.cash-bal-amt{font-size:16px;font-weight:700;font-family:var(--font-m);margin-top:2px;white-space:nowrap;font-variant-numeric:tabular-nums;letter-spacing:-.02em;overflow:hidden;text-overflow:ellipsis}
+/* Cash Ledger action buttons: colour-coded so the group reads distinctly from the filters */
+.cl-actions{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 12px}
+.cl-in{background:var(--green-dim);border-color:rgba(127,176,105,.5);color:var(--green)}
+.cl-out{background:var(--red-dim);border-color:rgba(196,100,76,.5);color:var(--red)}
+.cl-xfer{background:rgba(122,156,198,.14);border-color:rgba(122,156,198,.5);color:var(--blue)}
+.cl-open{background:var(--panel2)}
+/* segmented filter groups (Store / Show / Period), each boxed with a distinct left accent */
+.cl-seg{display:flex;gap:4px;flex-wrap:wrap;align-items:center;background:var(--panel2);border:1px solid var(--border-soft);border-left:3px solid var(--gold-soft);border-radius:10px;padding:6px 10px;margin-bottom:8px}
+.cl-seg .seg-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-right:4px}
+.cl-seg>button{border:1px solid transparent;background:none;padding:5px 11px;border-radius:7px;font-size:12.5px;font-weight:600;color:var(--text2);cursor:pointer;white-space:nowrap}
+.cl-seg>button.on{background:var(--gold-dim);color:var(--gold);border-color:var(--gold-soft)}
+.cl-seg-show{border-left-color:#9bb0c9}
+.cl-seg-period{border-left-color:#b39ddb}
+.cl-seg input{width:auto;padding:5px 8px;font-size:13px}
 .cash-lending{border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:var(--panel2)}
 .cash-lend-row{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:13px}
 .cal-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
@@ -483,6 +498,17 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   table.t-settings .btn-sm{padding:4px 7px;font-size:11px}
   .cat-inactive{display:none}
   .cat-hidden-toggle{display:none}
+  /* Cash Ledger on mobile: hide the description, use a predictable 3-column balance grid
+     with a smaller (non-wrapping) amount, and tighten the segmented filter buttons. */
+  .cash-ledger-desc{display:none}
+  .cash-bal-grid{grid-template-columns:repeat(3,1fr);gap:6px}
+  .cash-bal{padding:8px 9px}
+  .cash-bal-name{font-size:10px}
+  .cash-bal-amt{font-size:13.5px}
+  .cl-actions{gap:6px}
+  .cl-actions .btn{font-size:12px;padding:7px 9px}
+  .cl-seg{padding:6px 8px}
+  .cl-seg>button{padding:5px 9px;font-size:12px}
   /* Expense Categories: fixed layout so the name truncates with an ellipsis and the
      controls/action buttons always stay on screen (no horizontal scroll). */
   /* Expense Categories on mobile: stack so the name truncates on its own line and the
@@ -2491,7 +2517,7 @@ function Entry({corps, canEditIds, profile, presetCorp, presetMode}){
 // counted cash / transfers / other. Cash out = deposits, owner draws, bonuses, reimburse,
 // transfers, other. An out entry can optionally also post to the P&L as a cash expense with
 // a chosen category. Inter-corp transfers just move cash between boxes (paired rows).
-const CL_OUT_KINDS = [['bank_deposit','Bank deposit'],['owner_draw','Owner draw / distribution'],['bonus','Cash bonus'],['reimburse','Reimburse owner'],['other','Other']];
+const CL_OUT_KINDS = [['cash_expense','Cash expense'],['bank_deposit','Bank deposit'],['owner_draw','Owner draw / distribution'],['bonus','Cash bonus'],['reimburse','Reimburse owner'],['other','Other']];
 const CL_IN_KINDS = [['counted_cash','Counted cash'],['other','Other']];
 const CL_ALL_KINDS = [...CL_OUT_KINDS, ...CL_IN_KINDS, ['transfer_out','Transfer'],['transfer_in','Transfer'],['opening_balance','Opening balance']];
 const clKindLabel = k => { const f = CL_ALL_KINDS.find(x=>x[0]===k); return f ? f[1] : k; };
@@ -2504,7 +2530,11 @@ function CashLedger({corps, canEditIds, profile}){
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState(null);      // {mode,...}
   const [storeSel, setStoreSel] = useState('all'); // 'all' | corpId  (which store's ledger)
-  const [mode, setMode] = useState('all');         // 'all' | 'transfers'
+  const [mode, setMode] = useState('all');         // 'all' | 'transfers' | 'in' | 'out'
+  const [period, setPeriod] = useState('all');     // 'all' | 'month' | 'range'
+  const [ym, setYm] = useState(todayStr().slice(0,7));  // YYYY-MM for the month view
+  const [rStart, setRStart] = useState('');
+  const [rEnd, setREnd] = useState('');
   const [catsByCorp, setCatsByCorp] = useState({});
 
   const reload = useCallback(async()=>{
@@ -2530,7 +2560,7 @@ function CashLedger({corps, canEditIds, profile}){
     const first = (storeSel!=='all' ? storeSel : (ledgerCorps[0] && ledgerCorps[0].id));
     const base = { mode, corp:first, date:todayStr(), amount:'', memo:'' };
     if(mode==='in') base.kind='counted_cash';
-    if(mode==='out'){ base.kind='bank_deposit'; base.includePL=false; base.category_id=''; loadCats(first); }
+    if(mode==='out'){ base.kind='cash_expense'; base.includePL=true; base.category_id=''; loadCats(first); }
     if(mode==='transfer'){ base.from=first; base.to=(ledgerCorps[1]&&ledgerCorps[1].id)||first; }
     if(mode==='opening') base.kind='opening_balance';
     setModal(base);
@@ -2546,8 +2576,13 @@ function CashLedger({corps, canEditIds, profile}){
       if(isNaN(v) || v===0){ showToast('Enter an amount (can be negative)'); return; }
       setBusy(true);
       try{
-        const { error } = await sb.from('cash_ledger').insert({ corporation_id:m.corp, date:m.date, direction:(v<0?'out':'in'), kind:'opening_balance', amount:Math.abs(v), memo:m.memo||null, created_by:profile.id });
-        if(error) throw error;
+        if(m.editId){
+          const { error } = await sb.from('cash_ledger').update({ corporation_id:m.corp, date:m.date, direction:(v<0?'out':'in'), amount:Math.abs(v), memo:m.memo||null }).eq('id',m.editId);
+          if(error) throw error;
+        } else {
+          const { error } = await sb.from('cash_ledger').insert({ corporation_id:m.corp, date:m.date, direction:(v<0?'out':'in'), kind:'opening_balance', amount:Math.abs(v), memo:m.memo||null, created_by:profile.id });
+          if(error) throw error;
+        }
         setModal(null); showToast('Saved'); reload();
       }catch(e){ showToast('Save failed: '+(e.message||e)); }
       setBusy(false);
@@ -2559,27 +2594,49 @@ function CashLedger({corps, canEditIds, profile}){
     try{
       if(m.mode==='transfer'){
         if(m.from===m.to){ showToast('Pick two different corporations'); setBusy(false); return; }
-        const grp = (typeof crypto!=='undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now())+Math.random();
-        const { error } = await sb.from('cash_ledger').insert([
-          { corporation_id:m.from, date:m.date, direction:'out', kind:'transfer_out', amount:amt, counterparty_corp_id:m.to, transfer_group:grp, memo:m.memo||null, created_by:profile.id },
-          { corporation_id:m.to, date:m.date, direction:'in', kind:'transfer_in', amount:amt, counterparty_corp_id:m.from, transfer_group:grp, memo:m.memo||null, created_by:profile.id },
-        ]);
-        if(error) throw error;
+        if(m.editGroup){
+          const { error } = await sb.from('cash_ledger').update({ amount:amt, date:m.date, memo:m.memo||null }).eq('transfer_group', m.editGroup);
+          if(error) throw error;
+        } else {
+          const grp = (typeof crypto!=='undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now())+Math.random();
+          const { error } = await sb.from('cash_ledger').insert([
+            { corporation_id:m.from, date:m.date, direction:'out', kind:'transfer_out', amount:amt, counterparty_corp_id:m.to, transfer_group:grp, memo:m.memo||null, created_by:profile.id },
+            { corporation_id:m.to, date:m.date, direction:'in', kind:'transfer_in', amount:amt, counterparty_corp_id:m.from, transfer_group:grp, memo:m.memo||null, created_by:profile.id },
+          ]);
+          if(error) throw error;
+        }
       } else if(m.mode==='out'){
-        let expense_id = null;
+        let expense_id = m.editId ? (m.expenseId||null) : null;
         if(m.includePL){
           if(!m.category_id){ showToast('Pick a P&L category'); setBusy(false); return; }
-          const { data:exp, error:e1 } = await sb.from('expenses').insert({
-            corporation_id:m.corp, category_id:m.category_id, date:m.date, amount:amt,
-            memo:(m.memo||clKindLabel(m.kind)), method:'cash', source:'cash_ledger', status:'confirmed', entered_by:profile.id,
-          }).select('id').maybeSingle();
-          if(e1) throw e1; expense_id = exp && exp.id;
+          if(expense_id){
+            const { error:e1 } = await sb.from('expenses').update({ corporation_id:m.corp, category_id:m.category_id, date:m.date, amount:amt, memo:(m.memo||clKindLabel(m.kind)) }).eq('id',expense_id);
+            if(e1) throw e1;
+          } else {
+            const { data:exp, error:e1 } = await sb.from('expenses').insert({
+              corporation_id:m.corp, category_id:m.category_id, date:m.date, amount:amt,
+              memo:(m.memo||clKindLabel(m.kind)), method:'cash', source:'cash_ledger', status:'confirmed', entered_by:profile.id,
+            }).select('id').maybeSingle();
+            if(e1) throw e1; expense_id = exp && exp.id;
+          }
+        } else if(expense_id){
+          await sb.from('expenses').delete().eq('id',expense_id); expense_id=null;
         }
-        const { error } = await sb.from('cash_ledger').insert({ corporation_id:m.corp, date:m.date, direction:'out', kind:m.kind, amount:amt, memo:m.memo||null, expense_id, created_by:profile.id });
-        if(error) throw error;
-      } else { // in or opening
-        const { error } = await sb.from('cash_ledger').insert({ corporation_id:m.corp, date:m.date, direction:'in', kind:m.kind, amount:amt, memo:m.memo||null, created_by:profile.id });
-        if(error) throw error;
+        if(m.editId){
+          const { error } = await sb.from('cash_ledger').update({ corporation_id:m.corp, date:m.date, kind:m.kind, amount:amt, memo:m.memo||null, expense_id }).eq('id',m.editId);
+          if(error) throw error;
+        } else {
+          const { error } = await sb.from('cash_ledger').insert({ corporation_id:m.corp, date:m.date, direction:'out', kind:m.kind, amount:amt, memo:m.memo||null, expense_id, created_by:profile.id });
+          if(error) throw error;
+        }
+      } else { // in
+        if(m.editId){
+          const { error } = await sb.from('cash_ledger').update({ corporation_id:m.corp, date:m.date, kind:m.kind, amount:amt, memo:m.memo||null }).eq('id',m.editId);
+          if(error) throw error;
+        } else {
+          const { error } = await sb.from('cash_ledger').insert({ corporation_id:m.corp, date:m.date, direction:'in', kind:m.kind, amount:amt, memo:m.memo||null, created_by:profile.id });
+          if(error) throw error;
+        }
       }
       setModal(null); showToast('Saved'); reload();
     }catch(e){ showToast('Save failed: '+(e.message||e)); }
@@ -2595,6 +2652,33 @@ function CashLedger({corps, canEditIds, profile}){
       showToast('Deleted'); reload();
     }catch(e){ showToast('Delete failed: '+(e.message||e)); }
     setBusy(false);
+  };
+
+  // Open the modal pre-filled to edit an existing (manual) row. Auto rows are not editable.
+  const openEdit = async(r)=>{
+    if(r.auto_source==='cash_count') return;
+    if(r.transfer_group){
+      const isOut = r.direction==='out';
+      setModal({ mode:'transfer', editGroup:r.transfer_group,
+        from:(isOut?r.corporation_id:r.counterparty_corp_id), to:(isOut?r.counterparty_corp_id:r.corporation_id),
+        amount:String(r.amount), date:r.date, memo:r.memo||'' });
+      return;
+    }
+    if(r.kind==='opening_balance'){
+      setModal({ mode:'opening', editId:r.id, corp:r.corporation_id, kind:'opening_balance',
+        amount:String(r.direction==='out'?-Number(r.amount):Number(r.amount)), date:r.date, memo:r.memo||'' });
+      return;
+    }
+    if(r.direction==='in'){
+      setModal({ mode:'in', editId:r.id, corp:r.corporation_id, kind:r.kind, amount:String(r.amount), date:r.date, memo:r.memo||'' });
+      return;
+    }
+    // out: pull the linked expense's category if any
+    let category_id='';
+    if(r.expense_id){ try{ const {data}=await sb.from('expenses').select('category_id').eq('id',r.expense_id).maybeSingle(); category_id=(data&&data.category_id)||''; }catch(e){} }
+    loadCats(r.corporation_id);
+    setModal({ mode:'out', editId:r.id, expenseId:r.expense_id||null, corp:r.corporation_id, kind:r.kind,
+      amount:String(r.amount), date:r.date, memo:r.memo||'', includePL:!!r.expense_id, category_id });
   };
 
   // Net inter-corp lending (transfers only), collapsing reciprocals.
@@ -2614,12 +2698,21 @@ function CashLedger({corps, canEditIds, profile}){
     return out;
   };
 
-  const visRows = (rows||[]).filter(r=> (storeSel==='all' || r.corporation_id===storeSel) && (mode==='all' || (mode==='transfers' && !!r.transfer_group)));
+  const visRows = (rows||[]).filter(r=>{
+    if(storeSel!=='all' && r.corporation_id!==storeSel) return false;
+    if(period==='month' && ym){ if(!String(r.date).startsWith(ym)) return false; }
+    if(period==='range'){ if(rStart && r.date < rStart) return false; if(rEnd && r.date > rEnd) return false; }
+    if(mode==='all') return true;
+    if(mode==='transfers') return !!r.transfer_group;
+    if(mode==='in') return r.direction==='in' && !r.transfer_group;
+    if(mode==='out') return r.direction==='out' && !r.transfer_group;
+    return true;
+  });
   if(rows===null) return <div className="card"><div className="sub">Loading cash ledger...</div></div>;
 
   return <div className="card">
     <h3>Cash Ledger <span className="badge gold">Owner</span></h3>
-    <div className="sub" style={{marginBottom:12}}>Physical cash on hand per corporation. Separate from the P&L: only "cash out" entries you mark are also booked as expenses. Transfers just move cash between boxes.</div>
+    <div className="sub cash-ledger-desc" style={{marginBottom:12}}>Physical cash on hand per corporation. Separate from the P&L: only "cash out" entries you mark are also booked as expenses. Transfers just move cash between boxes.</div>
 
     <div className="cash-bal-grid">
       {ledgerCorps.map(c=><div key={c.id} className="cash-bal">
@@ -2628,28 +2721,46 @@ function CashLedger({corps, canEditIds, profile}){
       </div>)}
     </div>
 
-    <div style={{display:'flex',gap:8,flexWrap:'wrap',margin:'14px 0 10px'}}>
-      <button className="btn btn-sm btn-gold" onClick={()=>openModal('in')}>+ Cash in</button>
-      <button className="btn btn-sm" onClick={()=>openModal('out')}>&minus; Cash out</button>
-      <button className="btn btn-sm" onClick={()=>openModal('transfer')}>&#8646; Transfer</button>
-      <button className="btn btn-sm" onClick={()=>openModal('opening')}>Set opening balance</button>
+    <div className="cl-actions">
+      <button className="btn btn-sm cl-in" onClick={()=>openModal('in')}>+ Cash in</button>
+      <button className="btn btn-sm cl-out" onClick={()=>openModal('out')}>&minus; Cash out</button>
+      <button className="btn btn-sm cl-xfer" onClick={()=>openModal('transfer')}>&#8646; Transfer</button>
+      <button className="btn btn-sm cl-open" onClick={()=>openModal('opening')}>Opening balance</button>
     </div>
 
-    <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8,alignItems:'center'}}>
-      <span className="hint" style={{marginTop:0}}>Store:</span>
-      <button className={'btn btn-sm'+(storeSel==='all'?' btn-gold':'')} onClick={()=>setStoreSel('all')}>All</button>
-      {ledgerCorps.map(c=><button key={c.id} className={'btn btn-sm'+(storeSel===c.id?' btn-gold':'')} onClick={()=>setStoreSel(c.id)}>{c.code||c.name}</button>)}
+    <div className="cl-seg">
+      <span className="seg-lbl">Store</span>
+      <button className={storeSel==='all'?'on':''} onClick={()=>setStoreSel('all')}>All</button>
+      {ledgerCorps.map(c=><button key={c.id} className={storeSel===c.id?'on':''} onClick={()=>setStoreSel(c.id)}>{c.code||c.name}</button>)}
     </div>
 
-    <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8,alignItems:'center'}}>
-      <span className="hint" style={{marginTop:0}}>Show:</span>
-      <button className={'btn btn-sm'+(mode==='all'?' btn-gold':'')} onClick={()=>setMode('all')}>All entries</button>
-      <button className={'btn btn-sm'+(mode==='transfers'?' btn-gold':'')} onClick={()=>setMode('transfers')}>Transfers / lending</button>
+    <div className="cl-seg cl-seg-show">
+      <span className="seg-lbl">Show</span>
+      <button className={mode==='all'?'on':''} onClick={()=>setMode('all')}>All</button>
+      <button className={mode==='in'?'on':''} onClick={()=>setMode('in')}>Income</button>
+      <button className={mode==='out'?'on':''} onClick={()=>setMode('out')}>Expense</button>
+      <button className={mode==='transfers'?'on':''} onClick={()=>setMode('transfers')}>Transfers</button>
+    </div>
+
+    <div className="cl-seg cl-seg-period">
+      <span className="seg-lbl">Period</span>
+      <button className={period==='all'?'on':''} onClick={()=>setPeriod('all')}>All time</button>
+      <button className={period==='month'?'on':''} onClick={()=>setPeriod('month')}>Month</button>
+      <button className={period==='range'?'on':''} onClick={()=>setPeriod('range')}>Range</button>
+      {period==='month' && <input type="month" value={ym} onChange={e=>setYm(e.target.value)}/>}
+      {period==='range' && <><input type="date" value={rStart} onChange={e=>setRStart(e.target.value)}/>
+        <span className="seg-lbl" style={{margin:'0 2px'}}>to</span>
+        <input type="date" value={rEnd} onChange={e=>setREnd(e.target.value)}/></>}
     </div>
 
     {mode==='transfers' && <div className="cash-lending">
       {lending().length===0 ? <div className="faint">No outstanding inter-corp balances.</div>
         : lending().map((l,i)=><div key={i} className="cash-lend-row"><span>{corpName(l.from)} lent {corpName(l.to)}</span><span className="mono">{fmt$(l.amt)}</span></div>)}
+    </div>}
+
+    {(mode==='in'||mode==='out') && visRows.length>0 && <div className="cash-lend-row" style={{fontWeight:700,borderBottom:'1px solid var(--border)',paddingBottom:6,marginBottom:8}}>
+      <span>{mode==='in'?'Total income':'Total expense'}{storeSel!=='all'?' \u00b7 '+corpName(storeSel):''}</span>
+      <span className="mono">{fmt$(visRows.reduce((a,r)=>a+Number(r.amount),0))}</span>
     </div>}
 
     {visRows.length===0 ? <div className="faint">No entries yet.</div> :
@@ -2665,21 +2776,22 @@ function CashLedger({corps, canEditIds, profile}){
           <td className="num rec-amt" style={{color:r.direction==='in'?'var(--green)':'var(--red)'}}>{r.direction==='in'?'+':'\u2212'}{fmt$(Number(r.amount))}</td>
           <td className="rec-act" style={{textAlign:'right'}}>{r.auto_source==='cash_count'
             ? <span className="faint" style={{fontSize:11}}>Cash tab</span>
-            : <button className="btn btn-sm btn-danger" disabled={busy} onClick={()=>del(r)}>&#10005;</button>}</td>
+            : <><button className="btn btn-sm" disabled={busy} onClick={()=>openEdit(r)}>Edit</button>
+               <button className="btn btn-sm btn-danger" style={{marginLeft:6}} disabled={busy} onClick={()=>del(r)}>&#10005;</button></>}</td>
         </tr>)}
       </tbody></table>}
 
     {modal && <div className="modal-overlay" onClick={()=>setModal(null)}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
         <div className="modal-head">
-          <div className="modal-title">{modal.mode==='in'?'Cash in':modal.mode==='out'?'Cash out':modal.mode==='transfer'?'Transfer cash':'Set opening balance'}</div>
+          <div className="modal-title" style={{textTransform:'capitalize'}}>{(modal.editId||modal.editGroup)?'Edit ':''}{modal.mode==='in'?'cash in':modal.mode==='out'?'cash out':modal.mode==='transfer'?'transfer':'opening balance'}</div>
           <button className="modal-x" onClick={()=>setModal(null)}>✕</button>
         </div>
         {modal.mode==='transfer' ? <>
           <label className="hint">From</label>
-          <select style={{width:'100%',marginBottom:8}} value={modal.from} onChange={e=>setModal({...modal,from:e.target.value})}>{ledgerCorps.map(c=><option key={c.id} value={c.id}>{c.name||c.code}</option>)}</select>
+          <select style={{width:'100%',marginBottom:8}} disabled={!!modal.editGroup} value={modal.from} onChange={e=>setModal({...modal,from:e.target.value})}>{ledgerCorps.map(c=><option key={c.id} value={c.id}>{c.name||c.code}</option>)}</select>
           <label className="hint">To</label>
-          <select style={{width:'100%',marginBottom:8}} value={modal.to} onChange={e=>setModal({...modal,to:e.target.value})}>{ledgerCorps.map(c=><option key={c.id} value={c.id}>{c.name||c.code}</option>)}</select>
+          <select style={{width:'100%',marginBottom:8}} disabled={!!modal.editGroup} value={modal.to} onChange={e=>setModal({...modal,to:e.target.value})}>{ledgerCorps.map(c=><option key={c.id} value={c.id}>{c.name||c.code}</option>)}</select>
         </> : <>
           <label className="hint">Corporation</label>
           <select style={{width:'100%',marginBottom:8}} value={modal.corp} onChange={e=>{ const v=e.target.value; setModal({...modal,corp:v}); if(modal.mode==='out') loadCats(v); }}>{ledgerCorps.map(c=><option key={c.id} value={c.id}>{c.name||c.code}</option>)}</select>
@@ -2687,7 +2799,7 @@ function CashLedger({corps, canEditIds, profile}){
         {modal.mode==='in' && <><label className="hint">Type</label>
           <select style={{width:'100%',marginBottom:8}} value={modal.kind} onChange={e=>setModal({...modal,kind:e.target.value})}>{CL_IN_KINDS.map(k=><option key={k[0]} value={k[0]}>{k[1]}</option>)}</select></>}
         {modal.mode==='out' && <><label className="hint">Type</label>
-          <select style={{width:'100%',marginBottom:8}} value={modal.kind} onChange={e=>setModal({...modal,kind:e.target.value})}>{CL_OUT_KINDS.map(k=><option key={k[0]} value={k[0]}>{k[1]}</option>)}</select></>}
+          <select style={{width:'100%',marginBottom:8}} value={modal.kind} onChange={e=>{ const k=e.target.value; setModal({...modal, kind:k, includePL: k==='cash_expense' ? true : modal.includePL}); }}>{CL_OUT_KINDS.map(k=><option key={k[0]} value={k[0]}>{k[1]}</option>)}</select></>}
         <div style={{display:'flex',gap:8,marginBottom:8}}>
           <div style={{flex:1}}><label className="hint">Amount</label>
             <input type="text" inputMode="text" style={{width:'100%'}} placeholder={modal.mode==='opening'?'e.g. 500 or -500':'0.00'} value={modal.amount} onChange={e=>setModal({...modal,amount:e.target.value})}/></div>
@@ -2699,10 +2811,11 @@ function CashLedger({corps, canEditIds, profile}){
             <input type="checkbox" checked={!!modal.includePL} onChange={e=>setModal({...modal,includePL:e.target.checked})}/>
             <span className="hint" style={{marginTop:0}}>Also record as a P&amp;L expense</span>
           </label>
-          {modal.includePL && <select style={{width:'100%',marginTop:6}} value={modal.category_id} onChange={e=>setModal({...modal,category_id:e.target.value})}>
+          {modal.includePL && <><select style={{width:'100%',marginTop:6}} value={modal.category_id} onChange={e=>setModal({...modal,category_id:e.target.value})}>
             <option value="">Select category...</option>
             {(catsByCorp[modal.corp]||[]).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>}
+          </select>
+          <div className="hint" style={{marginTop:4}}>Need a different expense category? Add it in Settings &gt; Recurring &gt; Expense Categories.</div></>}
         </div>}
         <label className="hint">Note (optional)</label>
         <input style={{width:'100%',marginBottom:14}} value={modal.memo} onChange={e=>setModal({...modal,memo:e.target.value})} placeholder="Optional note"/>
