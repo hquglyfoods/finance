@@ -148,6 +148,12 @@ a{color:var(--gold);text-decoration:none}
 .autoapprove-opt .aa-label{font-weight:700;font-size:14px}
 .autoapprove-opt .aa-current{margin-left:auto;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}
 .autoapprove-opt .aa-desc{margin-top:4px;font-size:12.5px;color:var(--text2);line-height:1.45}
+.cash-bal-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px}
+.cash-bal{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--panel)}
+.cash-bal-name{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text2)}
+.cash-bal-amt{font-size:17px;font-weight:700;font-family:var(--font-m);margin-top:2px}
+.cash-lending{border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:var(--panel2)}
+.cash-lend-row{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:13px}
 .cal-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
 .cal-nav{flex:0 0 auto;width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);font-size:18px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
 .cal-nav:hover{border-color:var(--gold);color:var(--gold)}
@@ -2480,6 +2486,211 @@ function Entry({corps, canEditIds, profile, presetCorp, presetMode}){
 }
 
 // ================= CASH VERIFICATION =================
+// ============ CASH LEDGER (owner / HQ only) ============
+// Physical cash on hand per corporation, independent of the P&L revenue ledger. Cash in =
+// counted cash / transfers / other. Cash out = deposits, owner draws, bonuses, reimburse,
+// transfers, other. An out entry can optionally also post to the P&L as a cash expense with
+// a chosen category. Inter-corp transfers just move cash between boxes (paired rows).
+const CL_OUT_KINDS = [['bank_deposit','Bank deposit'],['owner_draw','Owner draw / distribution'],['bonus','Cash bonus'],['reimburse','Reimburse owner'],['other','Other']];
+const CL_IN_KINDS = [['counted_cash','Counted cash'],['other','Other']];
+const CL_ALL_KINDS = [...CL_OUT_KINDS, ...CL_IN_KINDS, ['transfer_out','Transfer'],['transfer_in','Transfer'],['opening_balance','Opening balance']];
+const clKindLabel = k => { const f = CL_ALL_KINDS.find(x=>x[0]===k); return f ? f[1] : k; };
+
+function CashLedger({corps, canEditIds, profile}){
+  const ledgerCorps = corps.filter(c=>canEditIds.has(c.id));
+  const corpName = id => { const c = corps.find(x=>x.id===id); return c ? (c.code||c.name) : '?'; };
+  const [rows, setRows] = useState(null);
+  const [toast, showToast] = useToast();
+  const [busy, setBusy] = useState(false);
+  const [modal, setModal] = useState(null);      // {mode,...}
+  const [filter, setFilter] = useState('all');    // 'all' | 'transfers' | corpId
+  const [catsByCorp, setCatsByCorp] = useState({});
+
+  const reload = useCallback(async()=>{
+    const ids = ledgerCorps.map(c=>c.id);
+    if(!ids.length){ setRows([]); return; }
+    const { data } = await sb.from('cash_ledger').select('*').in('corporation_id', ids)
+      .order('date',{ascending:false}).order('created_at',{ascending:false});
+    setRows(data||[]);
+  },[corps]);
+  useEffect(()=>{ reload(); },[reload]);
+
+  const balances = {};
+  ledgerCorps.forEach(c=>balances[c.id]=0);
+  (rows||[]).forEach(r=>{ if(balances[r.corporation_id]!=null) balances[r.corporation_id] += (r.direction==='in'?1:-1)*Number(r.amount); });
+
+  const loadCats = async(corpId)=>{
+    if(!corpId || catsByCorp[corpId]) return;
+    const { data } = await sb.from('expense_categories').select('id,name,active').eq('corporation_id',corpId).eq('active',true).order('display_order');
+    setCatsByCorp(prev=>({...prev,[corpId]:data||[]}));
+  };
+
+  const openModal = (mode)=>{
+    const first = ledgerCorps[0] && ledgerCorps[0].id;
+    const base = { mode, corp:first, date:todayStr(), amount:'', memo:'' };
+    if(mode==='in') base.kind='counted_cash';
+    if(mode==='out'){ base.kind='bank_deposit'; base.includePL=false; base.category_id=''; loadCats(first); }
+    if(mode==='transfer'){ base.from=first; base.to=(ledgerCorps[1]&&ledgerCorps[1].id)||first; }
+    if(mode==='opening') base.kind='opening_balance';
+    setModal(base);
+  };
+
+  const save = async()=>{
+    const m = modal, amt = sumExpr(m.amount);
+    if(isNaN(amt) || amt<=0){ showToast('Enter an amount'); return; }
+    setBusy(true);
+    try{
+      if(m.mode==='transfer'){
+        if(m.from===m.to){ showToast('Pick two different corporations'); setBusy(false); return; }
+        const grp = (typeof crypto!=='undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now())+Math.random();
+        const { error } = await sb.from('cash_ledger').insert([
+          { corporation_id:m.from, date:m.date, direction:'out', kind:'transfer_out', amount:amt, counterparty_corp_id:m.to, transfer_group:grp, memo:m.memo||null, created_by:profile.id },
+          { corporation_id:m.to, date:m.date, direction:'in', kind:'transfer_in', amount:amt, counterparty_corp_id:m.from, transfer_group:grp, memo:m.memo||null, created_by:profile.id },
+        ]);
+        if(error) throw error;
+      } else if(m.mode==='out'){
+        let expense_id = null;
+        if(m.includePL){
+          if(!m.category_id){ showToast('Pick a P&L category'); setBusy(false); return; }
+          const { data:exp, error:e1 } = await sb.from('expenses').insert({
+            corporation_id:m.corp, category_id:m.category_id, date:m.date, amount:amt,
+            memo:(m.memo||clKindLabel(m.kind)), method:'cash', source:'cash_ledger', status:'confirmed', entered_by:profile.id,
+          }).select('id').maybeSingle();
+          if(e1) throw e1; expense_id = exp && exp.id;
+        }
+        const { error } = await sb.from('cash_ledger').insert({ corporation_id:m.corp, date:m.date, direction:'out', kind:m.kind, amount:amt, memo:m.memo||null, expense_id, created_by:profile.id });
+        if(error) throw error;
+      } else { // in or opening
+        const { error } = await sb.from('cash_ledger').insert({ corporation_id:m.corp, date:m.date, direction:'in', kind:m.kind, amount:amt, memo:m.memo||null, created_by:profile.id });
+        if(error) throw error;
+      }
+      setModal(null); showToast('Saved'); reload();
+    }catch(e){ showToast('Save failed: '+(e.message||e)); }
+    setBusy(false);
+  };
+
+  const del = async(r)=>{
+    if(!confirm('Delete this cash entry?')) return;
+    setBusy(true);
+    try{
+      if(r.transfer_group){ await sb.from('cash_ledger').delete().eq('transfer_group', r.transfer_group); }
+      else { if(r.expense_id) await sb.from('expenses').delete().eq('id', r.expense_id); await sb.from('cash_ledger').delete().eq('id', r.id); }
+      showToast('Deleted'); reload();
+    }catch(e){ showToast('Delete failed: '+(e.message||e)); }
+    setBusy(false);
+  };
+
+  // Net inter-corp lending (transfers only), collapsing reciprocals.
+  const lending = ()=>{
+    const net = {};
+    (rows||[]).filter(r=>r.transfer_group && r.direction==='out' && r.counterparty_corp_id).forEach(r=>{
+      const key = r.corporation_id+'>'+r.counterparty_corp_id;
+      net[key] = (net[key]||0) + Number(r.amount);
+    });
+    const seen = new Set(), out = [];
+    Object.keys(net).forEach(k=>{
+      const [a,b] = k.split('>'); const rev = b+'>'+a;
+      if(seen.has(k)||seen.has(rev)) return; seen.add(k); seen.add(rev);
+      const n = (net[k]||0) - (net[rev]||0);
+      if(Math.abs(n)>=0.005){ if(n>0) out.push({from:a,to:b,amt:n}); else out.push({from:b,to:a,amt:-n}); }
+    });
+    return out;
+  };
+
+  const visRows = (rows||[]).filter(r=> filter==='all' ? true : filter==='transfers' ? !!r.transfer_group : r.corporation_id===filter);
+  if(rows===null) return <div className="card"><div className="sub">Loading cash ledger...</div></div>;
+
+  return <div className="card">
+    <h3>Cash Ledger <span className="badge gold">Owner</span></h3>
+    <div className="sub" style={{marginBottom:12}}>Physical cash on hand per corporation. Separate from the P&L: only "cash out" entries you mark are also booked as expenses. Transfers just move cash between boxes.</div>
+
+    <div className="cash-bal-grid">
+      {ledgerCorps.map(c=><div key={c.id} className="cash-bal">
+        <div className="cash-bal-name">{c.code||c.name}</div>
+        <div className="cash-bal-amt" style={{color:(balances[c.id]||0)<0?'var(--red)':'var(--text)'}}>{fmt$(balances[c.id]||0)}</div>
+      </div>)}
+    </div>
+
+    <div style={{display:'flex',gap:8,flexWrap:'wrap',margin:'14px 0 10px'}}>
+      <button className="btn btn-sm btn-gold" onClick={()=>openModal('in')}>+ Cash in</button>
+      <button className="btn btn-sm" onClick={()=>openModal('out')}>&minus; Cash out</button>
+      <button className="btn btn-sm" onClick={()=>openModal('transfer')}>&#8646; Transfer</button>
+      <button className="btn btn-sm" onClick={()=>openModal('opening')}>Set opening balance</button>
+    </div>
+
+    <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8,alignItems:'center'}}>
+      <span className="hint" style={{marginTop:0}}>Filter:</span>
+      <button className={'btn btn-sm'+(filter==='all'?' btn-gold':'')} onClick={()=>setFilter('all')}>All</button>
+      <button className={'btn btn-sm'+(filter==='transfers'?' btn-gold':'')} onClick={()=>setFilter('transfers')}>Transfers / lending</button>
+      {ledgerCorps.map(c=><button key={c.id} className={'btn btn-sm'+(filter===c.id?' btn-gold':'')} onClick={()=>setFilter(c.id)}>{c.code||c.name}</button>)}
+    </div>
+
+    {filter==='transfers' && <div className="cash-lending">
+      {lending().length===0 ? <div className="faint">No outstanding inter-corp balances.</div>
+        : lending().map((l,i)=><div key={i} className="cash-lend-row"><span>{corpName(l.from)} lent {corpName(l.to)}</span><span className="mono">{fmt$(l.amt)}</span></div>)}
+    </div>}
+
+    {visRows.length===0 ? <div className="faint">No entries yet.</div> :
+      <table className="t rec-list"><tbody>
+        {visRows.map(r=><tr key={r.id}>
+          <td className="rec-name">{corpName(r.corporation_id)} &middot; {clKindLabel(r.kind)}
+            {r.counterparty_corp_id && <span className="faint"> ({r.direction==='out'?'to ':'from '}{corpName(r.counterparty_corp_id)})</span>}
+            {r.expense_id && <span className="badge gold" style={{marginLeft:6}}>P&amp;L</span>}
+            {r.memo && <div className="faint" style={{fontSize:11}}>{r.memo}</div>}
+          </td>
+          <td className="rec-cat">{r.date}</td>
+          <td className="num rec-amt" style={{color:r.direction==='in'?'var(--green)':'var(--red)'}}>{r.direction==='in'?'+':'\u2212'}{fmt$(Number(r.amount))}</td>
+          <td className="rec-act" style={{textAlign:'right'}}><button className="btn btn-sm btn-danger" disabled={busy} onClick={()=>del(r)}>&#10005;</button></td>
+        </tr>)}
+      </tbody></table>}
+
+    {modal && <div className="modal-overlay" onClick={()=>setModal(null)}>
+      <div className="modal" onClick={e=>e.stopPropagation()}>
+        <div className="modal-head">
+          <div className="modal-title">{modal.mode==='in'?'Cash in':modal.mode==='out'?'Cash out':modal.mode==='transfer'?'Transfer cash':'Set opening balance'}</div>
+          <button className="modal-x" onClick={()=>setModal(null)}>✕</button>
+        </div>
+        {modal.mode==='transfer' ? <>
+          <label className="hint">From</label>
+          <select style={{width:'100%',marginBottom:8}} value={modal.from} onChange={e=>setModal({...modal,from:e.target.value})}>{ledgerCorps.map(c=><option key={c.id} value={c.id}>{c.name||c.code}</option>)}</select>
+          <label className="hint">To</label>
+          <select style={{width:'100%',marginBottom:8}} value={modal.to} onChange={e=>setModal({...modal,to:e.target.value})}>{ledgerCorps.map(c=><option key={c.id} value={c.id}>{c.name||c.code}</option>)}</select>
+        </> : <>
+          <label className="hint">Corporation</label>
+          <select style={{width:'100%',marginBottom:8}} value={modal.corp} onChange={e=>{ const v=e.target.value; setModal({...modal,corp:v}); if(modal.mode==='out') loadCats(v); }}>{ledgerCorps.map(c=><option key={c.id} value={c.id}>{c.name||c.code}</option>)}</select>
+        </>}
+        {modal.mode==='in' && <><label className="hint">Type</label>
+          <select style={{width:'100%',marginBottom:8}} value={modal.kind} onChange={e=>setModal({...modal,kind:e.target.value})}>{CL_IN_KINDS.map(k=><option key={k[0]} value={k[0]}>{k[1]}</option>)}</select></>}
+        {modal.mode==='out' && <><label className="hint">Type</label>
+          <select style={{width:'100%',marginBottom:8}} value={modal.kind} onChange={e=>setModal({...modal,kind:e.target.value})}>{CL_OUT_KINDS.map(k=><option key={k[0]} value={k[0]}>{k[1]}</option>)}</select></>}
+        <div style={{display:'flex',gap:8,marginBottom:8}}>
+          <div style={{flex:1}}><label className="hint">Amount</label>
+            <input type="text" inputMode="text" style={{width:'100%'}} placeholder="0.00" value={modal.amount} onChange={e=>setModal({...modal,amount:e.target.value})}/></div>
+          <div style={{flex:1}}><label className="hint">Date</label>
+            <input type="date" style={{width:'100%'}} value={modal.date} onChange={e=>setModal({...modal,date:e.target.value})}/></div>
+        </div>
+        {modal.mode==='out' && <div style={{marginBottom:8}}>
+          <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+            <input type="checkbox" checked={!!modal.includePL} onChange={e=>setModal({...modal,includePL:e.target.checked})}/>
+            <span className="hint" style={{marginTop:0}}>Also record as a P&amp;L expense</span>
+          </label>
+          {modal.includePL && <select style={{width:'100%',marginTop:6}} value={modal.category_id} onChange={e=>setModal({...modal,category_id:e.target.value})}>
+            <option value="">Select category...</option>
+            {(catsByCorp[modal.corp]||[]).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>}
+        </div>}
+        <label className="hint">Note (optional)</label>
+        <input style={{width:'100%',marginBottom:14}} value={modal.memo} onChange={e=>setModal({...modal,memo:e.target.value})} placeholder="Optional note"/>
+        <div style={{display:'flex',gap:8}}>
+          <button className="btn btn-gold" style={{flex:1}} disabled={busy} onClick={save}>Save</button>
+          <button className="btn" onClick={()=>setModal(null)}>Cancel</button>
+        </div>
+      </div>
+    </div>}
+    {toast && <div className="toast">{toast}</div>}
+  </div>;
+}
+
 function CashPage({corps, canEditIds, profile, isOwner}){
   const stores = corps.filter(c=>canEditIds.has(c.id));
   // Coins (anything under a dollar) stay in the register, so a count that's short by less
@@ -4378,7 +4589,7 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose
   </div>;
 }
 // ================= APP SHELL =================
-function NotificationBell({profile, onNavigate}){
+function NotificationBell({profile, onNavigate, currentTab}){
   const [open,setOpen]=useState(false);
   const [items,setItems]=useState([]);
   const [reads,setReads]=useState(new Set());
@@ -4398,16 +4609,40 @@ function NotificationBell({profile, onNavigate}){
   },[profile.id, profile.role]);
   useEffect(()=>{ load(); const iv=setInterval(load,60000); return ()=>clearInterval(iv); },[load]);
   useEffect(()=>{
+    // Re-sync the badge when the app regains focus (e.g. after acting on an item elsewhere,
+    // or reads made on another device), so the count doesn't go stale.
+    const r=()=>{ if(document.visibilityState==='visible') load(); };
+    document.addEventListener('visibilitychange', r);
+    window.addEventListener('focus', r);
+    return ()=>{ document.removeEventListener('visibilitychange', r); window.removeEventListener('focus', r); };
+  },[load]);
+  useEffect(()=>{
     const h=e=>{ if(ref.current && !ref.current.contains(e.target)) setOpen(false); };
     if(open) document.addEventListener('mousedown',h);
     return ()=>document.removeEventListener('mousedown',h);
   },[open]);
   const unread=items.filter(n=>!reads.has(n.id)).length;
+  const markRead=async(id)=>{
+    if(reads.has(id)) return;
+    setReads(prev=>new Set([...prev, id]));   // update badge immediately
+    try{ await sb.from('notification_reads').upsert({user_id:profile.id, notification_id:id},{onConflict:'user_id,notification_id'}); }catch(e){}
+  };
+  // Viewing the tab a notification points to counts as reading it: e.g. opening Approvals
+  // (to approve an expense) clears the pending-approval alerts; opening Reports clears
+  // published-report alerts. This keeps the badge in sync even when items are resolved
+  // without opening the bell.
+  useEffect(()=>{
+    if(!currentTab || !items.length) return;
+    const toMark = items.filter(n=>!reads.has(n.id) && n.link_tab===currentTab).map(n=>n.id);
+    if(!toMark.length) return;
+    setReads(prev=>new Set([...prev, ...toMark]));
+    sb.from('notification_reads').upsert(toMark.map(id=>({user_id:profile.id, notification_id:id})),{onConflict:'user_id,notification_id'}).then(()=>{},()=>{});
+  },[currentTab, items, reads, profile.id]);
   const markAll=async()=>{
     const unreadIds=items.filter(n=>!reads.has(n.id)).map(n=>n.id);
     if(!unreadIds.length) return;
-    await sb.from('notification_reads').upsert(unreadIds.map(id=>({user_id:profile.id, notification_id:id})),{onConflict:'user_id,notification_id'});
     setReads(new Set([...reads, ...unreadIds]));
+    try{ await sb.from('notification_reads').upsert(unreadIds.map(id=>({user_id:profile.id, notification_id:id})),{onConflict:'user_id,notification_id'}); }catch(e){}
   };
   const openPanel=()=>{ setOpen(o=>{ const n=!o; if(n) setTimeout(markAll,1200); return n; }); };
   const timeAgo=(ts)=>{ const s=(Date.now()-new Date(ts))/1000; if(s<60)return'just now'; if(s<3600)return Math.floor(s/60)+'m ago'; if(s<86400)return Math.floor(s/3600)+'h ago'; return Math.floor(s/86400)+'d ago'; };
@@ -4420,7 +4655,7 @@ function NotificationBell({profile, onNavigate}){
       <div className="bell-head"><span>Notifications</span>{unread>0 && <button className="bell-clear" onClick={markAll}>Mark all read</button>}</div>
       {items.length===0 ? <div className="bell-empty">No notifications yet.</div> :
         items.map(n=><button key={n.id} className={'bell-item'+(reads.has(n.id)?'':' unread')}
-          onClick={()=>{ if(n.link_tab && onNavigate) onNavigate(n.link_tab); setOpen(false); }}>
+          onClick={()=>{ markRead(n.id); if(n.link_tab && onNavigate) onNavigate(n.link_tab); setOpen(false); }}>
           <div className="bell-item-t">{n.title}</div>
           {n.body && <div className="bell-item-b">{n.body}</div>}
           <div className="bell-item-time">{timeAgo(n.created_at)}</div>
@@ -4523,6 +4758,7 @@ const NAV = [
   {id:'cash',      label:'Cash',    full:'Cash',            ic:'▤', roles:['owner','assistant']},
   {id:'close',     label:'Close',   full:'Close & Publish', ic:'◆', roles:['owner']},
   {id:'investor',  label:'Reports', full:'Reports',         ic:'▦', roles:['owner','investor']},
+  {id:'cashledger',label:'Cash Mgmt',full:'Cash Ledger',     ic:'▥', roles:['owner']},
   {id:'settings',  label:'Settings',full:'Settings',        ic:'⚙', roles:['owner']},
   {id:'alerts',    label:'Install', full:'Install App',     ic:'⬇', roles:['owner','assistant','investor']},
 ];
@@ -4617,6 +4853,7 @@ function App(){
     cash:      <CashPage corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner}/>,
     close:     <ClosePage corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} preset={closePreset}/>,
     investor:  <InvestorPortal corps={isOwner?storeCorps:viewCorps}/>,
+    cashledger:<div><div className="page-head"><div><div className="eyebrow">Cash</div><h2>Cash Management</h2></div></div><CashLedger corps={storeCorps} canEditIds={canEditIds} profile={profile}/></div>,
     settings:  <Settings corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} session={session}/>,
     alerts:    <div><div className="page-head"><div><div className="eyebrow">Install</div><h2>Install App & Notifications</h2></div></div><PwaCard profile={profile}/></div>,
   }[effTab];
@@ -4635,7 +4872,7 @@ function App(){
         {n.id==='approvals' && pendingCount>0 && <span className="nav-badge">{pendingCount}</span>}
       </button>)}
       <div className="foot">
-        <NotificationBell profile={profile} onNavigate={(t)=>setTab(t)}/>
+        <NotificationBell profile={profile} onNavigate={(t)=>setTab(t)} currentTab={effTab}/>
         <AccountMenu profile={profile} pendingCount={pendingCount}
           onNotifications={()=>setTab(nav.some(n=>n.id==='alerts')?'alerts':'settings')}
           onInstall={nav.some(n=>n.id==='alerts')?()=>setTab('alerts'):null}/>
