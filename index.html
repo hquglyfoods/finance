@@ -470,6 +470,33 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   /* wide tables scroll inside their card instead of stretching the page */
   .card{overflow-x:auto;-webkit-overflow-scrolling:touch;padding:15px 16px;margin-bottom:12px}
   table.t{min-width:max-content}
+  /* Settings lists (expense categories, recurring) are dense on mobile: smaller text,
+     tighter padding, and hidden categories fully suppressed. */
+  table.t-settings{font-size:11.5px;min-width:0}
+  table.t-settings td{padding:6px 6px}
+  table.t-settings .btn-sm{padding:4px 7px;font-size:11px}
+  .cat-inactive{display:none}
+  .cat-hidden-toggle{display:none}
+  /* Expense Categories: fixed layout so the name truncates with an ellipsis and the
+     controls/action buttons always stay on screen (no horizontal scroll). */
+  table.cat-list{table-layout:fixed;width:100%}
+  table.cat-list td.ctrl-td{width:104px;padding-right:4px}
+  table.cat-list td.nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  table.cat-list td.act-td{width:120px;white-space:normal !important}
+  table.cat-list td.act-td .btn-sm{margin:2px 0 2px 4px}
+  table.cat-list .inv-note{display:none}
+  /* Registered Recurring Expenses: stack each row so long names/memos truncate and the
+     action buttons wrap below instead of pushing the row off screen. */
+  table.rec-list,table.rec-list tbody,table.rec-list tr,table.rec-list td{display:block;width:auto}
+  table.rec-list thead{display:none}
+  table.rec-list tr{border-bottom:1px solid var(--border-soft);padding:8px 2px}
+  table.rec-list td{border:none;padding:1px 0}
+  table.rec-list td.rec-name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12.5px}
+  table.rec-list td.rec-cat,table.rec-list td.rec-sched{font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  table.rec-list td.rec-sched .faint{white-space:normal}
+  table.rec-list td.rec-amt{text-align:left !important;font-weight:600;font-size:12.5px}
+  table.rec-list td.rec-act{text-align:left !important;white-space:normal !important;margin-top:4px}
+  table.rec-list td.rec-act .btn-sm{margin:4px 6px 0 0}
   /* Daily table on mobile: hide the last-year revenue column (shown instead as a small
      '25 $xxx line under the Sales figure) so the row fits the screen. */
   .daily-t .ly-col{display:none}
@@ -981,9 +1008,9 @@ function computePL(meta, raw){
   Object.entries(catSum).forEach(([k,v]) => vars['cat_'+k] = v);
   raw.inputs.forEach(i => vars['inp_'+i.key] = Number(i.value));
   // effective rates from rate_schedule (most recent on/before this month).
-  // Exposed as royalty_rate / marketing_rate / sales_commission_rate for use in
+  // Exposed as royalty_rate / marketing_rate for use in
   // auto-rule expressions. Falls back to defaults when no schedule row exists.
-  const rateDefaults = { royalty: 0.03, marketing: 0, sales_commission: 0 };
+  const rateDefaults = { royalty: 0.03, marketing: 0 };
   const monthEnd = raw.monthKey ? `${raw.monthKey}-31` : null;
   const pickRate = type => {
     const applicable = (raw.rates||[])
@@ -993,7 +1020,6 @@ function computePL(meta, raw){
   };
   vars['royalty_rate'] = pickRate('royalty');
   vars['marketing_rate'] = pickRate('marketing');
-  vars['sales_commission_rate'] = pickRate('sales_commission');
   // auto-rules only for non-board (current/future) months
   const ruleRows = hasBoard ? [] : meta.rules.map(r => {
     const val = evalExpr(r.expr, vars);
@@ -2999,24 +3025,25 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
           <input placeholder="Category name (e.g. Accounting, Toast Fee, Trash Removal)" value={newCat} onChange={e=>setNewCat(e.target.value)}/>
           <button className="btn" style={{flex:'0 0 auto'}} onClick={addCategory}>Add Category</button>
         </div>
-        {catList.length>0 && <table className="t" style={{marginTop:14}}><tbody>
+        {catList.length>0 && <table className="t t-settings cat-list" style={{marginTop:14}}><tbody>
           {catList.map((c,idx)=><tr key={c.id} draggable
+            className={c.active?'':'cat-inactive'}
             onDragStart={()=>setDragId(c.id)}
             onDragOver={e=>e.preventDefault()}
             onDrop={()=>dropCategory(c,catList)}
             onDragEnd={()=>setDragId(null)}
             style={{opacity:dragId===c.id?0.4:(c.active?1:0.5), cursor:'grab'}}>
-            <td style={{width:1,whiteSpace:'nowrap',paddingRight:8}}>
+            <td className="ctrl-td" style={{width:1,whiteSpace:'nowrap',paddingRight:8}}>
               <span title="Drag to reorder" style={{color:'var(--text2)',marginRight:6,userSelect:'none'}}>⠿</span>
               <button className="btn btn-sm" disabled={idx===0} title="Move up" onClick={()=>moveCategory(c,'up',catList)}>▲</button>
               <button className="btn btn-sm" disabled={idx===catList.length-1} style={{marginLeft:4}} title="Move down" onClick={()=>moveCategory(c,'down',catList)}>▼</button>
             </td>
-            <td>{c.name}
+            <td className="nm">{c.name}
               {c.protected && <span className="badge gold">Auto</span>}
               {!c.active && <span className="badge" style={{background:'var(--panel2)'}}>Hidden</span>}
-              {c.investor_group && <span className="faint" style={{fontSize:11}}> · shown as "{c.investor_group}" to investors</span>}
+              {c.investor_group && <span className="faint inv-note" style={{fontSize:11}}> · shown as "{c.investor_group}" to investors</span>}
             </td>
-            <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+            <td className="act-td" style={{textAlign:'right',whiteSpace:'nowrap'}}>
               {c.active
                 ? <>
                     {!c.protected && <button className="btn btn-sm" onClick={()=>renameCategory(c)}>Rename</button>}
@@ -3027,7 +3054,7 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
             </td>
           </tr>)}
         </tbody></table>}
-        {hiddenCount>0 && <button className="btn btn-sm" style={{marginTop:12}} onClick={()=>setShowHidden(s=>!s)}>
+        {hiddenCount>0 && <button className="btn btn-sm cat-hidden-toggle" style={{marginTop:12}} onClick={()=>setShowHidden(s=>!s)}>
           {showHidden ? 'Hide hidden categories' : `Show ${hiddenCount} hidden categor${hiddenCount===1?'y':'ies'}`}
         </button>}
       </div>;
@@ -3115,19 +3142,18 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
     <div className="card">
       <h3>Registered Recurring Expenses</h3>
       {rows.length===0 ? <div className="faint">None</div> :
-      <table className="t">
-        <thead><tr><th>Name</th><th>Category</th><th>Schedule</th><th className="num">Amount</th><th></th></tr></thead>
+      <table className="t t-settings rec-list">        <thead><tr><th>Name</th><th>Category</th><th>Schedule</th><th className="num">Amount</th><th></th></tr></thead>
         <tbody>{rows.map(r=><tr key={r.id} style={{opacity:r.active?1:.45}}>
-          <td>{r.name}{r.payee && <span className="faint"> · {r.payee}</span>}
+          <td className="rec-name">{r.name}{r.payee && <span className="faint"> · {r.payee}</span>}
             {r.installment_total && <span className="badge gold" style={{marginLeft:6}}>Installment</span>}</td>
-          <td>{catName(r.category_id)}</td>
-          <td>{r.frequency==='weekly' ? 'Weekly · '+DOW[r.day_of_week] : 'Monthly · '+(r.day_of_month===99?'Last day':'Day '+r.day_of_month)}
+          <td className="rec-cat">{catName(r.category_id)}</td>
+          <td className="rec-sched">{r.frequency==='weekly' ? 'Weekly · '+DOW[r.day_of_week] : 'Monthly · '+(r.day_of_month===99?'Last day':'Day '+r.day_of_month)}
             {r.installment_total && <div className="faint" style={{fontSize:11}}>{r.installment_total} payment{r.installment_total>1?'s':''} · {r.start_date} → {r.end_date}</div>}
           </td>
-          <td className="num">{fmt$(Number(r.amount))}
+          <td className="num rec-amt">{fmt$(Number(r.amount))}
             {r.next_amount!=null && r.next_amount_from && <div className="faint" style={{fontSize:11}}>→ {fmt$(Number(r.next_amount))} from {r.next_amount_from}</div>}
           </td>
-          <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+          <td className="rec-act" style={{textAlign:'right',whiteSpace:'nowrap'}}>
             {isOwner && <button className="btn btn-sm" onClick={()=>{ setSched(null); setEdit(edit&&edit.id===r.id?null:{id:r.id, name:r.name, category_id:r.category_id, amount:String(r.amount), frequency:r.frequency, day_of_week:String(r.day_of_week??5), day_of_month:String(r.day_of_month??1), payee:r.payee||''}); }}>Edit</button>}
             {isOwner && <button className="btn btn-sm" style={{marginLeft:6}} onClick={()=>{ setEdit(null); setSched(sched&&sched.id===r.id?null:{id:r.id, amount:r.next_amount??'', from:r.next_amount_from||''}); }}>Schedule raise</button>}
             {isOwner && <button className="btn btn-sm" onClick={()=>toggle(r)} style={{marginLeft:6}}>{r.active?'Pause':'Resume'}</button>}
@@ -3982,7 +4008,7 @@ function RatesManager({corps, canEditIds}){
     reload();
   };
 
-  const RATE_LABEL = {royalty:'Royalty', marketing:'Marketing Fee', sales_commission:'Sales Commission'};
+  const RATE_LABEL = {royalty:'Royalty', marketing:'Marketing Fee'};
   if(!editable.length) return <div className="card">No corporations available.</div>;
   const byType={}; rows.forEach(r=>{ (byType[r.rate_type]=byType[r.rate_type]||[]).push(r); });
 
@@ -3999,7 +4025,6 @@ function RatesManager({corps, canEditIds}){
           <select value={f.rate_type} onChange={e=>setF({...f,rate_type:e.target.value})}>
             <option value="royalty">Royalty</option>
             <option value="marketing">Marketing Fee</option>
-            <option value="sales_commission">Sales Commission</option>
           </select>
         </div>
         <div style={{flex:1}}>
