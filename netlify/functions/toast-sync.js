@@ -78,11 +78,14 @@ function channelFor(order, diningNames) {
   if (doName.includes('uber')) return { delivery: 'uber' };
   if (doName.includes('doordash') || doName.includes('door dash')) return { delivery: 'doordash' };
   if (doName.includes('grubhub') || doName.includes('grub hub')) return { delivery: 'grubhub' };
+  // Self online ordering (Toast online ordering / Toast Delivery) is always card-paid but
+  // is tracked in its own 'online' channel, separate from in-store card.
+  if (doName.includes('online ordering') || doName.includes('online order')) return { delivery: 'online' };
   return { delivery: null }; // in-store: decide by payment type
 }
 
 function summarize(orders, diningNames) {
-  const sums = { cash: 0, card: 0, uber: 0, grubhub: 0, doordash: 0 };
+  const sums = { cash: 0, card: 0, uber: 0, grubhub: 0, doordash: 0, online: 0 };
   let tips = 0;
   for (const o of orders) {
     if (o.voided) continue;
@@ -181,11 +184,16 @@ exports.handler = async (event) => {
       catch (e) { log.push(`${code} ${d.ymd}: ${e.message}`); continue; }
       const { sums, tips } = summarize(orders, dn);
 
+      // Safety: if the dedicated 'online' channel hasn't been created for this store yet,
+      // fold online-ordering revenue back into card so nothing is dropped. Once the channel
+      // exists, it splits out automatically.
+      if (!chId['online'] && sums.online) { sums.card += sums.online; sums.online = 0; }
+
       // upsert each channel (skip 'manual' rows). Provisional (today) rows are
       // marked source 'toast_live' so the app can show them as in progress.
       // In a tips-only backfill, don't touch revenue at all.
       const src = d.provisional ? 'toast_live' : 'toast';
-      if (!tipsOnly) for (const chCode of ['cash', 'card', 'uber', 'grubhub', 'doordash']) {
+      if (!tipsOnly) for (const chCode of ['cash', 'card', 'uber', 'grubhub', 'doordash', 'online']) {
         if (!chId[chCode]) continue;
         const amount = sums[chCode] || 0;
         const { data: ex } = await admin.from('daily_revenue').select('id,source')
@@ -214,7 +222,7 @@ exports.handler = async (event) => {
           });
         }
       }
-      log.push(`${code} ${d.iso}${d.provisional ? ' (live)' : ''}: cash ${sums.cash} card ${sums.card} uber ${sums.uber} gh ${sums.grubhub} dd ${sums.doordash} tips ${tips}`);
+      log.push(`${code} ${d.iso}${d.provisional ? ' (live)' : ''}: cash ${sums.cash} card ${sums.card} online ${sums.online} uber ${sums.uber} gh ${sums.grubhub} dd ${sums.doordash} tips ${tips}`);
     }
   }
   return { statusCode: 200, body: JSON.stringify({ ok: true, log }) };
