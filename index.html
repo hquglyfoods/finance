@@ -2538,7 +2538,30 @@ function CashLedger({corps, canEditIds, profile}){
   const [ym, setYm] = useState(todayStr().slice(0,7));  // YYYY-MM for the month view
   const [rStart, setRStart] = useState('');
   const [rEnd, setREnd] = useState('');
+  const [q, setQ] = useState('');                  // free-text / amount search
   const [catsByCorp, setCatsByCorp] = useState({});
+  const [outTypes, setOutTypes] = useState([]);       // user-defined cash-out types
+  const [manageTypes, setManageTypes] = useState(false);
+  const [newType, setNewType] = useState('');
+
+  const loadTypes = useCallback(async()=>{
+    const { data } = await sb.from('cash_out_types').select('*').order('display_order').order('created_at');
+    setOutTypes(data||[]);
+  },[]);
+  useEffect(()=>{ loadTypes(); },[loadTypes]);
+  const addType = async()=>{
+    const name = newType.trim(); if(!name) return;
+    if([...CL_OUT_KINDS.map(k=>k[1]), ...outTypes.map(t=>t.name)].some(n=>n.toLowerCase()===name.toLowerCase())){ showToast('That type already exists'); return; }
+    const ord = outTypes.length ? Math.max(...outTypes.map(t=>t.display_order||0))+1 : 0;
+    const { error } = await sb.from('cash_out_types').insert({ name, display_order:ord });
+    if(error){ showToast('Add failed: '+error.message); return; }
+    setNewType(''); loadTypes();
+  };
+  const removeType = async(t)=>{
+    const { error } = await sb.from('cash_out_types').delete().eq('id', t.id);
+    if(error){ showToast('Remove failed: '+error.message); return; }
+    loadTypes();
+  };
 
   const reload = useCallback(async()=>{
     const ids = ledgerCorps.map(c=>c.id);
@@ -2705,10 +2728,15 @@ function CashLedger({corps, canEditIds, profile}){
     if(storeSel!=='all' && r.corporation_id!==storeSel) return false;
     if(period==='month' && ym){ if(!String(r.date).startsWith(ym)) return false; }
     if(period==='range'){ if(rStart && r.date < rStart) return false; if(rEnd && r.date > rEnd) return false; }
-    if(mode==='all') return true;
-    if(mode==='transfers') return !!r.transfer_group;
-    if(mode==='in') return r.direction==='in' && !r.transfer_group;
-    if(mode==='out') return r.direction==='out' && !r.transfer_group;
+    if(mode==='transfers' && !r.transfer_group) return false;
+    if(mode==='in' && !(r.direction==='in' && !r.transfer_group)) return false;
+    if(mode==='out' && !(r.direction==='out' && !r.transfer_group)) return false;
+    if(q.trim()){
+      const hay = [corpName(r.corporation_id), clKindLabel(r.kind), r.memo||'',
+        r.counterparty_corp_id?corpName(r.counterparty_corp_id):'',
+        String(r.amount), fmt$(Number(r.amount)), r.date].join(' ').toLowerCase();
+      if(!hay.includes(q.trim().toLowerCase())) return false;
+    }
     return true;
   });
   if(rows===null) return <div className="card"><div className="sub">Loading cash ledger...</div></div>;
@@ -2754,6 +2782,11 @@ function CashLedger({corps, canEditIds, profile}){
       {period==='range' && <><input type="date" value={rStart} onChange={e=>setRStart(e.target.value)}/>
         <span className="seg-lbl" style={{margin:'0 2px'}}>to</span>
         <input type="date" value={rEnd} onChange={e=>setREnd(e.target.value)}/></>}
+    </div>
+
+    <div style={{position:'relative',marginBottom:10}}>
+      <input style={{width:'100%',paddingRight:30}} placeholder="Search notes, type, corp, or amount (e.g. AI, 165)" value={q} onChange={e=>setQ(e.target.value)}/>
+      {q && <button type="button" onClick={()=>setQ('')} aria-label="Clear search" style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--text3)',fontSize:15}}>&#10005;</button>}
     </div>
 
     {mode==='transfers' && <div className="cash-lending">
@@ -2802,7 +2835,23 @@ function CashLedger({corps, canEditIds, profile}){
         {modal.mode==='in' && <><label className="hint">Type</label>
           <select style={{width:'100%',marginBottom:8}} value={modal.kind} onChange={e=>setModal({...modal,kind:e.target.value})}>{CL_IN_KINDS.map(k=><option key={k[0]} value={k[0]}>{k[1]}</option>)}</select></>}
         {modal.mode==='out' && <><label className="hint">Type</label>
-          <select style={{width:'100%',marginBottom:8}} value={modal.kind} onChange={e=>{ const k=e.target.value; setModal({...modal, kind:k, includePL: k==='cash_expense' ? true : modal.includePL}); }}>{CL_OUT_KINDS.map(k=><option key={k[0]} value={k[0]}>{k[1]}</option>)}</select></>}
+          <select style={{width:'100%',marginBottom:6}} value={modal.kind} onChange={e=>{ const k=e.target.value; setModal({...modal, kind:k, includePL: k==='cash_expense' ? true : modal.includePL}); }}>{(()=>{
+            const opts=[...CL_OUT_KINDS, ...outTypes.map(t=>[t.name,t.name])];
+            if(modal.kind && !opts.some(o=>o[0]===modal.kind)) opts.push([modal.kind, modal.kind]);
+            return opts.map(k=><option key={k[0]} value={k[0]}>{k[1]}</option>);
+          })()}</select>
+          <button type="button" className="btn btn-sm" style={{marginBottom:8}} onClick={()=>setManageTypes(v=>!v)}>{manageTypes?'Done managing types':'Add / remove types'}</button>
+          {manageTypes && <div style={{border:'1px solid var(--border-soft)',borderRadius:8,padding:10,marginBottom:8,background:'var(--panel2)'}}>
+            <div style={{display:'flex',gap:6,marginBottom:8}}>
+              <input style={{flex:1,minWidth:0}} placeholder="New type name" value={newType} onChange={e=>setNewType(e.target.value)}/>
+              <button type="button" className="btn btn-sm btn-gold" onClick={addType}>Add</button>
+            </div>
+            {outTypes.length===0 ? <div className="faint" style={{fontSize:12}}>No custom types yet. Built-in types can't be removed.</div>
+              : outTypes.map(t=><div key={t.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'3px 0'}}>
+                  <span>{t.name}</span>
+                  <button type="button" className="btn btn-sm btn-danger" onClick={()=>removeType(t)}>&#10005;</button>
+                </div>)}
+          </div>}</>}
         <div className="modal-2col" style={{display:'flex',gap:8,marginBottom:8}}>
           <div style={{flex:1,minWidth:0}}><label className="hint">Amount</label>
             <input type="text" inputMode="text" style={{width:'100%'}} placeholder={modal.mode==='opening'?'e.g. 500 or -500':'0.00'} value={modal.amount} onChange={e=>setModal({...modal,amount:e.target.value})}/></div>
