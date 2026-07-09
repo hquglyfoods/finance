@@ -39,7 +39,7 @@
 html,body{height:100%}
 body{background:var(--bg);color:var(--text);font-family:var(--font-b);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
 button{font-family:inherit;cursor:pointer}
-input,select,textarea{font-family:inherit;font-size:14px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:9px 11px;outline:none;width:100%}
+input,select,textarea{font-family:inherit;font-size:14px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:9px 11px;outline:none;width:100%;box-sizing:border-box}
 input[type=checkbox],input[type=radio]{width:auto;padding:0;margin:0;flex:0 0 auto;accent-color:var(--gold)}
 input:focus,select:textarea:focus,select:focus,textarea:focus{border-color:var(--gold-soft)}
 input[type=number]{font-family:var(--font-m)}
@@ -2801,9 +2801,9 @@ function CashLedger({corps, canEditIds, profile}){
         {modal.mode==='out' && <><label className="hint">Type</label>
           <select style={{width:'100%',marginBottom:8}} value={modal.kind} onChange={e=>{ const k=e.target.value; setModal({...modal, kind:k, includePL: k==='cash_expense' ? true : modal.includePL}); }}>{CL_OUT_KINDS.map(k=><option key={k[0]} value={k[0]}>{k[1]}</option>)}</select></>}
         <div style={{display:'flex',gap:8,marginBottom:8}}>
-          <div style={{flex:1}}><label className="hint">Amount</label>
+          <div style={{flex:1,minWidth:0}}><label className="hint">Amount</label>
             <input type="text" inputMode="text" style={{width:'100%'}} placeholder={modal.mode==='opening'?'e.g. 500 or -500':'0.00'} value={modal.amount} onChange={e=>setModal({...modal,amount:e.target.value})}/></div>
-          <div style={{flex:1}}><label className="hint">Date</label>
+          <div style={{flex:1,minWidth:0}}><label className="hint">Date</label>
             <input type="date" style={{width:'100%'}} value={modal.date} onChange={e=>setModal({...modal,date:e.target.value})}/></div>
         </div>
         {modal.mode==='out' && <div style={{marginBottom:8}}>
