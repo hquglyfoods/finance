@@ -437,6 +437,11 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .pend{display:flex;align-items:center;gap:12px;padding:11px 12px;border:1px solid var(--border-soft);border-radius:8px;margin-bottom:8px;background:var(--panel2)}
 .pend .grow{flex:1;min-width:0}
 .t tr.is-weekend td{background:rgba(176,138,30,0.05)}
+/* Daily view: give the date column left breathing room so the weekend/today tint doesn't
+   crowd the date number, and clearly mark today. */
+.daily-t td:first-child,.daily-t th:first-child{padding-left:14px}
+.daily-t tr.is-today td{background:rgba(176,138,30,0.16)}
+.daily-t tr.is-today td:first-child{box-shadow:inset 3px 0 0 var(--gold);font-weight:700}
 .t tr.is-weekend td:first-child{box-shadow:inset 3px 0 0 rgba(176,138,30,0.35)}
 .amt-input{position:relative;display:flex;align-items:center}
 .amt-input .amt-prefix{position:absolute;left:9px;color:var(--text3);font-family:var(--font-m);font-size:14px;pointer-events:none}
@@ -1965,7 +1970,7 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
           {rows.map(r=>{ const dnet=r.rev-r.exp; const has=r.rev!==0||r.exp!==0; const isOpen=open===r.d;
             const yy = "'"+String(y-1).slice(2);
             return <React.Fragment key={r.d}>
-              <tr className={(()=>{const wd=new Date(r.date+'T00:00').getDay();return wd===0||wd===6?'is-weekend':'';})()} style={{opacity:has?1:0.35}}>
+              <tr className={(()=>{const wd=new Date(r.date+'T00:00').getDay();const cls=[];if(wd===0||wd===6)cls.push('is-weekend');if(r.date===todayStr())cls.push('is-today');return cls.join(' ');})()} style={{opacity:has?1:0.35}}>
                 <td className="mono">{pad(r.d)} {DOW[new Date(r.date+'T00:00').getDay()]}
                   {r.d===bestDay && <span className="day-star best" title="Best sales day">★</span>}
                   {r.d===slowDay && r.d!==bestDay && <span className="day-star slow" title="Slowest sales day">★</span>}
