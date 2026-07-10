@@ -260,7 +260,7 @@ a{color:var(--gold);text-decoration:none}
 .exp-line-name{font-size:13.5px;color:var(--text);line-height:1.3;display:flex;align-items:center;gap:7px;cursor:pointer;min-width:0}
 .exp-line-name .exp-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .exp-src{flex-shrink:0;background:var(--panel) !important;font-size:10px}
-.exp-line-memo{font-size:12px;color:var(--text3);margin-top:3px;line-height:1.35;word-break:break-word}
+.exp-line-memo{font-size:12px;color:var(--text3);margin-top:3px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .exp-line-amt{font-size:13.5px;font-weight:600;white-space:nowrap;text-align:right;flex-shrink:0}
 .exp-edit-btn{flex-shrink:0;background:var(--panel);border:1px solid var(--border);border-radius:7px;width:30px;height:30px;font-size:16px;line-height:1;color:var(--text2);cursor:pointer;padding:0}
 .exp-edit-btn:hover{border-color:var(--gold);color:var(--gold-strong)}
@@ -436,12 +436,13 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 /* pending queue */
 .pend{display:flex;align-items:center;gap:12px;padding:11px 12px;border:1px solid var(--border-soft);border-radius:8px;margin-bottom:8px;background:var(--panel2)}
 .pend .grow{flex:1;min-width:0}
-.t tr.is-weekend td{background:rgba(176,138,30,0.05)}
-/* Daily view: give the date column left breathing room so the weekend/today tint doesn't
-   crowd the date number, and clearly mark today. */
+.daily-t tr.is-weekend td:first-child{box-shadow:inset 3px 0 0 var(--red)}
+.daily-t tr.is-weekend .dow{color:var(--red);font-weight:700}
+/* Daily view: give the date column left breathing room, and mark today with a gold outline. */
 .daily-t td:first-child,.daily-t th:first-child{padding-left:14px}
-.daily-t tr.is-today td{background:rgba(176,138,30,0.16)}
-.daily-t tr.is-today td:first-child{box-shadow:inset 3px 0 0 var(--gold);font-weight:700}
+.daily-t tr.is-today td{border-top:2px solid var(--gold);border-bottom:2px solid var(--gold)}
+.daily-t tr.is-today td:first-child{border-left:2px solid var(--gold);border-top-left-radius:9px;border-bottom-left-radius:9px;font-weight:700}
+.daily-t tr.is-today td:last-child{border-right:2px solid var(--gold);border-top-right-radius:9px;border-bottom-right-radius:9px}
 .t tr.is-weekend td:first-child{box-shadow:inset 3px 0 0 rgba(176,138,30,0.35)}
 .amt-input{position:relative;display:flex;align-items:center}
 .amt-input .amt-prefix{position:absolute;left:9px;color:var(--text3);font-family:var(--font-m);font-size:14px;pointer-events:none}
@@ -556,10 +557,20 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   /* tighten the daily table so a row fits the screen without side-scrolling:
      smaller type, tighter padding, whole-dollar display (cents hidden, math unchanged),
      narrower expand-chevron column */
-  table.t.daily-t{font-size:11.5px}
+  table.t.daily-t{font-size:11.5px;min-width:0;width:100%;table-layout:fixed}
   table.t.daily-t td,table.t.daily-t th{padding:8px 3px}
   table.t.daily-t td.mono,table.t.daily-t th{white-space:nowrap}
-  table.t.daily-t td:first-child,table.t.daily-t th:first-child{padding-left:2px}
+  table.t.daily-t td:first-child,table.t.daily-t th:first-child{padding-left:9px}
+  /* fixed column widths so numbers fit and the expanded detail can't stretch the table */
+  .daily-t th:nth-child(1){width:23%}
+  .daily-t th:nth-child(2){width:25%}
+  .daily-t th:nth-child(3){width:0;padding:0}
+  .daily-t th:nth-child(4){width:22%}
+  .daily-t th:nth-child(5){width:23%}
+  .daily-t th:nth-child(6){width:7%}
+  /* expanded expense detail wraps within the row (no side-scroll) */
+  table.t.daily-t td[colspan] .exp-detail{max-width:100%;overflow:hidden}
+  table.t.daily-t .exp-line-amt{white-space:nowrap}
   /* the daily card gets slimmer side padding so the 4-column table fits comfortably */
   .daily-card{padding-left:10px;padding-right:10px}
   .daily-t .amt-exact{display:none}
@@ -1971,7 +1982,7 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
             const yy = "'"+String(y-1).slice(2);
             return <React.Fragment key={r.d}>
               <tr className={(()=>{const wd=new Date(r.date+'T00:00').getDay();const cls=[];if(wd===0||wd===6)cls.push('is-weekend');if(r.date===todayStr())cls.push('is-today');return cls.join(' ');})()} style={{opacity:has?1:0.35}}>
-                <td className="mono">{pad(r.d)} {DOW[new Date(r.date+'T00:00').getDay()]}
+                <td className="mono">{pad(r.d)} <span className="dow">{DOW[new Date(r.date+'T00:00').getDay()]}</span>
                   {r.d===bestDay && <span className="day-star best" title="Best sales day">★</span>}
                   {r.d===slowDay && r.d!==bestDay && <span className="day-star slow" title="Slowest sales day">★</span>}
                 </td>
@@ -5032,7 +5043,11 @@ function App(){
     return ()=>{dead=true; clearInterval(iv);};
   },[profile, tab]);
 
-  if(session===undefined) return null;
+  if(session===undefined) return <div className="boot-splash">
+    <div className="boot-logo">Ugly <span>Finance</span></div>
+    <div className="boot-bar"><div className="boot-bar-fill"></div></div>
+    <div className="boot-msg">Loading your finances...</div>
+  </div>;
   if(!session) return <Login onDone={()=>{}}/>;
   if(fatal) return <div className="login-wrap"><div className="login-box">
     <div className="login-err">{fatal}</div>
