@@ -19,6 +19,41 @@ function cors(origin) {
   };
 }
 
+// Verify the caller's access token by asking the Auth API directly.
+// NOTE: supabase-js `auth.getUser(token)` does not reliably accept the newer
+// `sb_secret_...` service keys, which made every call come back "Invalid token".
+// The REST call below is what the other functions use and it works with both key formats.
+async function getCaller(token) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: { apikey: SERVICE_KEY, Authorization: 'Bearer ' + token },
+  });
+  if (!res.ok) return { user: null, status: res.status, detail: await res.text() };
+  const user = await res.json();
+  if (!user || !user.id) return { user: null, status: res.status, detail: 'no user id' };
+  return { user, status: 200, detail: '' };
+}
+
+// Admin Auth operations over REST, for the same key-compatibility reason as getCaller().
+async function adminAuth(path, method, payload) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users${path}`, {
+    method,
+    headers: {
+      apikey: SERVICE_KEY,
+      Authorization: 'Bearer ' + SERVICE_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: payload ? JSON.stringify(payload) : undefined,
+  });
+  const text = await res.text();
+  let json = null;
+  try { json = text ? JSON.parse(text) : null; } catch (e) { /* non-JSON body */ }
+  if (!res.ok) {
+    const msg = (json && (json.msg || json.message || json.error_description || json.error)) || text || ('HTTP ' + res.status);
+    return { data: null, error: { message: String(msg).slice(0, 300) } };
+  }
+  return { data: json, error: null };
+}
+
 exports.handler = async (event) => {
   const headers = cors(event.headers.origin || event.headers.Origin || '');
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers };
@@ -26,6 +61,9 @@ exports.handler = async (event) => {
     return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
 
   try {
+    if (!SUPABASE_URL || !SERVICE_KEY)
+      return { statusCode: 500, headers, body: JSON.stringify({ error: 'Server is missing SUPABASE_URL or SUPABASE_SERVICE_KEY' }) };
+
     const auth = event.headers.authorization || event.headers.Authorization || '';
     const token = auth.replace(/^Bearer\s+/i, '');
     if (!token) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Missing token' }) };
@@ -33,9 +71,11 @@ exports.handler = async (event) => {
     const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
     // verify caller
-    const { data: userData, error: userErr } = await admin.auth.getUser(token);
-    if (userErr || !userData.user)
-      return { statusCode: 401, headers, body: JSON.stringify({ error: 'Invalid token' }) };
+    const { user: callerUser, status: authStatus, detail: authDetail } = await getCaller(token);
+    if (!callerUser)
+      return { statusCode: 401, headers, body: JSON.stringify({
+        error: 'Invalid token', auth_status: authStatus, auth_detail: String(authDetail).slice(0, 200) }) };
+    const userData = { user: callerUser };
 
     const { data: caller } = await admin.from('profiles')
       .select('role, active').eq('id', userData.user.id).maybeSingle();
@@ -55,7 +95,7 @@ exports.handler = async (event) => {
         const pw = body.password;
         if (!pw || String(pw).length < 8)
           return { statusCode: 400, headers, body: JSON.stringify({ error: 'Password must be at least 8 characters' }) };
-        const { error } = await admin.auth.admin.updateUserById(targetId, { password: String(pw) });
+        const { error } = await adminAuth('/' + targetId, 'PUT', { password: String(pw) });
         if (error) return { statusCode: 400, headers, body: JSON.stringify({ error: error.message }) };
         return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
       }
@@ -63,7 +103,7 @@ exports.handler = async (event) => {
       // delete: remove permissions + profile, then the auth user
       await admin.from('permissions').delete().eq('profile_id', targetId);
       await admin.from('profiles').delete().eq('id', targetId);
-      const { error: delErr } = await admin.auth.admin.deleteUser(targetId);
+      const { error: delErr } = await adminAuth('/' + targetId, 'DELETE');
       if (delErr) return { statusCode: 400, headers, body: JSON.stringify({ error: delErr.message }) };
       return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
     }
@@ -77,19 +117,21 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Password must be 8+ characters' }) };
 
     // create auth user
-    const { data: created, error: createErr } = await admin.auth.admin.createUser({
+    const { data: created, error: createErr } = await adminAuth('', 'POST', {
       email, password, email_confirm: true,
     });
     if (createErr)
       return { statusCode: 400, headers, body: JSON.stringify({ error: createErr.message }) };
 
-    const uid = created.user.id;
+    const uid = created && (created.id || (created.user && created.user.id));
+    if (!uid)
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Account was created but no id came back' }) };
 
     // profile
     const { error: profErr } = await admin.from('profiles')
       .insert({ id: uid, email, full_name, role });
     if (profErr) {
-      await admin.auth.admin.deleteUser(uid);
+      await adminAuth('/' + uid, 'DELETE');
       return { statusCode: 400, headers, body: JSON.stringify({ error: profErr.message }) };
     }
 
