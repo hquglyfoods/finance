@@ -92,20 +92,22 @@ exports.handler = async (event) => {
     if (!callerUser) {
       const t = peekToken(token);
       // Work out the most likely cause so the message is actionable.
-      let why = 'token refused by Supabase';
+      let why;
       if (t.expired) why = 'your sign-in expired, please sign in again';
       else if (t.issuer && SUPABASE_URL && !t.issuer.startsWith(SUPABASE_URL))
         why = `token came from ${t.issuer} but the server checks ${SUPABASE_URL}`;
-      else if (authStatus === 401) why = 'SUPABASE_SERVICE_KEY is not accepted by this project';
+      else why = `Supabase said ${authStatus}: ${String(authDetail).replace(/\s+/g, ' ').slice(0, 120)}`;
       return { statusCode: 401, headers, body: JSON.stringify({
         error: 'Invalid token',
         why,
         auth_status: authStatus,
-        auth_detail: String(authDetail).slice(0, 200),
+        auth_detail: String(authDetail).slice(0, 300),
         token_issuer: t.issuer || null,
         token_expired: t.expired,
+        token_expires_in_s: t.expires_in_s,
         server_url: SUPABASE_URL,
         service_key_prefix: String(SERVICE_KEY || '').slice(0, 11),
+        service_key_len: String(SERVICE_KEY || '').length,
       }) };
     }
     const userData = { user: callerUser };

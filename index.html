@@ -4420,6 +4420,8 @@ function InvestorPortal({corps, isOwner, activeCorp, onCorp}){
 // there is nothing to act on.
 function fnError(j, fallback){
   if(!j) return fallback;
+  // The full payload carries the diagnosis; a toast is too short for it, so log it too.
+  try{ console.error('[create-account] backend said:', j); }catch(e){}
   if(j.why) return j.error ? `${j.error}: ${j.why}` : j.why;
   let msg = j.error || fallback;
   const bits = [];
