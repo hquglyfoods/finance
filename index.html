@@ -435,6 +435,17 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 
 /* forms */
 .form-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+/* Investors (owners) table: name truncates with a tap popover, % box is compact, and the
+   Rename/Remove actions stay pinned to the right regardless of name length. */
+.own-table{table-layout:fixed;width:100%}
+.own-table th:nth-child(2){width:76px}
+.own-table th:nth-child(3){width:150px}
+.own-name-cell{position:relative;overflow:visible}
+.own-name{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;cursor:pointer}
+.own-name-pop{position:absolute;left:0;top:100%;margin-top:4px;background:var(--text);color:var(--card);font-size:13px;padding:6px 10px;border-radius:8px;white-space:nowrap;z-index:60;box-shadow:0 6px 18px rgba(0,0,0,.28);max-width:80vw;overflow:hidden;text-overflow:ellipsis}
+.own-pct-cell{text-align:right}
+.own-pct{text-align:right;width:100%;font-size:13px}
+.own-acts-cell{text-align:right;white-space:nowrap}
 .form-row>*{flex:1;min-width:130px}
 .form-row .w-sm{flex:0 0 130px}
 .form-row .fr-col{flex:1;min-width:130px}
@@ -4035,19 +4046,20 @@ function Admin({corps, session, embedded}){
         <input placeholder="Full name" value={nf.full_name} onChange={e=>setNf({...nf,full_name:e.target.value})}/>
         <select className="w-sm" value={nf.role} onChange={e=>setNf({...nf,role:e.target.value})}>
           <option value="investor">Investor</option>
+          <option value="viewer">Viewer (read-only)</option>
           <option value="assistant">Assistant</option>
           <option value="owner">Owner</option>
         </select>
       </div>
       {nf.role!=='owner' && <table className="t" style={{marginBottom:12}}>
-        <thead><tr><th>Corporation</th><th>View (investor)</th><th>Edit (assistant)</th></tr></thead>
+        <thead><tr><th>Corporation</th><th>View</th>{nf.role!=='viewer' && <th>Edit</th>}</tr></thead>
         <tbody>{corps.map(c=>{
           const v = nfPerms[c.id]||{};
           return <tr key={c.id}><td>{c.name}</td>
             <td><input type="checkbox" style={{width:'auto'}} checked={!!v.can_view}
               onChange={e=>setNfPerms({...nfPerms,[c.id]:{...v,can_view:e.target.checked}})}/></td>
-            <td><input type="checkbox" style={{width:'auto'}} checked={!!v.can_edit}
-              onChange={e=>setNfPerms({...nfPerms,[c.id]:{...v,can_edit:e.target.checked}})}/></td>
+            {nf.role!=='viewer' && <td><input type="checkbox" style={{width:'auto'}} checked={!!v.can_edit}
+              onChange={e=>setNfPerms({...nfPerms,[c.id]:{...v,can_edit:e.target.checked}})}/></td>}
           </tr>;})}
         </tbody></table>}
       <button className="btn btn-gold" disabled={busy} onClick={createAccount}>Create Account</button>
@@ -4557,6 +4569,7 @@ function OwnersManager({corps, canEditIds}){
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [nf, setNf] = useState({holder:'', pct:''});
+  const [namePop, setNamePop] = useState(null); // holder id whose full name is shown
   const [toast, showToast] = useToast();
 
   const reload = useCallback(async()=>{
@@ -4602,15 +4615,18 @@ function OwnersManager({corps, canEditIds}){
     <div className="card">
       <h3>Shareholders / Profit Split</h3>
       {loading ? <Spinner/> : <>
-        <table className="t"><thead><tr><th>Holder</th><th className="num">Share %</th><th></th></tr></thead>
+        <table className="t own-table"><thead><tr><th>Holder</th><th className="num">Share %</th><th></th></tr></thead>
           <tbody>
             {rows.map(r=><tr key={r.id}>
-              <td>{r.holder}</td>
-              <td className="num" style={{width:120}}>
-                <input type="number" step="0.01" defaultValue={Number(r.pct)} key={r.id+r.pct}
-                  onBlur={e=>updatePct(r,e.target.value)} style={{textAlign:'right',width:90}}/>
+              <td className="own-name-cell">
+                <span className="own-name" onClick={()=>setNamePop(namePop===r.id?null:r.id)}>{r.holder}</span>
+                {namePop===r.id && <span className="own-name-pop" onClick={()=>setNamePop(null)}>{r.holder}</span>}
               </td>
-              <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+              <td className="num own-pct-cell">
+                <input type="number" step="0.01" defaultValue={Number(r.pct)} key={r.id+r.pct}
+                  onBlur={e=>updatePct(r,e.target.value)} className="own-pct"/>
+              </td>
+              <td className="own-acts-cell">
                 <button className="btn btn-sm" onClick={()=>rename(r)}>Rename</button>
                 <button className="btn btn-sm btn-danger" style={{marginLeft:6}} onClick={()=>remove(r)}>Remove</button>
               </td></tr>)}
@@ -4699,7 +4715,7 @@ function Settings({corps, canEditIds, profile, isOwner, session}){
 }
 
 // ================= HOME (TODAY) =================
-function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose, goApprovals}){
+function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsights, goClose, goApprovals}){
   const editable = corps.filter(c=>canEditIds.has(c.id));
   const ids = editable.map(c=>c.id);
   const [data, setData] = useState(null);
@@ -4775,7 +4791,7 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose
     <div className="greet">Good {now.getHours()<12?'morning':now.getHours()<18?'afternoon':'evening'}, {firstName}.</div>
     <div className="greet-sub">{MONTHS[now.getMonth()]} {now.getDate()} · Tap a store to see its sales detail.</div>
 
-    {totalPending>0 && <div style={{marginBottom:20}}>
+    {totalPending>0 && !readOnly && <div style={{marginBottom:20}}>
       <div className="quest">
         <div className="q-ico">!</div>
         <div className="grow"><div className="q-t">{totalPending} item{totalPending>1?'s':''} waiting for approval</div>
@@ -4812,10 +4828,10 @@ function Home({corps, canEditIds, profile, isOwner, goEntry, goInsights, goClose
                   style={{height:Math.max(8,Math.round(d.amount/wkMax*100))+'%'}} title={`${DOW[d.dow]} ${fmt$k(d.amount)}`}></div>)
               : null}
           </div>
-          <div className="hc-actions">
+          {!readOnly && <div className="hc-actions">
             <button className="hc-btn income" onClick={e=>{e.stopPropagation(); goEntry(c.id,'income');}}>Income</button>
             <button className="hc-btn expense" onClick={e=>{e.stopPropagation(); goEntry(c.id,'expense');}}>Expense</button>
-          </div>
+          </div>}
         </div>;
       })}
     </div>
@@ -5012,16 +5028,16 @@ function Login({onDone}){
 }
 
 const NAV = [
-  {id:'home',      label:'Home',    full:'Home',            ic:'⌂', roles:['owner','assistant']},
+  {id:'home',      label:'Home',    full:'Home',            ic:'⌂', roles:['owner','assistant','viewer']},
   {id:'entry',     label:'Entry',   full:'Daily Entry',     ic:'✎', roles:['owner','assistant']},
   {id:'approvals', label:'Approve', full:'Approvals',       ic:'✓', roles:['owner','assistant']},
-  {id:'insights',  label:'Insights',full:'Insights',        ic:'≈', roles:['owner','assistant']},
-  {id:'cash',      label:'Cash',    full:'Cash',            ic:'▤', roles:['owner','assistant']},
+  {id:'insights',  label:'Insights',full:'Insights',        ic:'≈', roles:['owner','assistant','viewer']},
+  {id:'cash',      label:'Cash',    full:'Cash',            ic:'▤', roles:['owner','assistant','viewer']},
   {id:'close',     label:'Close',   full:'Close & Publish', ic:'◆', roles:['owner']},
-  {id:'investor',  label:'Reports', full:'Reports',         ic:'▦', roles:['owner','investor']},
+  {id:'investor',  label:'Reports', full:'Reports',         ic:'▦', roles:['owner','investor','viewer']},
   {id:'cashledger',label:'Cash Mgmt',full:'Cash Ledger',     ic:'▥', roles:['owner']},
   {id:'settings',  label:'Settings',full:'Settings',        ic:'⚙', roles:['owner']},
-  {id:'alerts',    label:'Install', full:'Install App',     ic:'⬇', roles:['owner','assistant','investor']},
+  {id:'alerts',    label:'Install', full:'Install App',     ic:'⬇', roles:['owner','assistant','investor','viewer']},
 ];
 
 function App(){
@@ -5079,7 +5095,9 @@ function App(){
     const check = async()=>{
       try{
         let n = 0;
-        if(profile.role==='investor'){
+        if(profile.role==='viewer'){
+          n = 0;
+        } else if(profile.role==='investor'){
           const { count } = await sb.from('monthly_close').select('id',{count:'exact',head:true}).eq('status','published');
           n = count||0;
         } else {
@@ -5087,7 +5105,7 @@ function App(){
           n = count||0;
         }
         if(dead) return;
-        if(profile.role!=='investor') setPendingCount(n);
+        if(profile.role!=='investor' && profile.role!=='viewer') setPendingCount(n);
         if('setAppBadge' in navigator){
           if(n>0) navigator.setAppBadge(n).catch(()=>{}); else navigator.clearAppBadge().catch(()=>{});
         }
@@ -5110,20 +5128,23 @@ function App(){
   if(!profile) return <div className="login-wrap"><Spinner/></div>;
 
   const isOwner = profile.role==='owner';
+  const isViewer = profile.role==='viewer';   // read-only observer: sees all HQ views, edits nothing
   const canEditIds = new Set(isOwner ? corps.map(c=>c.id) : perms.filter(p=>p.can_edit).map(p=>p.corporation_id));
   const canViewIds = new Set(isOwner ? corps.map(c=>c.id) : perms.filter(p=>p.can_view).map(p=>p.corporation_id));
   const viewCorps = corps.filter(c=>canViewIds.has(c.id));
+  // informational tabs display by view access; a viewer has no edit ids, so edits stay off
+  const displayIds = isViewer ? canViewIds : canEditIds;
   // franchisee corps (if any) are excluded from every screen
   const storeCorps = corps.filter(c=>c.corp_type!=='franchisee');
   const nav = NAV.filter(n=>n.roles.includes(profile.role));
   const effTab = nav.some(n=>n.id===tab) ? tab : nav[0].id;
 
   const page = {
-    home:      <Home corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} goEntry={goEntry} goInsights={goInsights} goClose={goClose} goApprovals={goApprovals}/>,
+    home:      <Home corps={storeCorps} canEditIds={displayIds} readOnly={isViewer} profile={profile} isOwner={isOwner} goEntry={goEntry} goInsights={goInsights} goClose={goClose} goApprovals={goApprovals}/>,
     approvals: <Approvals corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner}/>,
     entry:     <Entry corps={storeCorps} canEditIds={canEditIds} profile={profile} presetCorp={entryCorp} presetMode={entryMode}/>,
-    insights:  <Dashboard corps={storeCorps} canEditIds={canEditIds} presetCorp={insightsCorp} isOwner={isOwner}/>,
-    cash:      <CashPage corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner}/>,
+    insights:  <Dashboard corps={storeCorps} canEditIds={displayIds} presetCorp={insightsCorp} isOwner={isOwner}/>,
+    cash:      <CashPage corps={storeCorps} canEditIds={displayIds} profile={profile} isOwner={isOwner}/>,
     close:     <ClosePage corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} preset={closePreset}/>,
     investor:  <InvestorPortal corps={isOwner?storeCorps:viewCorps}/>,
     cashledger:<div><div className="page-head"><div><div className="eyebrow">Cash</div><h2>Cash Management</h2></div></div><CashLedger corps={storeCorps} canEditIds={canEditIds} profile={profile}/></div>,

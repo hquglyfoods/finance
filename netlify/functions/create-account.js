@@ -46,7 +46,7 @@ exports.handler = async (event) => {
     const { email, password, full_name, role, permissions } = body;
     if (!email || !password || !full_name || !role)
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing fields' }) };
-    if (!['owner', 'assistant', 'investor'].includes(role))
+    if (!['owner', 'assistant', 'investor', 'viewer'].includes(role))
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid role' }) };
     if (String(password).length < 8)
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Password must be 8+ characters' }) };
