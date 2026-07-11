@@ -1073,9 +1073,18 @@ async function loadCorpMeta(corpId, force){
 // board never includes). isBoardSuperseded returns true only for auto sources that the
 // board actually replaces.
 const AUTO_SOURCES = new Set(['slack','toast','inventory']);
-function isBoardSuperseded(e, catCode){
+// Which non-board rows does the Excel board replace?
+//   * slack / toast / inventory are auto-captured estimates: the Excel always supersedes them.
+//   * payroll_bot (ADP) posts both Payroll and Payroll Tax. It is superseded ONLY when the
+//     Excel actually carries payroll for that month, because the sheet's payroll figure is the
+//     all-in cost. Stores whose sheet has no payroll keep the ADP figures.
+//   * Card Tips never appear in the Excel, so they always count.
+// boardHasPayroll = true when that month's board rows include a payroll line.
+function isBoardSuperseded(e, catCode, boardHasPayroll){
   if(catCode==='tips') return false;   // tips are never in the Excel board; always show
-  return AUTO_SOURCES.has(e.source);
+  if(AUTO_SOURCES.has(e.source)) return true;
+  if(e.source==='payroll_bot') return !!boardHasPayroll;
+  return false;
 }
 
 // Compute a single day's P&L (sales/expenses/net + payroll/supplies dollars) for one
@@ -1225,14 +1234,21 @@ function computePL(meta, raw){
   meta.categories.forEach(c => { catById[c.id] = c; catSum[c.code] = 0; });
   const confExp = raw.expenses.filter(e => e.status === 'confirmed');
   const boardExpDates = new Set(confExp.filter(e => e.source === 'board').map(e => e.date));
+  // Does the Excel actually carry payroll this month? If so, the ADP payroll_bot rows would
+  // duplicate it (the sheet's payroll figure is the all-in cost, tax included).
+  const boardHasPayroll = confExp.some(e => {
+    if (e.source !== 'board') return false;
+    const c = catById[e.category_id];
+    return !!c && (c.code === 'payroll' || c.code === 'payroll_tax');
+  });
   const hasBoard = boardLocked;   // auto-rules off for locked months
   confExp.forEach(e => {
-    // The Excel board import supersedes only the auto-estimated sources (Slack/Toast/
-    // inventory). Payroll (ADP bot), recurring bills, manual entries, and Card Tips are
-    // never in the Excel, so they must always count - even in a locked past month.
+    // The Excel board import supersedes the auto-estimated sources (Slack/Toast/inventory),
+    // and also the ADP payroll figures when the sheet already carries payroll for the month.
+    // Recurring bills, manual entries, and Card Tips are never in the Excel, so they always count.
     const cc = catById[e.category_id];
-    if (boardLocked && e.source !== 'board' && isBoardSuperseded(e, cc&&cc.code)) return;                 // locked: board replaces auto sources only
-    if (!boardLocked && e.source !== 'board' && isBoardSuperseded(e, cc&&cc.code) && boardExpDates.has(e.date)) return; // current: per-date
+    if (boardLocked && e.source !== 'board' && isBoardSuperseded(e, cc&&cc.code, boardHasPayroll)) return;                 // locked: board replaces those sources
+    if (!boardLocked && e.source !== 'board' && isBoardSuperseded(e, cc&&cc.code, boardHasPayroll) && boardExpDates.has(e.date)) return; // current: per-date
     const c = catById[e.category_id]; if(!c) return;
     catSum[c.code] = (catSum[c.code]||0) + Number(e.amount);
   });
