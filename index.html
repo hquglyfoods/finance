@@ -4422,12 +4422,12 @@ function fnError(j, fallback){
   if(!j) return fallback;
   // The full payload carries the diagnosis; a toast is too short for it, so log it too.
   try{ console.error('[create-account] backend said:', j); }catch(e){}
-  if(j.why) return j.error ? `${j.error}: ${j.why}` : j.why;
   let msg = j.error || fallback;
+  if(j.why) msg += ': ' + j.why;
   const bits = [];
-  if(j.auth_status) bits.push('status ' + j.auth_status);
+  if(j.auth_status) bits.push('HTTP ' + j.auth_status);
   if(j.auth_detail) bits.push(String(j.auth_detail));
-  if(bits.length) msg += ' (' + bits.join(' - ') + ')';
+  if(bits.length) msg += ' [' + bits.join(' | ') + ']';
   return msg;
 }
 
@@ -4435,10 +4435,26 @@ function fnError(j, fallback){
 // from render time. Always ask Supabase for the current token right before calling a
 // function, otherwise a long-open tab sends a stale one and the backend replies
 // "Invalid token".
+//
+// A token can also be signature-valid and unexpired while its SESSION has been removed on
+// the server (signed out on another device, session cleaned up). Reads still work, because
+// they only check the signature, but the backend verifies the session and answers 403
+// session_not_found. So confirm the session is really alive, and refresh it if it is not.
 async function authHeaders(){
   const { data } = await sb.auth.getSession();
-  const tok = data && data.session && data.session.access_token;
-  if(!tok) throw new Error('Your session expired. Please sign in again.');
+  let tok = data && data.session && data.session.access_token;
+  if(!tok) throw new Error('Your session expired. Please sign out and sign in again.');
+
+  // Is the session still real on the server?
+  const check = await sb.auth.getUser();
+  if(check.error){
+    const r = await sb.auth.refreshSession();
+    if(r.error || !r.data || !r.data.session){
+      await sb.auth.signOut();
+      throw new Error('Your sign-in is no longer valid. Please sign in again.');
+    }
+    tok = r.data.session.access_token;
+  }
   return { 'Content-Type':'application/json', 'Authorization':'Bearer '+tok };
 }
 

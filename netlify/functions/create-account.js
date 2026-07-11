@@ -93,10 +93,13 @@ exports.handler = async (event) => {
       const t = peekToken(token);
       // Work out the most likely cause so the message is actionable.
       let why;
-      if (t.expired) why = 'your sign-in expired, please sign in again';
+      const detailStr = String(authDetail || '');
+      if (/session_not_found|session from session_id/i.test(detailStr))
+        why = 'your sign-in session no longer exists on the server. Sign out and sign in again';
+      else if (t.expired) why = 'your sign-in expired, please sign in again';
       else if (t.issuer && SUPABASE_URL && !t.issuer.startsWith(SUPABASE_URL))
         why = `token came from ${t.issuer} but the server checks ${SUPABASE_URL}`;
-      else why = `Supabase said ${authStatus}: ${String(authDetail).replace(/\s+/g, ' ').slice(0, 120)}`;
+      else why = `Supabase said ${authStatus}: ${detailStr.replace(/\s+/g, ' ').slice(0, 120)}`;
       return { statusCode: 401, headers, body: JSON.stringify({
         error: 'Invalid token',
         why,
