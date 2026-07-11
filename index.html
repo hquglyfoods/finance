@@ -1119,9 +1119,12 @@ async function loadCorpMeta(corpId, force){
 // entries, and Card Tips (which come from Toast but are an independent line the Excel
 // board never includes). isBoardSuperseded returns true only for auto sources that the
 // board actually replaces.
-const AUTO_SOURCES = new Set(['slack','toast','inventory']);
+const AUTO_SOURCES = new Set(['slack','toast','inventory','recurring']);
 // Which non-board rows does the Excel board replace?
 //   * slack / toast / inventory are auto-captured estimates: the Excel always supersedes them.
+//   * recurring rows are auto-posted by the cron (rent, utilities, founder payroll). The
+//     Excel closing already carries those fixed costs, so counting recurring on top of a
+//     board month double-counts them (proven in the July 2026 audit). The Excel supersedes.
 //   * payroll_bot (ADP) posts both Payroll and Payroll Tax. It is superseded ONLY when the
 //     Excel actually carries payroll for that month, because the sheet's payroll figure is the
 //     all-in cost. Stores whose sheet has no payroll keep the ADP figures.
@@ -1266,13 +1269,21 @@ function computePL(meta, raw){
   const monthKey = raw.monthKey || '';
   const hasBoardRevAny = raw.revenue.some(r => r.source === 'board');
   const hasBoardExpAny = raw.expenses.some(e => e.source === 'board' && e.status === 'confirmed');
-  const boardLocked = (monthKey < curKey) && (hasBoardRevAny || hasBoardExpAny);
+  const isPast = monthKey < curKey;
+  // The Excel supersedes the other sources, but only for the side it actually covers.
+  // A month can have Excel EXPENSES while its revenue was keyed in by hand (UMMA does this):
+  // locking revenue on the strength of an expense row silently zeroed that month's sales.
+  const revLocked = isPast && hasBoardRevAny;
+  const expLocked = isPast && hasBoardExpAny;
+  // Auto-rules (royalty, sales tax, ...) are switched off once the Excel is the source of
+  // truth for the month, which is the case if it covers either side.
+  const boardLocked = isPast && (hasBoardRevAny || hasBoardExpAny);
 
   const boardRevDates = new Set(raw.revenue.filter(r => r.source === 'board').map(r => r.date));
   let totalSales = 0;
   raw.revenue.forEach(r => {
-    if (boardLocked && r.source !== 'board') return;                 // locked: board only
-    if (!boardLocked && r.source !== 'board' && boardRevDates.has(r.date)) return; // current: per-date
+    if (revLocked && r.source !== 'board') return;                 // locked: board only
+    if (!revLocked && r.source !== 'board' && boardRevDates.has(r.date)) return; // current: per-date
     const c = chByCode[r.channel_id]; if(!c) return;
     chSum[c.code] = (chSum[c.code]||0) + Number(r.amount);
     if (c.counts_in_total) totalSales += Number(r.amount) * Number(c.total_multiplier);
@@ -1290,12 +1301,12 @@ function computePL(meta, raw){
   });
   const hasBoard = boardLocked;   // auto-rules off for locked months
   confExp.forEach(e => {
-    // The Excel board import supersedes the auto-estimated sources (Slack/Toast/inventory),
-    // and also the ADP payroll figures when the sheet already carries payroll for the month.
-    // Recurring bills, manual entries, and Card Tips are never in the Excel, so they always count.
+    // The Excel board import supersedes the auto-generated sources (Slack/Toast/inventory/
+    // recurring), and also the ADP payroll figures when the sheet already carries payroll for
+    // the month. Manual entries and Card Tips are never in the Excel, so they always count.
     const cc = catById[e.category_id];
-    if (boardLocked && e.source !== 'board' && isBoardSuperseded(e, cc&&cc.code, boardHasPayroll)) return;                 // locked: board replaces those sources
-    if (!boardLocked && e.source !== 'board' && isBoardSuperseded(e, cc&&cc.code, boardHasPayroll) && boardExpDates.has(e.date)) return; // current: per-date
+    if (expLocked && e.source !== 'board' && isBoardSuperseded(e, cc&&cc.code, boardHasPayroll)) return;                 // locked: board replaces those sources
+    if (!expLocked && e.source !== 'board' && isBoardSuperseded(e, cc&&cc.code, boardHasPayroll) && boardExpDates.has(e.date)) return; // current: per-date
     const c = catById[e.category_id]; if(!c) return;
     catSum[c.code] = (catSum[c.code]||0) + Number(e.amount);
   });
@@ -1545,7 +1556,11 @@ function RatioChart({points}){
   const W = Math.max(560, pts.length*52), H = 200, padL=40, padR=10, padB=26, padT=14;
   const vals = pts.flatMap(p=>[p.payrollPct,p.suppliesPct]).filter(v=>v!==null);
   const rawMax = Math.max(0.30, ...vals);
-  const maxV = Math.ceil(rawMax/0.05)*0.05, minV = 0;          // round up to a 5% line
+  // Pick a gridline step that keeps the axis readable. A store like UMMA can run a ratio of
+  // 300%+ of sales, and a fixed 5% step would then stack 60 overlapping labels on the axis.
+  const STEPS = [0.05, 0.10, 0.25, 0.50, 1.00, 2.00, 5.00];
+  const step = STEPS.find(s => rawMax / s <= 8) || STEPS[STEPS.length-1];
+  const maxV = Math.ceil(rawMax/step)*step, minV = 0;
   const yOf = v => padT + (H-padB-padT)*(1-(v-minV)/(maxV-minV));
   const gap = (W-padL-padR)/pts.length;
   const cx = i => padL + gap*i + gap/2;
@@ -1555,8 +1570,7 @@ function RatioChart({points}){
   };
   const dots = (key,color)=> pts.map((p,i)=>p[key]===null?null:
     <circle key={key+i} cx={cx(i)} cy={yOf(p[key])} r={sel===i?4:2.5} fill={color} pointerEvents="none"/>);
-  // 5% gridlines
-  const grid=[]; for(let g=0; g<=maxV+1e-6; g+=0.05) grid.push(+g.toFixed(2));
+  const grid=[]; for(let g=0; g<=maxV+1e-6; g+=step) grid.push(+g.toFixed(4));
   return <div className="chart-wrap">
     <svg width={W} height={H} onMouseLeave={()=>setSel(null)}>
       {grid.map((g,i)=><g key={i}>
@@ -2703,6 +2717,29 @@ function Entry({corps, canEditIds, profile, presetCorp, presetMode, activeCorp, 
     const { error } = await sb.from('expenses').delete().eq('id',id);
     if(error) showToast('Delete failed: '+error.message); else reload();
   };
+  // ---- Edit an existing expense (modal, mirrors the Insights day-view editor) ----
+  const [editExp, setEditExp] = useState(null);
+  const [eForm, setEForm] = useState({category_id:'', amount:'', payee:'', memo:'', method:'', date:''});
+  const openEditExp = (e)=>{
+    setEditExp(e);
+    setEForm({ category_id:e.category_id||'', amount:String(e.amount), payee:e.payee||'',
+               memo:e.memo||'', method:e.method||'', date:e.date||date });
+  };
+  const saveEditExp = async ()=>{
+    if(!eForm.category_id){ showToast('Select a category'); return; }
+    const amt = sumExpr(eForm.amount);
+    if(isNaN(amt) || amt<=0){ showToast('Enter a valid amount'); return; }
+    if(!eForm.date){ showToast('Pick a date'); return; }
+    setBusy(true);
+    const upd = { category_id:eForm.category_id, amount:+amt.toFixed(2),
+                  payee:(eForm.payee||'').trim()||null, memo:(eForm.memo||'').trim().slice(0,300),
+                  date:eForm.date };
+    if(eForm.method) upd.method = eForm.method;   // never overwrite a null method with a default
+    const { error } = await sb.from('expenses').update(upd).eq('id', editExp.id);
+    setBusy(false);
+    if(error){ showToast('Save failed: '+error.message); return; }
+    setEditExp(null); showToast('Expense updated'); reload();
+  };
   const [pendCat, setPendCat] = useState({});
   const approvePending = async (p, ok) => {
     if(ok){ const upd = {status:'confirmed'};
@@ -2837,10 +2874,49 @@ function Entry({corps, canEditIds, profile, presetCorp, presetMode, activeCorp, 
                 {e.payee && <span className="faint"> · {e.payee}</span>}
                 {e.memo && <div className="faint" style={{fontSize:12}}>{e.memo}</div>}</td>
               <td className="num">{fmt$(Number(e.amount))}</td>
-              <td style={{width:36,textAlign:'right'}}><button className="btn btn-sm btn-ghost btn-danger" onClick={()=>delExp(e.id)}>✕</button></td>
+              <td style={{width:76,textAlign:'right',whiteSpace:'nowrap'}}>
+                <button className="btn btn-sm btn-ghost" onClick={()=>openEditExp(e)} aria-label="Edit">✎</button>
+                <button className="btn btn-sm btn-ghost btn-danger" onClick={()=>delExp(e.id)} aria-label="Delete">✕</button>
+              </td>
             </tr>)}
           </tbody></table>}
       </div>}
+    {editExp && <div className="modal-overlay" onClick={()=>setEditExp(null)}>
+      <div className="modal" onClick={e=>e.stopPropagation()}>
+        <div className="modal-head">
+          <div><div className="modal-title">Edit expense</div>
+            <div className="faint" style={{fontSize:12.5}}>{editExp.source} entry</div></div>
+          <button className="modal-x" onClick={()=>setEditExp(null)}>✕</button>
+        </div>
+        <label className="hint">Category</label>
+        <select style={{width:'100%',marginBottom:10}} value={eForm.category_id} onChange={e=>setEForm({...eForm,category_id:e.target.value})}>
+          <option value="">Select a category</option>
+          {(meta?meta.categories:[]).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <div style={{display:'flex',gap:8,marginBottom:10}}>
+          <div style={{flex:1}}><label className="hint">Amount</label>
+            <input type="text" inputMode="text" style={{width:'100%'}} placeholder="0.00 or 12+15+16" value={eForm.amount} onChange={e=>setEForm({...eForm,amount:e.target.value})}/>
+            {String(eForm.amount).includes('+') && !isNaN(sumExpr(eForm.amount)) && <div className="hint" style={{marginTop:4,color:'var(--gold)'}}>= {fmt$(sumExpr(eForm.amount))}</div>}
+          </div>
+          <div style={{flex:1}}><label className="hint">Date</label>
+            <input type="date" style={{width:'100%'}} value={eForm.date} onChange={e=>setEForm({...eForm,date:e.target.value})}/></div>
+        </div>
+        <label className="hint">Details</label>
+        <input style={{width:'100%',marginBottom:10}} value={eForm.memo} onChange={e=>setEForm({...eForm,memo:e.target.value})} placeholder="What was this for?"/>
+        <label className="hint">Payee (optional)</label>
+        <input style={{width:'100%',marginBottom:10}} value={eForm.payee} onChange={e=>setEForm({...eForm,payee:e.target.value})} placeholder="Vendor / person"/>
+        <label className="hint">Paid with</label>
+        <div className="method-seg" style={{marginBottom:14}}>
+          {[['card','Card'],['cash','Cash'],['transfer','Transfer']].map(([v,l])=>
+            <button key={v} type="button" className={'method-opt'+(eForm.method===v?' on':'')}
+              onClick={()=>setEForm({...eForm,method:v})}>{l}</button>)}
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <button className="btn btn-gold" style={{flex:1}} disabled={busy} onClick={saveEditExp}>Save</button>
+          <button className="btn btn-danger" disabled={busy} onClick={()=>{ const id=editExp.id; setEditExp(null); delExp(id); }}>Delete</button>
+        </div>
+      </div>
+    </div>}
     {toast && <div className="toast">{toast}</div>}
   </div>;
 }
