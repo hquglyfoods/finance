@@ -43,6 +43,31 @@ exports.handler = async (event) => {
       return { statusCode: 403, headers, body: JSON.stringify({ error: 'Owner only' }) };
 
     const body = JSON.parse(event.body || '{}');
+
+    // ---- account management actions (owner-only, same auth as creation) ----
+    if (body.action === 'delete' || body.action === 'reset_password') {
+      const targetId = body.id;
+      if (!targetId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing id' }) };
+      if (targetId === userData.user.id)
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'You cannot delete or reset your own account here' }) };
+
+      if (body.action === 'reset_password') {
+        const pw = body.password;
+        if (!pw || String(pw).length < 8)
+          return { statusCode: 400, headers, body: JSON.stringify({ error: 'Password must be at least 8 characters' }) };
+        const { error } = await admin.auth.admin.updateUserById(targetId, { password: String(pw) });
+        if (error) return { statusCode: 400, headers, body: JSON.stringify({ error: error.message }) };
+        return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
+      }
+
+      // delete: remove permissions + profile, then the auth user
+      await admin.from('permissions').delete().eq('profile_id', targetId);
+      await admin.from('profiles').delete().eq('id', targetId);
+      const { error: delErr } = await admin.auth.admin.deleteUser(targetId);
+      if (delErr) return { statusCode: 400, headers, body: JSON.stringify({ error: delErr.message }) };
+      return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
+    }
+
     const { email, password, full_name, role, permissions } = body;
     if (!email || !password || !full_name || !role)
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing fields' }) };
