@@ -997,7 +997,10 @@ const pad = n => String(n).padStart(2,'0');
 // wants to use) one, so an account can also be created with a simple ID such as "hq-mike".
 // An ID is turned into an internal address that Supabase accepts; the person never sees it
 // and just types their ID. Anything containing "@" is treated as a real email and used as-is.
-const ID_DOMAIN = 'id.uglyfinance.local';
+const ID_DOMAIN = 'id.uglydonutsncorndogs.com';
+// An earlier build used a .local address, which Supabase rejects as invalid. Any account that
+// did get created under it still logs in with the same ID.
+const LEGACY_ID_DOMAINS = ['id.uglyfinance.local'];
 const isEmailLike = v => String(v||'').includes('@');
 const normalizeLoginId = v => String(v||'').trim().toLowerCase();
 // what we hand to Supabase
@@ -1008,7 +1011,10 @@ const toAuthEmail = v => {
 // what we show back to a person (hide the internal domain)
 const displayLogin = v => {
   const s = String(v||'');
-  return s.endsWith('@'+ID_DOMAIN) ? s.slice(0, -('@'+ID_DOMAIN).length) : s;
+  for(const d of [ID_DOMAIN, ...LEGACY_ID_DOMAINS]){
+    if(s.endsWith('@'+d)) return s.slice(0, -('@'+d).length);
+  }
+  return s;
 };
 // IDs must be safe to put in front of an @
 const isValidLoginId = v => {
@@ -5515,7 +5521,14 @@ function Login({onDone}){
   const go = async e=>{
     e && e.preventDefault();
     setBusy(true); setErr(null);
-    const { error } = await sb.auth.signInWithPassword({email: toAuthEmail(email), password:pw});
+    let { error } = await sb.auth.signInWithPassword({email: toAuthEmail(email), password:pw});
+    // An account made by an earlier build may sit under the old internal domain; try that too.
+    if(error && !isEmailLike(email)){
+      for(const d of LEGACY_ID_DOMAINS){
+        const r = await sb.auth.signInWithPassword({email: `${normalizeLoginId(email)}@${d}`, password:pw});
+        if(!r.error){ error = null; break; }
+      }
+    }
     setBusy(false);
     if(error) setErr('Sign in failed. Check your ID and password.');
     else onDone();
