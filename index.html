@@ -438,7 +438,8 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 /* Investors (owners) table: name truncates with a tap popover, % box is compact, and the
    Rename/Remove actions stay pinned to the right regardless of name length. */
 .own-table{table-layout:fixed;width:100%}
-.own-table th:nth-child(2){width:76px}
+.own-table th{white-space:nowrap}
+.own-table th:nth-child(2){width:88px}
 .own-table th:nth-child(3){width:150px}
 .own-name-cell{position:relative;overflow:visible}
 .own-name{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;cursor:pointer}
@@ -538,6 +539,14 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   .cl-actions .btn{font-size:12px;padding:7px 9px}
   .cl-seg{padding:6px 8px}
   .cl-seg>button{padding:5px 9px;font-size:12px}
+  /* Investors table on mobile: give the actions column room and shrink its buttons so
+     Rename/Remove never spill outside the card. */
+  .own-table th:nth-child(1){width:34%}
+  .own-table th:nth-child(2){width:64px}
+  .own-table th:nth-child(3){width:auto}
+  .own-pct{font-size:12px;padding:5px 6px}
+  .own-acts-cell .btn{padding:5px 7px;font-size:11.5px}
+  .own-acts-cell .btn+.btn{margin-left:4px !important}
   .modal-2col{flex-direction:column;gap:8px}
   .modal-2col>div{width:100%}
   /* Expense Categories: fixed layout so the name truncates with an ellipsis and the
@@ -751,6 +760,17 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 }
 .tabbar{display:none}
 @media(max-width:820px){.tabbar{display:flex}}
+/* Very narrow phones (e.g. iPhone SE 1st gen, 320px): tighten the Investors row further so
+   Rename/Remove always stay inside the card. */
+@media(max-width:359px){
+  .own-table{table-layout:auto}
+  .own-table th{white-space:normal}
+  .own-table th:nth-child(1){width:auto}
+  .own-table th:nth-child(2){width:54px}
+  .own-acts-cell .btn{padding:4px 5px;font-size:10.5px}
+  .own-acts-cell .btn+.btn{margin-left:3px !important}
+  .own-pct{font-size:11px;padding:4px 5px}
+}
 
 /* ---------- home (today) ---------- */
 .home-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;margin-bottom:22px}
@@ -4068,11 +4088,15 @@ function Admin({corps, session, embedded}){
     <div className="card">
       <h3>Accounts & Permissions</h3>
       {profiles.map(p=><div key={p.id} style={{marginBottom:18,opacity:p.active?1:.5}}>
-        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8,flexWrap:'wrap'}}>
-          <b>{p.full_name||p.email}</b>
-          <span className="badge gold">{p.role}</span>
-          <span className="faint" style={{fontSize:12}}>{p.email}</span>
-          <button className="btn btn-sm" style={{marginLeft:'auto'}} onClick={()=>toggleActive(p)}>{p.active?'Deactivate':'Activate'}</button>
+        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
+              <b style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.full_name||p.email}</b>
+              <span className="badge gold" style={{flex:'0 0 auto'}}>{p.role}</span>
+            </div>
+            <div className="faint" style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.email}</div>
+          </div>
+          <button className="btn btn-sm" style={{flex:'0 0 auto'}} onClick={()=>toggleActive(p)}>{p.active?'Deactivate':'Activate'}</button>
         </div>
         {p.role!=='owner' && <table className="t" style={{maxWidth:560}}>
           <thead><tr><th>Corp</th><th>View</th><th>Edit</th></tr></thead>
@@ -5032,9 +5056,9 @@ const NAV = [
   {id:'entry',     label:'Entry',   full:'Daily Entry',     ic:'✎', roles:['owner','assistant']},
   {id:'approvals', label:'Approve', full:'Approvals',       ic:'✓', roles:['owner','assistant']},
   {id:'insights',  label:'Insights',full:'Insights',        ic:'≈', roles:['owner','assistant','viewer']},
-  {id:'cash',      label:'Cash',    full:'Cash',            ic:'▤', roles:['owner','assistant','viewer']},
+  {id:'cash',      label:'Cash',    full:'Cash',            ic:'▤', roles:['owner','assistant']},
   {id:'close',     label:'Close',   full:'Close & Publish', ic:'◆', roles:['owner']},
-  {id:'investor',  label:'Reports', full:'Reports',         ic:'▦', roles:['owner','investor','viewer']},
+  {id:'investor',  label:'Reports', full:'Reports',         ic:'▦', roles:['owner','investor']},
   {id:'cashledger',label:'Cash Mgmt',full:'Cash Ledger',     ic:'▥', roles:['owner']},
   {id:'settings',  label:'Settings',full:'Settings',        ic:'⚙', roles:['owner']},
   {id:'alerts',    label:'Install', full:'Install App',     ic:'⬇', roles:['owner','assistant','investor','viewer']},

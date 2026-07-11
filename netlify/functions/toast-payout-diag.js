@@ -79,8 +79,36 @@ async function probe(method, path, token, guid, body) {
   return out;
 }
 
+// Verify the caller is an authenticated owner via their Supabase JWT.
+async function isOwnerCaller(authHeader) {
+  if (!authHeader) return false;
+  const token = authHeader.replace(/^Bearer\s+/i, '');
+  try {
+    const res = await fetch(`${process.env.SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: process.env.SUPABASE_SERVICE_KEY, Authorization: 'Bearer ' + token },
+    });
+    if (!res.ok) return false;
+    const user = await res.json();
+    if (!user || !user.id) return false;
+    const pr = await fetch(`${process.env.SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=role`, {
+      headers: { apikey: process.env.SUPABASE_SERVICE_KEY, Authorization: 'Bearer ' + process.env.SUPABASE_SERVICE_KEY },
+    });
+    const rows = await pr.json();
+    return rows && rows[0] && rows[0].role === 'owner';
+  } catch (e) { return false; }
+}
+
 exports.handler = async (event) => {
-  const qp = (event && event.queryStringParameters) || {};
+  // This endpoint returns raw Toast sales/payment data, so it must never be public.
+  const qp0 = (event && event.queryStringParameters) || {};
+  const okKey = qp0.key && qp0.key === process.env.WEBHOOK_SECRET;
+  const hdrs = (event && event.headers) || {};
+  const okOwner = !okKey && await isOwnerCaller(hdrs.authorization || hdrs.Authorization);
+  if (!okKey && !okOwner) {
+    return { statusCode: 403, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Forbidden' }) };
+  }
+
+  const qp = qp0;
   const map = {};
   (process.env.TOAST_RESTAURANTS || '').split(',').map(s => s.trim()).filter(Boolean)
     .forEach(p => { const [c, g] = p.split(':'); map[c] = g; });
