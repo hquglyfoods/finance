@@ -1153,12 +1153,51 @@ function computePL(meta, raw){
   };
   vars['royalty_rate'] = pickRate('royalty');
   vars['marketing_rate'] = pickRate('marketing');
-  // auto-rules only for non-board (current/future) months
-  const ruleRows = hasBoard ? [] : meta.rules.map(r => {
-    const val = evalExpr(r.expr, vars);
-    vars[r.code] = val;
-    return { code:r.code, name:r.name, amount:val };
-  });
+  // auto-rules only for non-board (current/future) months.
+  // Rules may reference other rules by code (e.g. royalty uses sales_tax). A rule whose
+  // dependency has not been evaluated yet would read that variable as 0 and silently
+  // under/over-charge, so instead of trusting display_order we resolve dependencies:
+  // evaluate in passes, taking each rule as soon as every rule-code it references is
+  // known. Display order still decides how the lines are LISTED.
+  const ruleRows = hasBoard ? [] : (() => {
+    const codes = new Set(meta.rules.map(r => r.code));
+    const depsOf = r => {
+      const found = new Set();
+      String(r.expr || '').replace(/[A-Za-z_][A-Za-z0-9_]*/g, t => {
+        if (t !== r.code && codes.has(t)) found.add(t);
+        return t;
+      });
+      return found;
+    };
+    const pending = meta.rules.slice();
+    const done = {};                       // code -> {code,name,amount}
+    let guard = pending.length + 1;
+    while (pending.length && guard-- > 0) {
+      let progressed = false;
+      for (let i = 0; i < pending.length; i++) {
+        const r = pending[i];
+        const deps = depsOf(r);
+        let ready = true;
+        deps.forEach(d => { if (!(d in done)) ready = false; });
+        if (!ready) continue;
+        const val = evalExpr(r.expr, vars);
+        vars[r.code] = val;
+        done[r.code] = { code: r.code, name: r.name, amount: val };
+        pending.splice(i, 1); i--;
+        progressed = true;
+      }
+      if (!progressed) break;              // circular reference: fall through below
+    }
+    // Any rule left over is part of a cycle (or references itself). Evaluate it with
+    // whatever is known so the P&L still produces a number rather than breaking.
+    pending.forEach(r => {
+      const val = evalExpr(r.expr, vars);
+      vars[r.code] = val;
+      done[r.code] = { code: r.code, name: r.name, amount: val };
+    });
+    // list the lines in the order the user arranged them
+    return meta.rules.map(r => done[r.code]).filter(Boolean);
+  })();
   const catExpense = Object.values(catSum).reduce((a,b)=>a+b,0);
   const ruleExpense = ruleRows.reduce((a,r)=>a+r.amount,0);
   const totalExpenses = catExpense + ruleExpense;
