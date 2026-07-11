@@ -4415,6 +4415,20 @@ function InvestorPortal({corps, isOwner, activeCorp, onCorp}){
 }
 
 // ================= ADMIN =================
+// The backend returns extra diagnosis alongside the headline error (auth_status,
+// auth_detail). Surface it, otherwise every failure just reads "Invalid token" and
+// there is nothing to act on.
+function fnError(j, fallback){
+  if(!j) return fallback;
+  if(j.why) return j.error ? `${j.error}: ${j.why}` : j.why;
+  let msg = j.error || fallback;
+  const bits = [];
+  if(j.auth_status) bits.push('status ' + j.auth_status);
+  if(j.auth_detail) bits.push(String(j.auth_detail));
+  if(bits.length) msg += ' (' + bits.join(' - ') + ')';
+  return msg;
+}
+
 // Access tokens expire (about an hour), and the session held in React state is a snapshot
 // from render time. Always ask Supabase for the current token right before calling a
 // function, otherwise a long-open tab sends a stale one and the backend replies
@@ -4475,7 +4489,7 @@ function Admin({corps, session, embedded}){
         body:JSON.stringify({action:'delete', id:p.id})
       });
       const j = await res.json();
-      if(!res.ok) throw new Error(j.error||'Delete failed');
+      if(!res.ok) throw new Error(fnError(j, 'Delete failed'));
       showToast('Account deleted'); reload();
     }catch(e){ showToast(e.message); }
     setBusy(false);
@@ -4493,7 +4507,7 @@ function Admin({corps, session, embedded}){
         body:JSON.stringify({action:'reset_password', id:p.id, password:pw})
       });
       const j = await res.json();
-      if(!res.ok) throw new Error(j.error||'Reset failed');
+      if(!res.ok) throw new Error(fnError(j, 'Reset failed'));
       showToast('Password updated. Share it with them securely.');
     }catch(e){ showToast(e.message); }
     setBusy(false);
@@ -4518,7 +4532,7 @@ function Admin({corps, session, embedded}){
           .map(([cid,v])=>({corporation_id:cid, can_view:!!v.can_view, can_edit:!!v.can_edit}))})
       });
       const j = await res.json();
-      if(!res.ok) throw new Error(j.error||'Create failed');
+      if(!res.ok) throw new Error(fnError(j, 'Create failed'));
       showToast('Account created: '+normalizeLoginId(nf.email));
       setNf({email:'',password:'',full_name:'',role:'investor'}); setNfPerms({});
       reload();

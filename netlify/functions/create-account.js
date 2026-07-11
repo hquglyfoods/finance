@@ -33,6 +33,23 @@ async function getCaller(token) {
   return { user, status: 200, detail: '' };
 }
 
+// Read the (unverified) claims out of a JWT so a rejection can be explained. The token is
+// still verified by Supabase above; this is only used to build a useful error message.
+function peekToken(token) {
+  try {
+    const part = token.split('.')[1];
+    const json = Buffer.from(part.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+    const c = JSON.parse(json);
+    const now = Math.floor(Date.now() / 1000);
+    return {
+      issuer: c.iss || null,                 // which Supabase project issued it
+      expired: c.exp ? c.exp < now : null,
+      expires_in_s: c.exp ? c.exp - now : null,
+      subject: c.sub || null,
+    };
+  } catch (e) { return { parse_error: true }; }
+}
+
 // Admin Auth operations over REST, for the same key-compatibility reason as getCaller().
 async function adminAuth(path, method, payload) {
   const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users${path}`, {
@@ -72,9 +89,25 @@ exports.handler = async (event) => {
 
     // verify caller
     const { user: callerUser, status: authStatus, detail: authDetail } = await getCaller(token);
-    if (!callerUser)
+    if (!callerUser) {
+      const t = peekToken(token);
+      // Work out the most likely cause so the message is actionable.
+      let why = 'token refused by Supabase';
+      if (t.expired) why = 'your sign-in expired, please sign in again';
+      else if (t.issuer && SUPABASE_URL && !t.issuer.startsWith(SUPABASE_URL))
+        why = `token came from ${t.issuer} but the server checks ${SUPABASE_URL}`;
+      else if (authStatus === 401) why = 'SUPABASE_SERVICE_KEY is not accepted by this project';
       return { statusCode: 401, headers, body: JSON.stringify({
-        error: 'Invalid token', auth_status: authStatus, auth_detail: String(authDetail).slice(0, 200) }) };
+        error: 'Invalid token',
+        why,
+        auth_status: authStatus,
+        auth_detail: String(authDetail).slice(0, 200),
+        token_issuer: t.issuer || null,
+        token_expired: t.expired,
+        server_url: SUPABASE_URL,
+        service_key_prefix: String(SERVICE_KEY || '').slice(0, 11),
+      }) };
+    }
     const userData = { user: callerUser };
 
     const { data: caller } = await admin.from('profiles')
