@@ -312,9 +312,17 @@ a{color:var(--gold);text-decoration:none}
 .insight-ic.pos{color:var(--green)}
 .insight-ic.neg{color:var(--red)}
 .insight-ic.faint{color:var(--text3)}
-.day-star{margin-left:6px;font-size:11px;vertical-align:middle}
-.day-star.best{color:var(--gold-strong)}
-.day-star.slow{color:var(--text3)}
+.day-star{margin-left:6px;font-size:13px;vertical-align:middle;font-weight:700;line-height:1}
+.daily-monthnav{display:none;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
+.daily-monthnav .dmn-label{font-weight:700;font-size:14px}
+.day-star.best{color:var(--green)}
+.day-star.best::before{content:'\2605'} /* filled star */
+.day-star.best{font-size:0}
+.day-star.best::before{font-size:13px}
+.day-star.slow{color:var(--red)}
+.day-star.slow::before{content:'\2605'} /* filled star */
+.day-star.slow{font-size:0}
+.day-star.slow::before{font-size:13px}
 
 .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px 22px;margin-bottom:18px;box-shadow:var(--shadow)}
 .card h3{font-size:14px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px}
@@ -440,9 +448,9 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .daily-t tr.is-weekend .dow{color:var(--red);font-weight:700}
 /* Daily view: give the date column left breathing room, and mark today with a gold outline. */
 .daily-t td:first-child,.daily-t th:first-child{padding-left:14px}
-.daily-t tr.is-today td{border-top:2px solid var(--gold);border-bottom:2px solid var(--gold)}
-.daily-t tr.is-today td:first-child{border-left:2px solid var(--gold);border-top-left-radius:9px;border-bottom-left-radius:9px;font-weight:700}
-.daily-t tr.is-today td:last-child{border-right:2px solid var(--gold);border-top-right-radius:9px;border-bottom-right-radius:9px}
+.daily-t tr.is-today td{box-shadow:inset 0 2px 0 var(--gold),inset 0 -2px 0 var(--gold)}
+.daily-t tr.is-today td:first-child{box-shadow:inset 0 2px 0 var(--gold),inset 0 -2px 0 var(--gold),inset 2px 0 0 var(--gold);font-weight:700}
+.daily-t tr.is-today td:last-child{box-shadow:inset 0 2px 0 var(--gold),inset 0 -2px 0 var(--gold),inset -2px 0 0 var(--gold)}
 .t tr.is-weekend td:first-child{box-shadow:inset 3px 0 0 rgba(176,138,30,0.35)}
 .amt-input{position:relative;display:flex;align-items:center}
 .amt-input .amt-prefix{position:absolute;left:9px;color:var(--text3);font-family:var(--font-m);font-size:14px;pointer-events:none}
@@ -557,26 +565,31 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   /* tighten the daily table so a row fits the screen without side-scrolling:
      smaller type, tighter padding, whole-dollar display (cents hidden, math unchanged),
      narrower expand-chevron column */
-  table.t.daily-t{font-size:11.5px;min-width:0;width:100%;table-layout:fixed}
-  table.t.daily-t td,table.t.daily-t th{padding:8px 3px}
+  table.t.daily-t{font-size:11px;min-width:0;width:100%;table-layout:fixed}
+  table.t.daily-t td,table.t.daily-t th{padding:8px 2px;overflow:hidden}
   table.t.daily-t td.mono,table.t.daily-t th{white-space:nowrap}
   table.t.daily-t td:first-child,table.t.daily-t th:first-child{padding-left:9px}
   /* fixed column widths so numbers fit and the expanded detail can't stretch the table */
-  .daily-t th:nth-child(1){width:23%}
-  .daily-t th:nth-child(2){width:25%}
+  .daily-t th:nth-child(1){width:18%}
+  .daily-t th:nth-child(2){width:26%}
   .daily-t th:nth-child(3){width:0;padding:0}
-  .daily-t th:nth-child(4){width:22%}
-  .daily-t th:nth-child(5){width:23%}
-  .daily-t th:nth-child(6){width:7%}
+  .daily-t th:nth-child(4){width:24%}
+  .daily-t th:nth-child(5){width:25%}
+  .daily-t th:nth-child(6){width:42px}
+  .daily-t .chev-td{text-align:center;padding-left:2px;padding-right:2px}
+  .daily-t tr.is-today td:last-child{padding-right:2px}
   /* expanded expense detail wraps within the row (no side-scroll) */
   table.t.daily-t td[colspan] .exp-detail{max-width:100%;overflow:hidden}
   table.t.daily-t .exp-line-amt{white-space:nowrap}
+  .auto-hint{display:none}
+  .daily-monthnav{display:flex;position:sticky;top:47px;z-index:15;background:var(--card);margin:0 -10px 8px;padding:8px 10px;border-bottom:1px solid var(--border-soft)}
+  .daily-t td.num,.daily-t td.mono{font-variant-numeric:tabular-nums}
   /* the daily card gets slimmer side padding so the 4-column table fits comfortably */
   .daily-card{padding-left:10px;padding-right:10px}
   .daily-t .amt-exact{display:none}
   .daily-t .amt-round{display:inline}
-  .daily-t .chev-td{width:26px}
-  table.t.daily-t .chev-td .btn{padding:3px 8px;font-size:11px;box-shadow:none}
+  .daily-t .chev-td{width:42px}
+  table.t.daily-t .chev-td .btn{padding:3px 6px;font-size:11px;box-shadow:none}
   /* expanded expense lines on mobile: tighter padding; name ellipsis keeps it on screen */
   .exp-line{padding:10px 12px 10px 16px;gap:8px}
   .exp-line-name{font-size:12.5px}
@@ -1576,7 +1589,7 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner}){
       <StoreCompareView editable={editable} cmpIds={cmpIds} toggleCmp={toggleCmp} data={cmpData} y={y} m={m} period={cmpPeriod} cmpDate={cmpDate}/> :
       loading ? <Spinner/> :
       view==='month'   ? <MonthView pl={pl} yoy={yoy} trend={trend} y={y} m={m}/> :
-      view==='daily'   ? <DailyView rows={dayRows} pl={pl} yoy={yoy} y={y} m={m} isOwner={isOwner} categories={(meta&&meta.categories)||[]} onChanged={()=>setRefresh(x=>x+1)}/> :
+      view==='daily'   ? <DailyView rows={dayRows} pl={pl} yoy={yoy} y={y} m={m} isOwner={isOwner} categories={(meta&&meta.categories)||[]} onChanged={()=>setRefresh(x=>x+1)} onMonth={(a,b)=>{setY(a);setM(b);}}/> :
       view==='year'    ? <YearView months={yearMonths} y={y} yearMode={yearMode} onYearMode={setYearMode}
                            prev={yearMonthsPrev} prev2={yearMonthsPrev2}/> :
       view==='alltime' ? <AllTimeView data={allTime}/> :
@@ -1853,7 +1866,7 @@ function MonthView({pl, yoy, trend, y, m}){
 }
 
 // ---- DAILY VIEW (per-day rev/exp/net, vs last year, with expense detail) ----
-function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
+function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged, onMonth}){
   const [open, setOpen] = useState(null);
   const [revOpen, setRevOpen] = useState(false);   // "Revenue by channel" card, collapsed by default
   const [badgeOpen, setBadgeOpen] = useState(null); // which expense line shows its source badge
@@ -1974,6 +1987,11 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
     </div>}
     <div className="card daily-card">
       <h3><span>{MONTHS[m-1]} {y} · Day by Day <span className="faint" style={{fontWeight:400,fontSize:13}}>vs {y-1}</span></span></h3>
+      {onMonth && <div className="daily-monthnav">
+        <button className="btn btn-sm" onClick={()=>{const d=new Date(y,m-2,1);onMonth(d.getFullYear(),d.getMonth()+1);}}>‹ Prev</button>
+        <span className="dmn-label">{MONTHS[m-1]} {y}</span>
+        <button className="btn btn-sm" onClick={()=>{const d=new Date(y,m,1);onMonth(d.getFullYear(),d.getMonth()+1);}}>Next ›</button>
+      </div>}
       <table className="t daily-t">
         <thead><tr><th>Date</th><th className="num">Sales</th><th className="num faint ly-col">{y-1}</th>
           <th className="num">Expenses</th><th className="num">Net</th><th></th></tr></thead>
@@ -2023,15 +2041,15 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged}){
                     </div>
                     <div className="exp-line-amt mono">{fmt$(a.amount)}</div>
                   </div>)}
-                  {r.autoLines&&r.autoLines.length>0 && <div className="hint" style={{padding:'6px 2px 0'}}>Auto lines are calculated (not entered) and counted in the monthly P&L, not in this day's entered total.</div>}
+                  {r.autoLines&&r.autoLines.length>0 && <div className="hint auto-hint" style={{padding:'6px 2px 0'}}>Auto lines are calculated (not entered) and counted in the monthly P&L, not in this day's entered total.</div>}
                 </div>
               </td></tr>}
             </React.Fragment>; })}
           <tr className="total"><td>Total</td>
-            <td className="num">{fmt$(tot.rev)}{tot.lyRev?<div className="ly-under">{"'"+String(y-1).slice(2)} {fmt$(tot.lyRev,0)}</div>:null}</td>
-            <td className="num faint ly-col">{fmt$(tot.lyRev,0)}</td>
-            <td className="num">{fmt$(tot.exp)}</td>
-            <td className={'num '+(net>=0?'pos':'neg')}>{fmt$(net)}</td><td></td></tr>
+            <td className="num mono"><Amt v={tot.rev}/>{tot.lyRev?<div className="ly-under">{"'"+String(y-1).slice(2)} {fmt$(tot.lyRev,0)}</div>:null}</td>
+            <td className="num mono faint ly-col">{fmt$(tot.lyRev,0)}</td>
+            <td className="num mono"><Amt v={tot.exp}/></td>
+            <td className={'num mono '+(net>=0?'pos':'neg')}><Amt v={net}/></td><td></td></tr>
         </tbody>
       </table>
       <div className="hint"><span className="day-star best">★</span> best sales day · <span className="day-star slow">★</span> slowest. Tap the arrow on a day to see every expense; tap a name for its source and note{isOwner?'; tap ⋯ to edit or delete':''}.</div>
