@@ -974,7 +974,48 @@ const FN_BASE = '/.netlify/functions';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ================= HELPERS =================
+// Every tab with a store picker uses this so the store you chose follows you across tabs.
+// It takes the app-wide selection when that store is available on this tab, otherwise falls
+// back to the first one. Choosing a store here updates the app-wide selection too.
+function useCorpSelection(list, activeCorp, onCorp, preferred){
+  const pick = (activeCorp && list.some(c=>c.id===activeCorp)) ? activeCorp : (list[0] && list[0].id);
+  const [corpId, setCorpIdRaw] = useState(preferred || pick);
+  // corps arrive asynchronously, and the shared selection can change on another tab
+  useEffect(()=>{
+    if(!list.length) return;
+    const want = (activeCorp && list.some(c=>c.id===activeCorp)) ? activeCorp : (list[0] && list[0].id);
+    if(!corpId || !list.some(c=>c.id===corpId)) setCorpIdRaw(want);
+    else if(activeCorp && activeCorp!==corpId && list.some(c=>c.id===activeCorp)) setCorpIdRaw(activeCorp);
+  },[list.map(c=>c.id).join(','), activeCorp]);
+  const setCorpId = id=>{ setCorpIdRaw(id); if(onCorp) onCorp(id); };
+  return [corpId, setCorpId];
+}
+
 const pad = n => String(n).padStart(2,'0');
+
+// Sign-in identity. Supabase Auth always stores an email address, but not everyone has (or
+// wants to use) one, so an account can also be created with a simple ID such as "hq-mike".
+// An ID is turned into an internal address that Supabase accepts; the person never sees it
+// and just types their ID. Anything containing "@" is treated as a real email and used as-is.
+const ID_DOMAIN = 'id.uglyfinance.local';
+const isEmailLike = v => String(v||'').includes('@');
+const normalizeLoginId = v => String(v||'').trim().toLowerCase();
+// what we hand to Supabase
+const toAuthEmail = v => {
+  const s = normalizeLoginId(v);
+  return isEmailLike(s) ? s : `${s}@${ID_DOMAIN}`;
+};
+// what we show back to a person (hide the internal domain)
+const displayLogin = v => {
+  const s = String(v||'');
+  return s.endsWith('@'+ID_DOMAIN) ? s.slice(0, -('@'+ID_DOMAIN).length) : s;
+};
+// IDs must be safe to put in front of an @
+const isValidLoginId = v => {
+  const s = normalizeLoginId(v);
+  if(isEmailLike(s)) return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+  return /^[a-z0-9][a-z0-9._-]{2,}$/.test(s);   // at least 3 chars, letters/digits/._-
+};
 const fmt$ = (v, dec=2) => {
   if (v === null || v === undefined || isNaN(v)) return '-';
   const neg = v < -0.004;
@@ -1573,9 +1614,9 @@ function YoYDelta({cur, prev, bare, invert}){
 }
 
 // ================= DASHBOARD =================
-function Dashboard({corps, canEditIds, presetCorp, isOwner}){
+function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp}){
   const editable = corps.filter(c=>canEditIds.has(c.id));
-  const [corpId, setCorpId] = useState(editable[0] && editable[0].id);
+  const [corpId, setCorpId] = useCorpSelection(editable, activeCorp, onCorp);
   const now = new Date();
   const [y, setY] = useState(now.getFullYear());
   const [m, setM] = useState(now.getMonth()+1);
@@ -2597,9 +2638,9 @@ function allTimeInsights(active){
 }
 
 // ================= ENTRY (Maria) =================
-function Entry({corps, canEditIds, profile, presetCorp, presetMode}){
+function Entry({corps, canEditIds, profile, presetCorp, presetMode, activeCorp, onCorp}){
   const editable = corps.filter(c=>canEditIds.has(c.id));
-  const [corpId, setCorpId] = useState(presetCorp || (editable[0] && editable[0].id));
+  const [corpId, setCorpId] = useCorpSelection(editable, activeCorp, onCorp, presetCorp);
   useEffect(()=>{ if(presetCorp) setCorpId(presetCorp); },[presetCorp]);
   const [date, setDate] = useState(todayStr());
   const [meta, setMeta] = useState(null);
@@ -3165,12 +3206,12 @@ function CashLedger({corps, canEditIds, profile}){
   </div>;
 }
 
-function CashPage({corps, canEditIds, profile, isOwner}){
+function CashPage({corps, canEditIds, profile, isOwner, activeCorp, onCorp}){
   const stores = corps.filter(c=>canEditIds.has(c.id));
   // Coins (anything under a dollar) stay in the register, so a count that's short by less
   // than $1 is treated as fine. Only a shortfall of $1 or more counts as "short".
   const SHORT_TOL = 1;
-  const [corpId, setCorpId] = useState(stores[0] && stores[0].id);
+  const [corpId, setCorpId] = useCorpSelection(stores, activeCorp, onCorp);
   const now = new Date();
   const [y,setY] = useState(now.getFullYear());
   const [m,setM] = useState(now.getMonth()+1);
@@ -3501,9 +3542,9 @@ function CashPage({corps, canEditIds, profile, isOwner}){
     {toast && <div className="toast">{toast}</div>}
   </div>;
 }
-function Recurring({corps, canEditIds, profile, isOwner, embedded}){
+function Recurring({corps, canEditIds, profile, isOwner, embedded, activeCorp, onCorp}){
   const editable = corps.filter(c=>canEditIds.has(c.id));
-  const [corpId, setCorpId] = useState(editable[0] && editable[0].id);
+  const [corpId, setCorpId] = useCorpSelection(editable, activeCorp, onCorp);
   const [meta, setMeta] = useState(null);
   const [rows, setRows] = useState([]);
   const [f, setF] = useState({name:'', category_id:'', amount:'', frequency:'monthly', day_of_week:'5', day_of_month:'1', payee:''});
@@ -3919,9 +3960,9 @@ function Recurring({corps, canEditIds, profile, isOwner, embedded}){
 }
 
 // ================= MONTHLY CLOSE =================
-function ClosePage({corps, canEditIds, profile, isOwner, preset}){
+function ClosePage({corps, canEditIds, profile, isOwner, preset, activeCorp, onCorp}){
   const editable = corps.filter(c=>canEditIds.has(c.id));
-  const [corpId, setCorpId] = useState((preset&&preset.corpId) || (editable[0] && editable[0].id));
+  const [corpId, setCorpId] = useCorpSelection(editable, activeCorp, onCorp, preset&&preset.corpId);
   const now = new Date();
   const prevM = now.getMonth()===0 ? {y:now.getFullYear()-1,m:12} : {y:now.getFullYear(),m:now.getMonth()};
   const [y,setY] = useState((preset&&preset.y)||prevM.y);
@@ -4260,8 +4301,8 @@ function StatementView({corpName, year, month, summary, notes, files, publishedA
   </div>;
 }
 
-function InvestorPortal({corps, isOwner}){
-  const [corpId, setCorpId] = useState(corps[0] && corps[0].id);
+function InvestorPortal({corps, isOwner, activeCorp, onCorp}){
+  const [corpId, setCorpId] = useCorpSelection(corps, activeCorp, onCorp);
   const [reports, setReports] = useState(null);
   const [err, setErr] = useState(null);
   const [open, setOpen] = useState(null);   // the report shown in the popup
@@ -4408,7 +4449,7 @@ function Admin({corps, session, embedded}){
 
   const deleteAccount = async p=>{
     if(session && p.id===session.user.id){ showToast("You cannot delete your own account"); return; }
-    if(!confirm(`Delete the account for ${p.full_name||p.email}? This cannot be undone.`)) return;
+    if(!confirm(`Delete the account for ${p.full_name||displayLogin(p.email)}? This cannot be undone.`)) return;
     setBusy(true);
     try{
       const res = await fetch(FN_BASE+'/create-account',{
@@ -4424,7 +4465,7 @@ function Admin({corps, session, embedded}){
   };
 
   const resetPassword = async p=>{
-    const pw = prompt(`New password for ${p.full_name||p.email} (at least 8 characters):`);
+    const pw = prompt(`New password for ${p.full_name||displayLogin(p.email)} (at least 8 characters):`);
     if(pw===null) return;
     if(String(pw).length<8){ showToast('Password must be at least 8 characters'); return; }
     setBusy(true);
@@ -4443,18 +4484,25 @@ function Admin({corps, session, embedded}){
 
   const createAccount = async()=>{
     if(!nf.email||!nf.password||!nf.full_name){ showToast('Fill in all fields'); return; }
+    if(!isValidLoginId(nf.email)){
+      showToast(isEmailLike(nf.email)
+        ? 'That email address does not look valid'
+        : 'ID must be at least 3 characters: letters, numbers, dot, dash or underscore');
+      return;
+    }
+    if(String(nf.password).length<8){ showToast('Password must be at least 8 characters'); return; }
     setBusy(true);
     try{
       const res = await fetch(FN_BASE+'/create-account',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token},
-        body:JSON.stringify({...nf, permissions:Object.entries(nfPerms)
+        body:JSON.stringify({...nf, email: toAuthEmail(nf.email), permissions:Object.entries(nfPerms)
           .filter(([,v])=>v.can_view||v.can_edit)
           .map(([cid,v])=>({corporation_id:cid, can_view:!!v.can_view, can_edit:!!v.can_edit}))})
       });
       const j = await res.json();
       if(!res.ok) throw new Error(j.error||'Create failed');
-      showToast('Account created: '+nf.email);
+      showToast('Account created: '+normalizeLoginId(nf.email));
       setNf({email:'',password:'',full_name:'',role:'investor'}); setNfPerms({});
       reload();
     }catch(e){ showToast(e.message); }
@@ -4466,7 +4514,8 @@ function Admin({corps, session, embedded}){
     <div className="card">
       <h3>Create Account</h3>
       <div className="form-row">
-        <input placeholder="Email" value={nf.email} onChange={e=>setNf({...nf,email:e.target.value})}/>
+        <input placeholder="ID or Email (e.g. hq-mike)" autoCapitalize="none" autoCorrect="off" spellCheck="false"
+          value={nf.email} onChange={e=>setNf({...nf,email:e.target.value})}/>
         <input placeholder="Temporary password" type="text" value={nf.password} onChange={e=>setNf({...nf,password:e.target.value})}/>
         <input placeholder="Full name" value={nf.full_name} onChange={e=>setNf({...nf,full_name:e.target.value})}/>
         <select className="w-sm" value={nf.role} onChange={e=>setNf({...nf,role:e.target.value})}>
@@ -4496,10 +4545,10 @@ function Admin({corps, session, embedded}){
         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
           <div style={{flex:1,minWidth:0}}>
             <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
-              <b style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.full_name||p.email}</b>
+              <b style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.full_name||displayLogin(p.email)}</b>
               <span className="badge gold" style={{flex:'0 0 auto'}}>{p.role}</span>
             </div>
-            <div className="faint" style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.email}</div>
+            <div className="faint" style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{displayLogin(p.email)}</div>
           </div>
         </div>
         <div className="acct-actions">
@@ -4917,9 +4966,9 @@ function ToastDiag({session}){
 }
 
 // ================= RATES (royalty / marketing, effective-from) =================
-function RatesManager({corps, canEditIds}){
+function RatesManager({corps, canEditIds, activeCorp, onCorp}){
   const editable = corps.filter(c=>canEditIds.has(c.id));
-  const [corpId, setCorpId] = useState(editable[0] && editable[0].id);
+  const [corpId, setCorpId] = useCorpSelection(editable, activeCorp, onCorp);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [f, setF] = useState({rate_type:'royalty', pct:'', effective_from:todayStr()});
@@ -4999,9 +5048,9 @@ function RatesManager({corps, canEditIds}){
 }
 
 // ================= OWNERS / PROFIT DISTRIBUTION (owner-only) =================
-function OwnersManager({corps, canEditIds}){
+function OwnersManager({corps, canEditIds, activeCorp, onCorp}){
   const editable = corps.filter(c=>canEditIds.has(c.id) && c.corp_type!=='franchisee');
-  const [corpId, setCorpId] = useState(editable[0] && editable[0].id);
+  const [corpId, setCorpId] = useCorpSelection(editable, activeCorp, onCorp);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [nf, setNf] = useState({holder:'', pct:''});
@@ -5133,7 +5182,7 @@ function SlackAutoApprove({profile}){
 }
 
 // ================= SETTINGS =================
-function Settings({corps, canEditIds, profile, isOwner, session}){
+function Settings({corps, canEditIds, profile, isOwner, session, activeCorp, onCorp}){
   const [sub, setSub] = useState('recurring');
   const TABS = [['recurring','Recurring'],['rates','Rates'],['owners','Investors'],['accounts','Accounts'],
     ...(isOwner?[['slack','Slack']]:[]),
@@ -5146,9 +5195,9 @@ function Settings({corps, canEditIds, profile, isOwner, session}){
       {TABS.map(([id,label])=>
         <button key={id} className={'settings-tab'+(sub===id?' on':'')} onClick={()=>setSub(id)}>{label}</button>)}
     </div>
-    {sub==='recurring' && <Recurring corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} embedded={true}/>}
-    {sub==='rates' && <RatesManager corps={corps} canEditIds={canEditIds}/>}
-    {sub==='owners' && <OwnersManager corps={corps} canEditIds={canEditIds}/>}
+    {sub==='recurring' && <Recurring corps={corps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} embedded={true} activeCorp={activeCorp} onCorp={onCorp}/>}
+    {sub==='rates' && <RatesManager corps={corps} canEditIds={canEditIds} activeCorp={activeCorp} onCorp={onCorp}/>}
+    {sub==='owners' && <OwnersManager corps={corps} canEditIds={canEditIds} activeCorp={activeCorp} onCorp={onCorp}/>}
     {sub==='accounts' && <Admin corps={corps} session={session} embedded={true}/>}
     {sub==='slack' && isOwner && <SlackAutoApprove profile={profile}/>}
     {sub==='device' && <PwaCard profile={profile}/>}
@@ -5430,7 +5479,7 @@ function AccountMenu({profile, pendingCount, onNotifications, onInstall}){
       setNotif('on');
     }catch(e){ setNotif('off'); }
   };
-  const name=profile.full_name||profile.email;
+  const name=profile.full_name||displayLogin(profile.email);
   const initial=(name||'?').trim()[0].toUpperCase();
   return <div className="acct" ref={ref}>
     <button className="acct-btn" onClick={()=>setOpen(o=>!o)} aria-label="Account menu">
@@ -5466,9 +5515,9 @@ function Login({onDone}){
   const go = async e=>{
     e && e.preventDefault();
     setBusy(true); setErr(null);
-    const { error } = await sb.auth.signInWithPassword({email, password:pw});
+    const { error } = await sb.auth.signInWithPassword({email: toAuthEmail(email), password:pw});
     setBusy(false);
-    if(error) setErr('Sign in failed. Check your email and password.');
+    if(error) setErr('Sign in failed. Check your ID and password.');
     else onDone();
   };
   return <div className="login-wrap">
@@ -5478,8 +5527,9 @@ function Login({onDone}){
       <div className="sub">HQ financial management & investor reporting</div>
       {err && <div className="login-err">{err}</div>}
       <form onSubmit={go}>
-        <div className="field"><label>Email</label>
-          <input type="email" value={email} onChange={e=>setEmail(e.target.value)} autoFocus/></div>
+        <div className="field"><label>ID or Email</label>
+          <input type="text" autoCapitalize="none" autoCorrect="off" spellCheck="false"
+            value={email} onChange={e=>setEmail(e.target.value)} autoFocus/></div>
         <div className="field"><label>Password</label>
           <input type="password" value={pw} onChange={e=>setPw(e.target.value)}/></div>
         <button type="submit" className="btn btn-gold" style={{width:'100%',padding:'11px'}} disabled={busy}>
@@ -5522,9 +5572,18 @@ function App(){
   const [closePreset,setClosePreset] = useState(null);
   const [moreOpen,setMoreOpen] = useState(false);
   const [pendingCount,setPendingCount] = useState(0);
-  const goEntry = (corpId, mode)=>{ setEntryCorp(corpId); setEntryMode(mode?{mode,t:Date.now()}:null); setTab('entry'); };
-  const goInsights = (corpId)=>{ setInsightsCorp({id:corpId, t:Date.now()}); setTab('insights'); };
-  const goClose = (corpId,y,m)=>{ setClosePreset({corpId,y,m}); setTab('close'); };
+  // The store you pick is shared by every tab, so moving from Entry to Insights keeps you on
+  // the same store instead of silently snapping back to the first one. Kept across reloads.
+  const [activeCorp,setActiveCorpRaw] = useState(()=>{
+    try{ return localStorage.getItem('ft_corp')||null; }catch(e){ return null; }
+  });
+  const setActiveCorp = React.useCallback(id=>{
+    setActiveCorpRaw(id);
+    try{ if(id) localStorage.setItem('ft_corp',id); }catch(e){}
+  },[]);
+  const goEntry = (corpId, mode)=>{ if(corpId) setActiveCorp(corpId); setEntryCorp(corpId); setEntryMode(mode?{mode,t:Date.now()}:null); setTab('entry'); };
+  const goInsights = (corpId)=>{ if(corpId) setActiveCorp(corpId); setInsightsCorp({id:corpId, t:Date.now()}); setTab('insights'); };
+  const goClose = (corpId,y,m)=>{ if(corpId) setActiveCorp(corpId); setClosePreset({corpId,y,m}); setTab('close'); };
   const goApprovals = ()=>setTab('approvals');
   const [fatal,setFatal] = useState(null);
 
@@ -5604,13 +5663,13 @@ function App(){
   const page = {
     home:      <Home corps={storeCorps} canEditIds={displayIds} readOnly={isViewer} profile={profile} isOwner={isOwner} goEntry={goEntry} goInsights={goInsights} goClose={goClose} goApprovals={goApprovals}/>,
     approvals: <Approvals corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner}/>,
-    entry:     <Entry corps={storeCorps} canEditIds={canEditIds} profile={profile} presetCorp={entryCorp} presetMode={entryMode}/>,
-    insights:  <Dashboard corps={storeCorps} canEditIds={displayIds} presetCorp={insightsCorp} isOwner={isOwner}/>,
-    cash:      <CashPage corps={storeCorps} canEditIds={displayIds} profile={profile} isOwner={isOwner}/>,
-    close:     <ClosePage corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} preset={closePreset}/>,
-    investor:  <InvestorPortal corps={isOwner?storeCorps:viewCorps} isOwner={isOwner}/>,
+    entry:     <Entry corps={storeCorps} canEditIds={canEditIds} profile={profile} presetCorp={entryCorp} presetMode={entryMode} activeCorp={activeCorp} onCorp={setActiveCorp}/>,
+    insights:  <Dashboard corps={storeCorps} canEditIds={displayIds} presetCorp={insightsCorp} isOwner={isOwner} activeCorp={activeCorp} onCorp={setActiveCorp}/>,
+    cash:      <CashPage corps={storeCorps} canEditIds={displayIds} profile={profile} isOwner={isOwner} activeCorp={activeCorp} onCorp={setActiveCorp}/>,
+    close:     <ClosePage corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} preset={closePreset} activeCorp={activeCorp} onCorp={setActiveCorp}/>,
+    investor:  <InvestorPortal corps={isOwner?storeCorps:viewCorps} isOwner={isOwner} activeCorp={activeCorp} onCorp={setActiveCorp}/>,
     cashledger:<div><div className="page-head"><div><div className="eyebrow">Cash</div><h2>Cash Management</h2></div></div><CashLedger corps={storeCorps} canEditIds={canEditIds} profile={profile}/></div>,
-    settings:  <Settings corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} session={session}/>,
+    settings:  <Settings corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} session={session} activeCorp={activeCorp} onCorp={setActiveCorp}/>,
     alerts:    <div><div className="page-head"><div><div className="eyebrow">Install</div><h2>Install App & Notifications</h2></div></div><PwaCard profile={profile}/></div>,
   }[effTab];
 
