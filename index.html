@@ -4415,6 +4415,17 @@ function InvestorPortal({corps, isOwner, activeCorp, onCorp}){
 }
 
 // ================= ADMIN =================
+// Access tokens expire (about an hour), and the session held in React state is a snapshot
+// from render time. Always ask Supabase for the current token right before calling a
+// function, otherwise a long-open tab sends a stale one and the backend replies
+// "Invalid token".
+async function authHeaders(){
+  const { data } = await sb.auth.getSession();
+  const tok = data && data.session && data.session.access_token;
+  if(!tok) throw new Error('Your session expired. Please sign in again.');
+  return { 'Content-Type':'application/json', 'Authorization':'Bearer '+tok };
+}
+
 function Admin({corps, session, embedded}){
   const [profiles, setProfiles] = useState([]);
   const [perms, setPerms] = useState([]);
@@ -4460,7 +4471,7 @@ function Admin({corps, session, embedded}){
     try{
       const res = await fetch(FN_BASE+'/create-account',{
         method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token},
+        headers: await authHeaders(),
         body:JSON.stringify({action:'delete', id:p.id})
       });
       const j = await res.json();
@@ -4478,7 +4489,7 @@ function Admin({corps, session, embedded}){
     try{
       const res = await fetch(FN_BASE+'/create-account',{
         method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token},
+        headers: await authHeaders(),
         body:JSON.stringify({action:'reset_password', id:p.id, password:pw})
       });
       const j = await res.json();
@@ -4501,7 +4512,7 @@ function Admin({corps, session, embedded}){
     try{
       const res = await fetch(FN_BASE+'/create-account',{
         method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token},
+        headers: await authHeaders(),
         body:JSON.stringify({...nf, email: toAuthEmail(nf.email), permissions:Object.entries(nfPerms)
           .filter(([,v])=>v.can_view||v.can_edit)
           .map(([cid,v])=>({corporation_id:cid, can_view:!!v.can_view, can_edit:!!v.can_edit}))})
@@ -4714,10 +4725,9 @@ function PwaCard({profile}){
   const sendTestPush = async ()=>{
     setTesting(true); setTestRes(null);
     try{
-      const { data:{ session } } = await sb.auth.getSession();
       const res = await fetch('/.netlify/functions/push-test', {
         method:'POST',
-        headers:{ 'Content-Type':'application/json', Authorization:'Bearer '+(session&&session.access_token) },
+        headers: await authHeaders(),
       });
       const j = await res.json();
       setTestRes(j);
@@ -4857,7 +4867,7 @@ function ToastDiag({session}){
     try{
       const ymd = date.replace(/-/g,'');
       const r = await fetch(`/.netlify/functions/toast-diag?store=${store}&date=${ymd}`, {
-        headers: { Authorization: 'Bearer ' + session.access_token },
+        headers: await authHeaders(),
       });
       const j = await r.json();
       if(j.error){ setErr(j.error); } else { setRes(j); }
