@@ -836,10 +836,13 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 
 /* Statement history: YoY comparison + 12-month charts (shown in the investor report and
    in the Close & Publish preview so the owner sees exactly what is published). */
-.stmt-yoy{margin-top:18px;padding-top:16px;border-top:1px solid var(--border-soft)}
-.stmt-yoy-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:8px}
-.stmt-yoy-item{background:var(--panel2);border:1px solid var(--border-soft);border-radius:10px;padding:10px 12px;min-width:0}
-.stmt-yoy-d{font-size:12px;font-weight:700;margin-top:2px}
+.stmt-yoy{margin-top:24px;padding:18px 18px 20px;border-top:1px solid var(--border-soft);
+  background:var(--panel3);border-radius:12px}
+.stmt-yoy-h{font-size:15px;font-weight:700;color:var(--text);margin-bottom:2px;letter-spacing:0}
+.stmt-yoy-sub{font-size:12.5px;color:var(--text3);margin-bottom:14px}
+.stmt-yoy-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:0}
+.stmt-yoy-item{background:var(--panel);border:1px solid var(--border-soft);border-radius:10px;padding:12px 14px;min-width:0}
+.stmt-yoy-d{font-size:12px;font-weight:700;margin-top:3px}
 .stmt-yoy-d.pos{color:var(--green)} .stmt-yoy-d.neg{color:var(--red)}
 .stmt-chart{margin-top:18px;padding-top:16px;border-top:1px solid var(--border-soft)}
 .stmt-chart-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:8px}
@@ -848,8 +851,11 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .stmt-legend .lg-payroll{background:#B08A1E}
 .stmt-legend .lg-supplies{background:#3A6EA5}
 @media(max-width:820px){
-  .stmt-yoy-grid{grid-template-columns:repeat(3,1fr);gap:6px}
-  .stmt-yoy-item{padding:8px}
+  .stmt-yoy{padding:14px 12px 16px}
+  .stmt-yoy-h{font-size:14px}
+  .stmt-yoy-sub{margin-bottom:10px;font-size:12px}
+  .stmt-yoy-grid{grid-template-columns:repeat(3,1fr);gap:8px}
+  .stmt-yoy-item{padding:9px 8px}
   .stmt-yoy-item .ss-val{font-size:14px}
   .stmt-yoy-d{font-size:11px}
 }
@@ -882,6 +888,30 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 @media(max-width:820px){
   .day-nav{gap:6px}
   .day-nav-label b{font-size:14px}
+}
+
+/* Investor reports: collapsed summary rows that open the full statement in a popup. */
+.rpt-list{display:flex;flex-direction:column;gap:10px}
+.rpt-row{display:block;width:100%;text-align:left;background:var(--panel);border:1px solid var(--border);
+  border-radius:12px;padding:14px 16px;cursor:pointer;box-shadow:var(--shadow);transition:border-color .15s}
+.rpt-row:hover{border-color:var(--gold-soft)}
+.rpt-row-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.rpt-month{font-weight:700;font-size:15px}
+.rpt-open{font-size:12.5px;color:var(--gold);font-weight:600;flex:0 0 auto}
+.rpt-figs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.rpt-fig{font-family:var(--font-n);font-size:16px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:2px}
+.rpt-mgn{font-size:11.5px;color:var(--text3);margin-top:1px}
+.rpt-backdrop{position:fixed;inset:0;background:rgba(26,23,18,.5);z-index:80;display:flex;
+  align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.rpt-modal{position:relative;background:var(--panel);border-radius:14px;width:100%;max-width:860px;
+  padding:8px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.rpt-close{position:absolute;top:10px;right:10px;z-index:2;width:32px;height:32px;border-radius:8px;
+  border:1px solid var(--border-soft);background:var(--panel2);color:var(--text2);font-size:15px;cursor:pointer}
+@media(max-width:820px){
+  .rpt-figs{gap:6px}
+  .rpt-fig{font-size:14px}
+  .rpt-backdrop{padding:12px 8px}
+  .rpt-modal{padding:4px}
 }
 </style>
 <link rel="manifest" href="/manifest.webmanifest">
@@ -1271,7 +1301,7 @@ function computePL(meta, raw){
 }
 
 // summary snapshot stored on publish (this is exactly what investors see)
-function buildSummary(pl){
+function buildSummary(pl, extra){
   // Fold categories that share an investor_group into a single investor-facing
   // line, so internal splits (e.g. HQ Supplies vs store Supplies) are not exposed.
   const grouped = {};
@@ -1283,16 +1313,35 @@ function buildSummary(pl){
   });
   const expenses = order.map(k=>({name:k, amount:+grouped[k].toFixed(2)}))
     .concat(pl.ruleRows.filter(r=>r.amount!==0).map(r=>({name:r.name, amount:+r.amount.toFixed(2), auto:true})));
-  return {
+  const out = {
     total_sales: +pl.totalSales.toFixed(2),
     total_expenses: +pl.totalExpenses.toFixed(2),
     net_profit: +pl.net.toFixed(2),
     net_margin: pl.margin !== null ? +(pl.margin).toFixed(4) : null,
+    // Cost ratios are stored here so the investor report can chart them without ever
+    // reading the raw revenue/expense tables (investors have no access to those).
+    payroll_pct: pl.payrollPct !== null && pl.payrollPct !== undefined ? +(pl.payrollPct).toFixed(4) : null,
+    supplies_pct: pl.suppliesPct !== null && pl.suppliesPct !== undefined ? +(pl.suppliesPct).toFixed(4) : null,
     revenue: pl.channelRows.filter(c=>c.amount!==0).map(c=>({name:c.name, amount:+c.amount.toFixed(2)})),
     expenses,
     // NOTE: profit distribution / shareholder names are intentionally NOT included.
     // Published reports must never contain investor or ownership information.
   };
+  // The history charts are SNAPSHOTTED at publish time. Readers (investors, viewers) then
+  // render exactly what was published, with no access to the raw tables and no recompute.
+  if(extra && extra.trend) out.trend = extra.trend.map(p=>({
+    label: p.label,
+    sales: +Number(p.sales||0).toFixed(2),
+    net:   +Number(p.net||0).toFixed(2),
+    payrollPct:  p.payrollPct  !== null && p.payrollPct  !== undefined ? +Number(p.payrollPct).toFixed(4)  : null,
+    suppliesPct: p.suppliesPct !== null && p.suppliesPct !== undefined ? +Number(p.suppliesPct).toFixed(4) : null,
+  }));
+  if(extra && extra.ly) out.last_year = {
+    total_sales: +Number(extra.ly.totalSales||0).toFixed(2),
+    net_profit:  +Number(extra.ly.net||0).toFixed(2),
+    net_margin:  extra.ly.margin !== null && extra.ly.margin !== undefined ? +Number(extra.ly.margin).toFixed(4) : null,
+  };
+  return out;
 }
 
 // ================= SHARED UI =================
@@ -1321,10 +1370,18 @@ function MonthPick({y, m, onChange}){
 // (they are generated separately with full numbers).
 function KVal({v}){
   const [pop,setPop]=useState(false);
+  // Any tap elsewhere on the page closes the popover.
+  useEffect(()=>{
+    if(!pop) return;
+    const close = ()=>setPop(false);
+    // defer so the tap that opened it does not immediately close it
+    const t = setTimeout(()=>document.addEventListener('click', close), 0);
+    return ()=>{ clearTimeout(t); document.removeEventListener('click', close); };
+  },[pop]);
   return <span className="kval-wrap">
     <span className="kval-full">{fmt$(v)}</span>
     <span className="kval-abbr" onClick={()=>setPop(p=>!p)}>{fmt$k(v)}</span>
-    {pop && <span className="kval-pop" onClick={()=>setPop(false)}>{fmt$(v)}</span>}
+    {pop && <span className="kval-pop">{fmt$(v)}</span>}
   </span>;
 }
 function Spinner(){ return <div className="faint" style={{padding:'30px 0',textAlign:'center'}}>Loading...</div>; }
@@ -3884,9 +3941,22 @@ function ClosePage({corps, canEditIds, profile, isOwner, preset}){
 
   const saveClose = async (publish)=>{
     setBusy(true);
+    // Snapshot the history charts into the report itself. Readers then see exactly what was
+    // published (no recompute, and no need for them to read the raw revenue/expense tables).
+    let extra = null;
+    try{
+      if(meta){
+        const [trend, rawLY] = await Promise.all([
+          loadTrend12(corpId, y, m, meta),
+          loadMonthRaw(corpId, y-1, m),
+        ]);
+        const ply = computePL(meta, rawLY);
+        extra = { trend, ly: (ply.totalSales!==0||ply.totalExpenses!==0) ? ply : null };
+      }
+    }catch(e){ extra = null; }   // charts are a bonus; never block a close on them
     const payload = {
       corporation_id:corpId, year:y, month:m,
-      summary: Object.assign({}, close?close.summary:{}, buildSummary(pl)),
+      summary: Object.assign({}, close?close.summary:{}, buildSummary(pl, extra)),
       notes: notes||null, updated_at:new Date().toISOString(),
       status: publish?'published':(close?close.status:'draft'),
     };
@@ -3988,7 +4058,7 @@ function ClosePage({corps, canEditIds, profile, isOwner, preset}){
       <StatementView
         corpName={(editable.find(c=>c.id===corpId)||{}).name||''}
         year={y} month={m}
-        summary={buildSummary(pl)} notes={notes} corpId={corpId}
+        summary={buildSummary(pl)} notes={notes} corpId={corpId} live={true}
         files={files.map(f=>({id:f.id, name:f.name}))}
         previewLabel={close && close.status==='published' ? 'Preview · already published' : 'Preview · not yet published'}/>
     </div>}
@@ -4026,18 +4096,29 @@ async function loadTrend12(corpId, y, m, meta){
   return pts;
 }
 
-function StatementView({corpName, year, month, summary, notes, files, publishedAt, onDownload, previewLabel, corpId}){
+function StatementView({corpName, year, month, summary, notes, files, publishedAt, onDownload, previewLabel, corpId, live}){
   const s = summary||{};
   const rev = (s.revenue||[]).filter(x=>x.amount!==0);
   const exp = (s.expenses||[]).filter(x=>x.amount!==0);
   const margin = (s.net_margin!==null && s.net_margin!==undefined) ? s.net_margin : (s.total_sales? s.net_profit/s.total_sales : null);
 
-  // History shown on the statement: 12-month trend, cost ratios, and the same month last
-  // year. Loaded here so both the investor portal and the Close & Publish preview show it.
-  const [trend, setTrend] = useState(null);
-  const [ly, setLy] = useState(undefined);   // undefined = loading, null = no prior year
+  // The charts come from the SNAPSHOT stored in the report when it was published, so a
+  // reader renders exactly what HQ published. No raw-table access, no recompute, and a
+  // report keeps its own history even if neighbouring months were never published.
+  const snapTrend = Array.isArray(s.trend) ? s.trend : null;
+  const snapLY = s.last_year ? {
+    totalSales: s.last_year.total_sales,
+    net:        s.last_year.net_profit,
+    margin:     (s.last_year.net_margin!==null && s.last_year.net_margin!==undefined) ? s.last_year.net_margin : null,
+  } : null;
+
+  // Live fallback: only used by the owner's Close & Publish preview, where the report has
+  // not been published yet so there is no snapshot to read.
+  const needLive = live && !snapTrend && !!corpId;
+  const [liveTrend, setLiveTrend] = useState(null);
+  const [liveLY, setLiveLY] = useState(undefined);
   useEffect(()=>{
-    if(!corpId){ setTrend([]); setLy(null); return; }
+    if(!needLive){ return; }
     let dead=false;
     (async()=>{
       try{
@@ -4045,15 +4126,18 @@ function StatementView({corpName, year, month, summary, notes, files, publishedA
         if(dead) return;
         const pts = await loadTrend12(corpId, year, month, meta);
         if(dead) return;
-        setTrend(pts);
+        setLiveTrend(pts);
         const rawLY = await loadMonthRaw(corpId, year-1, month);
         if(dead) return;
         const ply = computePL(meta, rawLY);
-        setLy((ply.totalSales!==0||ply.totalExpenses!==0) ? ply : null);
-      }catch(e){ if(!dead){ setTrend([]); setLy(null); } }
+        setLiveLY((ply.totalSales!==0||ply.totalExpenses!==0) ? ply : null);
+      }catch(e){ if(!dead){ setLiveTrend([]); setLiveLY(null); } }
     })();
     return ()=>{dead=true};
-  },[corpId, year, month]);
+  },[needLive, corpId, year, month]);
+
+  const trend = snapTrend !== null ? snapTrend : (needLive ? liveTrend : []);
+  const ly    = snapLY   !== null ? snapLY   : (needLive ? liveLY : null);
 
   const yoyPct = (cur, prev) => (prev && prev!==0) ? (cur-prev)/Math.abs(prev) : null;
   const salesYoY = ly ? yoyPct(s.total_sales||0, ly.totalSales) : null;
@@ -4096,7 +4180,8 @@ function StatementView({corpName, year, month, summary, notes, files, publishedA
     </div>
 
     {ly && <div className="stmt-yoy">
-      <div className="stmt-block-h">vs {MONTHS[month-1]} {year-1}</div>
+      <div className="stmt-yoy-h">Compared to {MONTHS[month-1]} {year-1}</div>
+      <div className="stmt-yoy-sub">Same month, one year earlier</div>
       <div className="stmt-yoy-grid">
         <div className="stmt-yoy-item">
           <div className="ss-lbl">Revenue</div>
@@ -4143,11 +4228,19 @@ function InvestorPortal({corps}){
   const [corpId, setCorpId] = useState(corps[0] && corps[0].id);
   const [reports, setReports] = useState(null);
   const [err, setErr] = useState(null);
+  const [open, setOpen] = useState(null);   // the report shown in the popup
+
+  // corps arrive asynchronously, so the initial useState can be undefined. Select the
+  // first store as soon as the list is available, otherwise the page waits forever.
+  useEffect(()=>{
+    if(!corpId && corps.length) setCorpId(corps[0].id);
+  },[corps]);
 
   useEffect(()=>{ if(!corpId) return; let dead=false;
     (async()=>{
       setReports(null); setErr(null);
       try{
+        setOpen(null);   // switching stores closes any open report
         const mc = await sb.from('monthly_close').select('*').eq('corporation_id',corpId)
           .eq('status','published').order('year',{ascending:false}).order('month',{ascending:false});
         if(mc.error) throw mc.error;
@@ -4173,6 +4266,7 @@ function InvestorPortal({corps}){
   };
 
   if(!corps.length) return <div className="card">No corporations available. Contact HQ.</div>;
+  const corp = corps.find(c=>c.id===corpId);
   return <div>
     <div className="page-head">
       <div><div className="eyebrow">Investor Reports</div><h2>Monthly Reports</h2>
@@ -4188,11 +4282,34 @@ function InvestorPortal({corps}){
         <b>No reports yet</b>
         <div className="faint" style={{marginTop:6,fontSize:13}}>Monthly reports appear here once Ugly HQ closes and publishes the month.</div>
       </div> :
-      reports.map(r=>{
-        const corp = corps.find(c=>c.id===corpId);
-        return <StatementView key={r.id} corpName={corp?corp.name:''} year={r.year} month={r.month}
-          summary={r.summary||{}} notes={r.notes} files={r.files} publishedAt={r.published_at} onDownload={download} corpId={corpId}/>;
-      })}
+      <div className="rpt-list">
+        {reports.map(r=>{
+          const s = r.summary||{};
+          const mgn = (s.net_margin!==null && s.net_margin!==undefined) ? s.net_margin : (s.total_sales ? s.net_profit/s.total_sales : null);
+          return <button key={r.id} className="rpt-row" onClick={()=>setOpen(r)}>
+            <div className="rpt-row-head">
+              <div className="rpt-month">{MONTHS[r.month-1]} {r.year}</div>
+              <div className="rpt-open">View ›</div>
+            </div>
+            <div className="rpt-figs">
+              <div><div className="ss-lbl">Sales</div><div className="rpt-fig">{fmt$m(s.total_sales)}</div></div>
+              <div><div className="ss-lbl">Expenses</div><div className="rpt-fig">{fmt$m(s.total_expenses)}</div></div>
+              <div><div className="ss-lbl">Net Profit</div>
+                <div className={'rpt-fig '+((s.net_profit||0)>=0?'pos':'neg')}>{fmt$m(s.net_profit)}</div>
+                {mgn!==null && <div className="rpt-mgn">{fmtPct(mgn)} margin</div>}</div>
+            </div>
+          </button>;
+        })}
+      </div>}
+
+    {open && <div className="rpt-backdrop" onClick={()=>setOpen(null)}>
+      <div className="rpt-modal" onClick={e=>e.stopPropagation()}>
+        <button className="rpt-close" onClick={()=>setOpen(null)} aria-label="Close">✕</button>
+        <StatementView corpName={corp?corp.name:''} year={open.year} month={open.month}
+          summary={open.summary||{}} notes={open.notes} files={open.files}
+          publishedAt={open.published_at} onDownload={download} corpId={corpId}/>
+      </div>
+    </div>}
   </div>;
 }
 
@@ -4835,6 +4952,12 @@ function OwnersManager({corps, canEditIds}){
   const [loading, setLoading] = useState(true);
   const [nf, setNf] = useState({holder:'', pct:''});
   const [namePop, setNamePop] = useState(null); // holder id whose full name is shown
+  useEffect(()=>{
+    if(!namePop) return;
+    const close = ()=>setNamePop(null);
+    const t = setTimeout(()=>document.addEventListener('click', close), 0);
+    return ()=>{ clearTimeout(t); document.removeEventListener('click', close); };
+  },[namePop]);
   const [toast, showToast] = useToast();
 
   const reload = useCallback(async()=>{
@@ -4991,7 +5114,12 @@ function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsight
   // All windows (month-to-date, 7-day trend, last week's same day) are anchored to the
   // selected day, so stepping back a day shows what that day actually looked like.
   const now = new Date(date + 'T12:00');
-  const shiftDay = n => { const d = new Date(date + 'T12:00'); d.setDate(d.getDate() + n); const s = dstr(d); if (s <= todayStr()) setDate(s); };
+  const shiftDay = n => {
+    const d = new Date(date + 'T12:00');
+    d.setDate(d.getDate() + n);
+    const s = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    if (s <= todayStr()) setDate(s);
+  };
   const prev = now.getMonth()===0 ? {y:now.getFullYear()-1,m:12} : {y:now.getFullYear(),m:now.getMonth()};
 
   useEffect(()=>{ if(!ids.length){ setData({}); return; } let dead=false;
@@ -5314,7 +5442,7 @@ const NAV = [
   {id:'insights',  label:'Insights',full:'Insights',        ic:'≈', roles:['owner','assistant','viewer']},
   {id:'cash',      label:'Cash',    full:'Cash',            ic:'▤', roles:['owner','assistant']},
   {id:'close',     label:'Close',   full:'Close & Publish', ic:'◆', roles:['owner']},
-  {id:'investor',  label:'Reports', full:'Reports',         ic:'▦', roles:['owner','investor']},
+  {id:'investor',  label:'Reports', full:'Reports',         ic:'▦', roles:['owner','investor','viewer']},
   {id:'cashledger',label:'Cash Mgmt',full:'Cash Ledger',     ic:'▥', roles:['owner']},
   {id:'settings',  label:'Settings',full:'Settings',        ic:'⚙', roles:['owner']},
   {id:'alerts',    label:'Install', full:'Install App',     ic:'⬇', roles:['owner','assistant','investor','viewer']},
