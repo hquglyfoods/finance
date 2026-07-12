@@ -5359,8 +5359,10 @@ function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsight
       // last week same weekday, for the same-time-of-day snapshot comparison
       const lwD = new Date(now); lwD.setDate(lwD.getDate()-7);
       const lwIso = `${lwD.getFullYear()}-${pad(lwD.getMonth()+1)}-${pad(lwD.getDate())}`;
-      // store-local hour (all stores run on Eastern time)
-      const localHr = Number(new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour:'numeric',hourCycle:'h23'}).format(new Date()));
+      // store-local time of day in minutes (all stores run on Eastern time)
+      const _tp = new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'numeric',hourCycle:'h23'}).formatToParts(new Date());
+      const _g = t => Number((_tp.find(x=>x.type===t)||{}).value||0);
+      const nowMin = _g('hour')*60 + _g('minute');
       const [chAll, revToday, expToday, pend, revMonth, closes, rev14, snaps] = await Promise.all([
         sb.from('revenue_channels').select('id,corporation_id,code,name,counts_in_total,total_multiplier').in('corporation_id',ids),
         sb.from('daily_revenue').select('corporation_id,channel_id,amount,source').in('corporation_id',ids).eq('date',date),
@@ -5371,7 +5373,7 @@ function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsight
         fetchAllRows(()=>sb.from('daily_revenue').select('corporation_id,channel_id,date,amount').in('corporation_id',ids).gte('date',winStart).lte('date',date).order('date')),
         // hourly snapshots of last week's same day; missing table or rows just
         // falls back to the full-day comparison, so errors are ignored
-        sb.from('revenue_snapshots').select('corporation_id,hour,amount').in('corporation_id',ids).eq('date',lwIso).lte('hour',localHr).then(r=>r, ()=>({data:[]})),
+        sb.from('revenue_snapshots').select('corporation_id,hour,minute,amount').in('corporation_id',ids).eq('date',lwIso).then(r=>r, ()=>({data:[]})),
       ]);
       if(dead) return;
       const chBy = {}; (chAll.data||[]).forEach(c=>chBy[c.id]=c);
@@ -5405,12 +5407,12 @@ function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsight
         per[c.id].lastSameDay = t[dstr(lw)]!=null ? t[dstr(lw)] : null;   // same weekday last week
         // same weekday last week, as of the same hour of day (snapshot with the
         // greatest hour <= now). Null when no snapshot history exists yet.
-        const snapRows = ((snaps&&snaps.data)||[]).filter(s=>s.corporation_id===c.id);
+        const mins = s => s.hour*60 + (s.minute||0);
+        const snapRows = ((snaps&&snaps.data)||[]).filter(s=>s.corporation_id===c.id && mins(s) <= nowMin);
         if(snapRows.length){
-          const best = snapRows.reduce((a,s)=> s.hour>a.hour ? s : a);
+          const best = snapRows.reduce((a,s)=> mins(s)>mins(a) ? s : a);
           per[c.id].lastSameTime = Number(best.amount);
-          per[c.id].lastSameTimeHour = best.hour;
-        } else { per[c.id].lastSameTime = null; per[c.id].lastSameTimeHour = null; }
+        } else { per[c.id].lastSameTime = null; }
         // today's per-channel breakdown, largest first, only channels with revenue
         per[c.id].channels = Object.values(chTot[c.id]||{})
           .filter(x=>x.ch.counts_in_total && Number(x.amount)>0)
@@ -5463,8 +5465,6 @@ function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsight
         // history exists for that day yet.
         const lsd = p.lastSameDay;
         const lst = isToday ? p.lastSameTime : null;    // same time last week (live day only)
-        const lstH = p.lastSameTimeHour;
-        const hr12 = h => h===0?'12 AM':h<12?h+' AM':h===12?'12 PM':(h-12)+' PM';
         const base = lst!=null ? lst : lsd;
         const delta = (base!=null && base>0) ? (p.sales-base)/base : null;
         const week = p.week||[];
@@ -5477,9 +5477,9 @@ function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsight
           <div className="hc-amt"><span className="cur">$</span>{p.sales.toLocaleString('en-US',{maximumFractionDigits:0})}<span className="cur"> {isToday ? 'today' : `${MONTHS[now.getMonth()].slice(0,3)} ${now.getDate()}`}</span></div>
           <div className="hc-cmp">
             {lst!=null && delta!=null
-              ? <><span className={delta>=0?'pos':'neg'}>{delta>=0?'▲':'▼'} {Math.abs(delta*100).toFixed(0)}%</span> <span className="faint">vs last {dowLbl} by {hr12(lstH)} ({fmt$k(lst)})</span></>
+              ? <><span className={delta>=0?'pos':'neg'}>{delta>=0?'▲':'▼'} {Math.abs(delta*100).toFixed(0)}%</span> <span className="faint">vs last {dowLbl} same time ({fmt$k(lst)})</span></>
               : lst!=null
-              ? <span className="faint">Last {dowLbl} by {hr12(lstH)}: {fmt$k(lst)}</span>
+              ? <span className="faint">Last {dowLbl} same time: {fmt$k(lst)}</span>
               : lsd!=null && delta!=null
               ? <><span className={delta>=0?'pos':'neg'}>{delta>=0?'▲':'▼'} {Math.abs(delta*100).toFixed(0)}%</span> <span className="faint">vs last {dowLbl} ({fmt$k(lsd)}{isToday?' full day':''})</span></>
               : lsd!=null

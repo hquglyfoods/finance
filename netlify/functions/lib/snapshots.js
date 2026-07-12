@@ -13,19 +13,27 @@
 // must never break the revenue sync itself, so callers wrap in try/catch and we
 // swallow "table missing" errors with a log line.
 
-const localHour = (tz) => Number(
-  new Intl.DateTimeFormat('en-US', { timeZone: tz || 'America/New_York', hour: 'numeric', hourCycle: 'h23' })
-    .format(new Date())
-);
+const localHourMin = (tz) => {
+  const parts = new Intl.DateTimeFormat('en-US',
+    { timeZone: tz || 'America/New_York', hour: 'numeric', minute: 'numeric', hourCycle: 'h23' })
+    .formatToParts(new Date());
+  const get = t => Number((parts.find(p => p.type === t) || {}).value || 0);
+  return { hour: get('hour'), minute: get('minute') };
+};
+const localHour = (tz) => localHourMin(tz).hour;
 
 // Capture "total counts-in-total sales so far today" for one corp, computed exactly
 // the way the app totals a day (counts_in_total + total_multiplier), so the snapshot
-// always matches what the Home card showed at that moment.
+// always matches what the Home card showed at that moment. Minute-precise and
+// change-driven: a row is written only when the running total actually moved, so a
+// per-minute sync writes a handful of rows per day, not 1,440.
 async function captureSnapshot(admin, corpId, dateIso, tz) {
-  const hour = localHour(tz);
-  const [{ data: rows }, { data: chs }] = await Promise.all([
+  const { hour, minute } = localHourMin(tz);
+  const [{ data: rows }, { data: chs }, { data: last }] = await Promise.all([
     admin.from('daily_revenue').select('channel_id,amount').eq('corporation_id', corpId).eq('date', dateIso),
     admin.from('revenue_channels').select('id,counts_in_total,total_multiplier').eq('corporation_id', corpId),
+    admin.from('revenue_snapshots').select('amount').eq('corporation_id', corpId).eq('date', dateIso)
+      .order('hour', { ascending: false }).order('minute', { ascending: false }).limit(1),
   ]);
   const chBy = {}; (chs || []).forEach(c => { chBy[c.id] = c; });
   let total = 0;
@@ -33,10 +41,12 @@ async function captureSnapshot(admin, corpId, dateIso, tz) {
     const c = chBy[r.channel_id];
     if (c && c.counts_in_total) total += Number(r.amount) * Number(c.total_multiplier || 1);
   });
+  total = +total.toFixed(2);
+  if ((last || []).length && Number(last[0].amount) === total) return;   // unchanged: no write
   const { error } = await admin.from('revenue_snapshots').upsert({
-    corporation_id: corpId, date: dateIso, hour, amount: +total.toFixed(2),
+    corporation_id: corpId, date: dateIso, hour, minute, amount: total,
     captured_at: new Date().toISOString(),
-  }, { onConflict: 'corporation_id,date,hour' });
+  }, { onConflict: 'corporation_id,date,hour,minute' });
   if (error) throw new Error('snapshot upsert: ' + error.message);
 }
 
@@ -73,9 +83,10 @@ async function backfillHourlyFromOrders(admin, corpId, dateIso, orders, tz) {
   const rows = [];
   for (let h = 0; h < 24; h++) {
     run += hourly[h];
-    rows.push({ corporation_id: corpId, date: dateIso, hour: h, amount: +run.toFixed(2) });
+    // minute 59: a backfilled row means "total through the END of hour h"
+    rows.push({ corporation_id: corpId, date: dateIso, hour: h, minute: 59, amount: +run.toFixed(2) });
   }
-  const { error } = await admin.from('revenue_snapshots').upsert(rows, { onConflict: 'corporation_id,date,hour' });
+  const { error } = await admin.from('revenue_snapshots').upsert(rows, { onConflict: 'corporation_id,date,hour,minute' });
   if (error) throw new Error('snapshot backfill: ' + error.message);
 }
 

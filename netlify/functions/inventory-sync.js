@@ -231,19 +231,21 @@ exports.handler = async (event) => {
   }
 
   const upsertRev = async (corp, chId, date, amount) => {
-    const { data: ex } = await fin.from('daily_revenue').select('id,source')
+    const { data: ex } = await fin.from('daily_revenue').select('id,source,amount')
       .eq('corporation_id', corp).eq('channel_id', chId).eq('date', date).maybeSingle();
     if (ex && ex.source === 'manual') return;
     if (!ex && amount === 0) return;
+    if (ex && Number(ex.amount) === +amount.toFixed(2)) return;   // unchanged: no write
     await fin.from('daily_revenue').upsert({
       corporation_id: corp, channel_id: chId, date, amount: +amount.toFixed(2),
       source: 'inventory', updated_at: new Date().toISOString(),
     }, { onConflict: 'corporation_id,channel_id,date' });
   };
   const upsertExp = async (corp, catId, date, amount) => {
-    const { data: ex } = await fin.from('expenses').select('id')
+    const { data: ex } = await fin.from('expenses').select('id,amount')
       .eq('corporation_id', corp).eq('category_id', catId).eq('date', date)
       .eq('source', 'inventory').maybeSingle();
+    if (ex && Number(ex.amount) === +amount.toFixed(2)) return;   // unchanged: no write
     if (ex) { await fin.from('expenses').update({ amount: +amount.toFixed(2) }).eq('id', ex.id); return; }
     if (amount === 0) return;
     await fin.from('expenses').insert({

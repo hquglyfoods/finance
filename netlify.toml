@@ -15,9 +15,11 @@
 [functions."toast-sync"]
   schedule = "@hourly"
 
-# Hourly: HQ invoices + Ummas orders from the Inventory app Supabase
+# Every minute: HQ invoices + Ummas orders from the Inventory app Supabase.
+# Writes are change-guarded (no-op runs write nothing), so the tight schedule
+# costs reads only.
 [functions."inventory-sync"]
-  schedule = "@hourly"
+  schedule = "* * * * *"
 
 # Daily 9:00 UTC: generate due recurring expenses
 [functions."recurring-cron"]
