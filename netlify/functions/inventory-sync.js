@@ -22,6 +22,7 @@
 //   INV_UMMA_MAP      "ummasrecipe-store=ugly;wix=franchise"  (source -> UMMA channel)
 
 const { createClient } = require('@supabase/supabase-js');
+const { captureSnapshot } = require('./lib/snapshots.js');
 const pad = n => String(n).padStart(2, '0');
 
 // Postgres timestamptz -> YYYY-MM-DD in the store's timezone (default America/New_York).
@@ -259,6 +260,20 @@ exports.handler = async (event) => {
       if (ummaChId[ch]) await upsertRev(corpId.UMMA, ummaChId[ch], date, byDate[date] || 0);
   }
 
+  // Intraday snapshot of today's running totals for HQ and UMMA (for the Home
+  // "same time last week" comparison). Skipped during explicit-range backfills.
+  // Fail-soft: a snapshot problem must never break the sync.
+  const snapErrors = [];
+  if (!(qs.from && qs.to)) {
+    const tz = 'America/New_York';
+    const etToday = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date()); // YYYY-MM-DD
+    for (const code of ['HQ', 'UMMA']) {
+      if (!corpId[code]) continue;
+      try { await captureSnapshot(fin, corpId[code], etToday, tz); }
+      catch (e) { snapErrors.push(`${code}: ${e.message}`); }
+    }
+  }
+
   // sum helpers for the diagnostic response
   const sumByDate = obj => Object.values(obj).reduce((a, v) => a + v, 0);
   const ummaTotals = {};
@@ -278,5 +293,6 @@ exports.handler = async (event) => {
     ummaRevenueByChannel: ummaTotals,
     ummaChannelsFound: Object.keys(ummaChId),
     sourcesSeen: [...new Set(allRows.map(o => o.source))],
+    snapshotErrors: snapErrors.length ? snapErrors : undefined,
   }) };
 };

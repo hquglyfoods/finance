@@ -27,6 +27,7 @@
 //   TOAST_RESTAURANTS      "AD:guid,BW:guid,FH:guid"
 
 const { createClient } = require('@supabase/supabase-js');
+const { captureSnapshot, hasSnapshots, backfillHourlyFromOrders } = require('./lib/snapshots.js');
 
 const HOST = process.env.TOAST_API_HOST || 'https://ws-api.toasttab.com';
 const pad = n => String(n).padStart(2, '0');
@@ -223,6 +224,27 @@ exports.handler = async (event) => {
         }
       }
       log.push(`${code} ${d.iso}${d.provisional ? ' (live)' : ''}: cash ${sums.cash} card ${sums.card} online ${sums.online} uber ${sums.uber} gh ${sums.grubhub} dd ${sums.doordash} tips ${tips}`);
+
+      // Intraday snapshot for the Home "same time last week" comparison. Only on the
+      // live day of a normal run; never during manual backfills. Fail-soft: snapshot
+      // problems (e.g. table not created yet) must not break the revenue sync.
+      if (d.provisional && !backfill && !tipsOnly) {
+        const tz = CENTRAL.has(code) ? 'America/Chicago' : 'America/New_York';
+        try { await captureSnapshot(admin, corp.id, d.iso, tz); }
+        catch (e) { log.push(`${code} snapshot: ${e.message}`); }
+        // Self-heal: if last week's same day has no hourly snapshots yet (feature just
+        // shipped), rebuild them once from that day's Toast order timestamps so the
+        // comparison works immediately instead of after a one-week warm-up.
+        try {
+          const lw = new Date(d.iso + 'T12:00:00Z'); lw.setUTCDate(lw.getUTCDate() - 7);
+          const lwIso = `${lw.getUTCFullYear()}-${pad(lw.getUTCMonth() + 1)}-${pad(lw.getUTCDate())}`;
+          if (!(await hasSnapshots(admin, corp.id, lwIso))) {
+            const lwOrders = await fetchOrders(token, guid, lwIso.replace(/-/g, ''));
+            await backfillHourlyFromOrders(admin, corp.id, lwIso, lwOrders, tz);
+            log.push(`${code} snapshot backfill ${lwIso}: done`);
+          }
+        } catch (e) { log.push(`${code} snapshot backfill: ${e.message}`); }
+      }
     }
   }
   return { statusCode: 200, body: JSON.stringify({ ok: true, log }) };

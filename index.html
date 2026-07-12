@@ -5355,7 +5355,12 @@ function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsight
       // 14-day window: last 7 days for the mini trend + the same weekday last week
       const win = new Date(now); win.setDate(win.getDate()-13);
       const winStart = `${win.getFullYear()}-${pad(win.getMonth()+1)}-${pad(win.getDate())}`;
-      const [chAll, revToday, expToday, pend, revMonth, closes, rev14] = await Promise.all([
+      // last week same weekday, for the same-time-of-day snapshot comparison
+      const lwD = new Date(now); lwD.setDate(lwD.getDate()-7);
+      const lwIso = `${lwD.getFullYear()}-${pad(lwD.getMonth()+1)}-${pad(lwD.getDate())}`;
+      // store-local hour (all stores run on Eastern time)
+      const localHr = Number(new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour:'numeric',hourCycle:'h23'}).format(new Date()));
+      const [chAll, revToday, expToday, pend, revMonth, closes, rev14, snaps] = await Promise.all([
         sb.from('revenue_channels').select('id,corporation_id,code,name,counts_in_total,total_multiplier').in('corporation_id',ids),
         sb.from('daily_revenue').select('corporation_id,channel_id,amount,source').in('corporation_id',ids).eq('date',date),
         sb.from('expenses').select('corporation_id').in('corporation_id',ids).eq('date',date).eq('status','confirmed'),
@@ -5363,6 +5368,9 @@ function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsight
         fetchAllRows(()=>sb.from('daily_revenue').select('corporation_id,date,amount').in('corporation_id',ids).gte('date',monthStart).lte('date',date).gt('amount',0).order('date')),
         isOwner ? sb.from('monthly_close').select('corporation_id,status').in('corporation_id',ids).eq('year',prev.y).eq('month',prev.m) : Promise.resolve({data:[]}),
         fetchAllRows(()=>sb.from('daily_revenue').select('corporation_id,channel_id,date,amount').in('corporation_id',ids).gte('date',winStart).lte('date',date).order('date')),
+        // hourly snapshots of last week's same day; missing table or rows just
+        // falls back to the full-day comparison, so errors are ignored
+        sb.from('revenue_snapshots').select('corporation_id,hour,amount').in('corporation_id',ids).eq('date',lwIso).lte('hour',localHr).then(r=>r, ()=>({data:[]})),
       ]);
       if(dead) return;
       const chBy = {}; (chAll.data||[]).forEach(c=>chBy[c.id]=c);
@@ -5394,6 +5402,14 @@ function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsight
         per[c.id].week=week;
         const lw=new Date(now); lw.setDate(lw.getDate()-7);
         per[c.id].lastSameDay = t[dstr(lw)]!=null ? t[dstr(lw)] : null;   // same weekday last week
+        // same weekday last week, as of the same hour of day (snapshot with the
+        // greatest hour <= now). Null when no snapshot history exists yet.
+        const snapRows = ((snaps&&snaps.data)||[]).filter(s=>s.corporation_id===c.id);
+        if(snapRows.length){
+          const best = snapRows.reduce((a,s)=> s.hour>a.hour ? s : a);
+          per[c.id].lastSameTime = Number(best.amount);
+          per[c.id].lastSameTimeHour = best.hour;
+        } else { per[c.id].lastSameTime = null; per[c.id].lastSameTimeHour = null; }
         // today's per-channel breakdown, largest first, only channels with revenue
         per[c.id].channels = Object.values(chTot[c.id]||{})
           .filter(x=>x.ch.counts_in_total && Number(x.amount)>0)
@@ -5440,10 +5456,18 @@ function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsight
         const p = data[c.id] || {sales:0,revRows:0,synced:false,exp:0,pending:0,daysDone:new Set(),closed:false,week:[],lastSameDay:null};
         const done = p.revRows>0;
         const pct = Math.min(100, Math.round(p.daysDone.size/dayOfMonth*100));
-        // same weekday last week comparison (today is still in progress, so this is a pace check)
+        // same weekday last week comparison. Preferred: same time of day (hourly
+        // snapshot), so a half-finished morning is not compared against last week's
+        // FULL day. Falls back to the full-day figure (labeled) when no snapshot
+        // history exists for that day yet.
         const lsd = p.lastSameDay;
-        const delta = (lsd!=null && lsd>0) ? (p.sales-lsd)/lsd : null;
+        const lst = isToday ? p.lastSameTime : null;    // same time last week (live day only)
+        const lstH = p.lastSameTimeHour;
+        const hr12 = h => h===0?'12 AM':h<12?h+' AM':h===12?'12 PM':(h-12)+' PM';
+        const base = lst!=null ? lst : lsd;
+        const delta = (base!=null && base>0) ? (p.sales-base)/base : null;
         const week = p.week||[];
+        const dowLbl = DOW[week.length?week[week.length-1].dow:now.getDay()];
         const wkMax = Math.max(1, ...week.map(d=>d.amount));
         return <div key={c.id} className={'home-card'+(done?' done':'')} onClick={()=>setDetail({corp:c, p})}>
           {done && <div className="hc-check">✓</div>}
@@ -5451,11 +5475,15 @@ function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsight
           <div className="hc-code hc-code-big">{c.code}</div>
           <div className="hc-amt"><span className="cur">$</span>{p.sales.toLocaleString('en-US',{maximumFractionDigits:0})}<span className="cur"> {isToday ? 'today' : `${MONTHS[now.getMonth()].slice(0,3)} ${now.getDate()}`}</span></div>
           <div className="hc-cmp">
-            {lsd!=null && delta!=null
-              ? <><span className={delta>=0?'pos':'neg'}>{delta>=0?'▲':'▼'} {Math.abs(delta*100).toFixed(0)}%</span> <span className="faint">vs last {DOW[week.length?week[week.length-1].dow:now.getDay()]} ({fmt$k(lsd)})</span></>
+            {lst!=null && delta!=null
+              ? <><span className={delta>=0?'pos':'neg'}>{delta>=0?'▲':'▼'} {Math.abs(delta*100).toFixed(0)}%</span> <span className="faint">vs last {dowLbl} by {hr12(lstH)} ({fmt$k(lst)})</span></>
+              : lst!=null
+              ? <span className="faint">Last {dowLbl} by {hr12(lstH)}: {fmt$k(lst)}</span>
+              : lsd!=null && delta!=null
+              ? <><span className={delta>=0?'pos':'neg'}>{delta>=0?'▲':'▼'} {Math.abs(delta*100).toFixed(0)}%</span> <span className="faint">vs last {dowLbl} ({fmt$k(lsd)}{isToday?' full day':''})</span></>
               : lsd!=null
               ? <span className="faint">Last {DOW[now.getDay()]}: {fmt$k(lsd)}</span>
-              : <span className="faint">No sales last {DOW[week.length?week[week.length-1].dow:now.getDay()]}</span>}
+              : <span className="faint">No sales last {dowLbl}</span>}
           </div>
           <div className="hc-spark" title="Last 7 days">
             {week.length>0
