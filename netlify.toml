@@ -11,9 +11,10 @@
 [functions."slack-expense"]
   external_node_modules = ["jimp"]
 
-# Hourly: Toast store sales + tips (AD/BW/FH)
+# Every 10 minutes: Toast store sales + tips (AD/BW/FH). Writes are change-guarded
+# upserts, so quiet runs cost API reads only.
 [functions."toast-sync"]
-  schedule = "@hourly"
+  schedule = "*/10 * * * *"
 
 # Every minute: HQ invoices + Ummas orders from the Inventory app Supabase.
 # Writes are change-guarded (no-op runs write nothing), so the tight schedule

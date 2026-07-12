@@ -5350,6 +5350,20 @@ function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsight
   };
   const prev = now.getMonth()===0 ? {y:now.getFullYear()-1,m:12} : {y:now.getFullYear(),m:now.getMonth()};
 
+  // Live refresh: while the live day is on screen, re-pull every 60s so the cards
+  // follow the syncs (Toast every 10 min, inventory every minute) without a manual
+  // reload. Past days are static, so they are fetched once.
+  const [tick, setTick] = useState(0);
+  useEffect(()=>{
+    if(!isToday) return;
+    const iv = setInterval(()=>{
+      if(document.visibilityState === 'visible') setTick(t=>t+1);   // no polling in the background
+    }, 60000);
+    const onShow = ()=>{ if(document.visibilityState === 'visible') setTick(t=>t+1); };
+    document.addEventListener('visibilitychange', onShow);
+    return ()=>{ clearInterval(iv); document.removeEventListener('visibilitychange', onShow); };
+  },[isToday]);
+
   useEffect(()=>{ if(!ids.length){ setData({}); return; } let dead=false;
     (async()=>{
       const monthStart = `${now.getFullYear()}-${pad(now.getMonth()+1)}-01`;
@@ -5422,7 +5436,7 @@ function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsight
       setData(per);
     })();
     return ()=>{dead=true};
-  },[ids.join(','), date]);
+  },[ids.join(','), date, tick]);
 
   if(!editable.length) return <div className="card">No corporations available for your account.</div>;
   if(!data) return <Spinner/>;
