@@ -197,6 +197,11 @@ a{color:var(--gold);text-decoration:none}
 .spendname{font-weight:500;font-size:14px}
 .spendamt{font-size:14px}
 .spendbar{height:8px;background:var(--panel2);border-radius:4px;overflow:hidden}
+/* revenue note: a quiet second line under the channel name, so a one-off income
+   (royalty, grant, catering) still says what it was months later */
+.rev-memo{display:block;width:100%;margin-top:5px;padding:5px 8px;font-size:12px;
+  border:1px solid var(--border-soft);border-radius:6px;background:var(--panel2);color:var(--text2)}
+.rev-memo::placeholder{color:var(--text3)}
 .spin-ring{width:26px;height:26px;margin:0 auto;border-radius:50%;border:2.5px solid var(--border);border-top-color:var(--gold);animation:spin-rot .8s linear infinite}
 @keyframes spin-rot{to{transform:rotate(360deg)}}
 .spendbar-fill{height:100%;background:linear-gradient(90deg,var(--gold-soft),var(--gold));border-radius:4px}
@@ -1127,6 +1132,8 @@ async function loadCorpMeta(corpId, force){
 // board never includes). isBoardSuperseded returns true only for auto sources that the
 // board actually replaces.
 const AUTO_SOURCES = new Set(['slack','toast','inventory','recurring']);
+// Revenue rows created by a sync rather than typed in by a person.
+const AUTO_REV_SOURCES = new Set(['toast','toast_live','inventory','quickbooks','board']);
 // Which non-board rows does the Excel board replace?
 //   * slack / toast / inventory are auto-captured estimates: the Excel always supersedes them.
 //   * recurring rows are auto-posted by the cron (rent, utilities, founder payroll). The
@@ -3066,13 +3073,22 @@ function Entry({corps, canEditIds, profile, presetCorp, presetMode, activeCorp, 
   },[corpId,date]);
   useEffect(()=>{ reload(); },[reload]);
 
-  const saveRev = async (ch, val) => {
-    const amount = parseFloat(val)||0;
+  // Revenue can carry a note, the same way an expense does. A one-off income (a royalty
+  // payment, a grant, a catering job) is meaningless later as a bare number.
+  const saveRev = async (ch, val, memoVal) => {
     const ex = dayRev[ch.id];
-    if(ex && Number(ex.amount)===amount) return;
-    const { error } = await sb.from('daily_revenue').upsert(
-      { corporation_id:corpId, channel_id:ch.id, date, amount, source:'manual', updated_by:profile.id, updated_at:new Date().toISOString() },
-      { onConflict:'corporation_id,channel_id,date' });
+    const amount = val===undefined ? (ex ? Number(ex.amount) : 0) : (parseFloat(val)||0);
+    const memo = memoVal===undefined ? (ex ? (ex.memo||'') : '') : String(memoVal).trim().slice(0,300);
+    const sameAmount = ex && Number(ex.amount)===amount;
+    const sameMemo = (ex ? (ex.memo||'') : '') === memo;
+    if(sameAmount && sameMemo) return;                 // nothing changed
+    if(!ex && amount===0 && !memo) return;             // empty row: do not create it
+    const row = { corporation_id:corpId, channel_id:ch.id, date, amount, memo: memo || null,
+      updated_by:profile.id, updated_at:new Date().toISOString() };
+    // An automatic row (Toast, inventory) keeps its source when only the note is edited,
+    // so a note never disguises synced sales as hand-entered ones.
+    if(!ex || !AUTO_REV_SOURCES.has(ex.source) || !sameAmount) row.source = 'manual';
+    const { error } = await sb.from('daily_revenue').upsert(row, { onConflict:'corporation_id,channel_id,date' });
     if(error) showToast('Save failed: '+error.message); else { showToast(ch.name+' saved'); reload(); }
   };
 
@@ -3184,7 +3200,12 @@ function Entry({corps, canEditIds, profile, presetCorp, presetMode, activeCorp, 
               row.source==='quickbooks' ? 'QuickBooks' : row.source) : '';
             return <tr key={c.id}>
               <td>{c.name} {auto && <span className={'badge '+(row.source==='toast_live'?'gold':'green')}>{badgeLabel}</span>}
-                {row && row.verified && <span className="badge gold">Verified</span>}</td>
+                {row && row.verified && <span className="badge gold">Verified</span>}
+                <input className="rev-memo" type="text" maxLength={300}
+                  defaultValue={row?(row.memo||''):''} placeholder="Note (optional)"
+                  key={'m'+c.id+date+(row?(row.memo||''):'')}
+                  onBlur={e=>saveRev(c, undefined, e.target.value)}/>
+              </td>
               <td className="num rev-amt">
                 <input type="number" step="0.01" defaultValue={row?Number(row.amount):''} placeholder="0.00"
                   key={c.id+date+(row?row.amount:'')}
@@ -3196,7 +3217,7 @@ function Entry({corps, canEditIds, profile, presetCorp, presetMode, activeCorp, 
           <span className="bt-v">{fmt$((meta?meta.channels:[]).reduce((a,c)=>{
             const r=dayRev[c.id]; if(!r||!c.counts_in_total) return a;
             return a+Number(r.amount)*Number(c.total_multiplier);},0))}</span></div>
-        <div className="hint">Amounts save when you click outside the field. Includes Other Income for grants or catering.</div>
+        <div className="hint">Amounts and notes save when you click outside the field. Includes Other Income for grants, royalties, or catering.</div>
       </div>}
 
     {mode==='expense' &&
