@@ -2230,8 +2230,12 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged, onMonth
   const withSales = active.filter(r=>r.rev>0);
   // Best / slowest sales days: marked with a star in the day-by-day list below,
   // not shown as a text line (a big one-off cost on a day is not a real "loss").
-  const bestDay = withSales.length>=2 ? withSales.reduce((a,b)=> b.rev>a.rev?b:a).d : null;
-  const slowDay = withSales.length>=2 ? withSales.reduce((a,b)=> b.rev<a.rev?b:a).d : null;
+  // Today is excluded when it is still in progress: a day that has only been open
+  // an hour would always win the "slowest" star against completed days.
+  const todayD = isCurMonth ? _now.getDate() : null;
+  const ranked = withSales.filter(r => r.d !== todayD);
+  const bestDay = ranked.length>=2 ? ranked.reduce((a,b)=> b.rev>a.rev?b:a).d : null;
+  const slowDay = ranked.length>=2 ? ranked.reduce((a,b)=> b.rev<a.rev?b:a).d : null;
   const findings = (()=>{
     const F=[];
     if(!active.length) return F;
