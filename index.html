@@ -199,6 +199,9 @@ a{color:var(--gold);text-decoration:none}
 .spendbar{height:8px;background:var(--panel2);border-radius:4px;overflow:hidden}
 .spendbar-fill{height:100%;background:linear-gradient(90deg,var(--gold-soft),var(--gold));border-radius:4px}
 .spendbar-fill.big{background:linear-gradient(90deg,var(--red-soft),var(--red))}
+/* income bars read as money coming IN, so they are green, never red */
+.spendbar-fill.income{background:linear-gradient(90deg,var(--green-soft),var(--green))}
+.spendbar-fill.income.big{background:linear-gradient(90deg,var(--green-soft),var(--green))}
 .kpi.accent-green{background:linear-gradient(160deg,var(--green-dim),var(--panel));border-color:#CDE6D6}
 .kpi.accent-red{background:linear-gradient(160deg,var(--red-dim),var(--panel));border-color:#F3D3CE}
 .kpi.accent-gold{background:linear-gradient(160deg,var(--gold-dim),var(--panel));border-color:#EBDCA8}
@@ -1185,23 +1188,36 @@ async function loadMonthRaw(corpId, y, m){
 // Supabase caps a query at 1000 rows. With per-day data a year can exceed that,
 // so page through in 1000-row chunks and concatenate.
 async function fetchAllRows(build){
+  // Supabase caps a query at 1000 rows, so page through with .range().
+  //
+  // Paging is only correct if the sort is TOTAL. The callers order by date alone, and a
+  // store with many rows on the same date (BW and FH have several revenue channels and
+  // dozens of expenses per day) has no defined order among those ties, so Postgres may
+  // return them in a different order on each page request. Rows then get skipped or
+  // repeated across page boundaries. Requesting the page range on an explicit id
+  // tiebreaker makes the order total and the paging exact. If a caller's table has no
+  // id column, we fall back to the caller's own ordering.
   const PAGE=1000; let from=0, all=[];
   for(;;){
-    const { data, error } = await build().range(from, from+PAGE-1);
+    let q = build();
+    if(q && typeof q.order === 'function'){
+      try { q = q.order('id', { ascending: true }); } catch(e) { /* no id column: keep caller order */ }
+    }
+    const { data, error } = await q.range(from, from+PAGE-1);
     if(error) throw error;
     const rows = data||[];
     all = all.concat(rows);
     if(rows.length < PAGE) break;
     from += PAGE;
-    if(from > 200000) break; // safety
+    if(from > 500000) break; // safety
   }
   return all;
 }
 
 async function loadAllTimePL(corpId, meta){
   const [rev, exp, inp, rt] = await Promise.all([
-    fetchAllRows(()=>sb.from('daily_revenue').select('date,amount,channel_id,source').eq('corporation_id',corpId).order('date')),
-    fetchAllRows(()=>sb.from('expenses').select('date,amount,category_id,status,source').eq('corporation_id',corpId).order('date')),
+    fetchAllRows(()=>sb.from('daily_revenue').select('id,date,amount,channel_id,source').eq('corporation_id',corpId).order('date')),
+    fetchAllRows(()=>sb.from('expenses').select('id,date,amount,category_id,status,source').eq('corporation_id',corpId).order('date')),
     sb.from('monthly_inputs').select('*').eq('corporation_id',corpId),
     sb.from('rate_schedule').select('rate_type,rate,effective_from').eq('corporation_id',corpId),
   ]);
@@ -1234,8 +1250,8 @@ async function loadAllTimePL(corpId, meta){
 async function loadYearPL(corpId, meta, y){
   const start=`${y}-01-01`, end=`${y}-12-31`;
   const [rvData, exData, inp, rt] = await Promise.all([
-    fetchAllRows(()=>sb.from('daily_revenue').select('date,amount,channel_id,source').eq('corporation_id',corpId).gte('date',start).lte('date',end).order('date')),
-    fetchAllRows(()=>sb.from('expenses').select('date,amount,category_id,status,source').eq('corporation_id',corpId).gte('date',start).lte('date',end).order('date')),
+    fetchAllRows(()=>sb.from('daily_revenue').select('id,date,amount,channel_id,source').eq('corporation_id',corpId).gte('date',start).lte('date',end).order('date')),
+    fetchAllRows(()=>sb.from('expenses').select('id,date,amount,category_id,status,source').eq('corporation_id',corpId).gte('date',start).lte('date',end).order('date')),
     sb.from('monthly_inputs').select('*').eq('corporation_id',corpId).eq('year',y),
     sb.from('rate_schedule').select('rate_type,rate,effective_from').eq('corporation_id',corpId),
   ]);
@@ -1675,6 +1691,7 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
   const [yearMonthsPrev, setYearMonthsPrev] = useState([]); // compare view
   const [yearMonthsPrev2, setYearMonthsPrev2] = useState([]); // 3-year
   const [allTime, setAllTime] = useState(null); // all-time view
+  const [loadErr, setLoadErr] = useState(null);  // shown instead of an empty state when a load fails
   // store comparison: pick up to 3 stores, compare the selected month side by side
   const [cmpIds, setCmpIds] = useState(()=>editable.slice(0,3).map(c=>c.id));
   const [cmpData, setCmpData] = useState(null);
@@ -1700,7 +1717,7 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
     // AD's numbers no matter which store was picked).
     if(_corpRef.current && _corpRef.current !== corpId){
       setAllTime(null); setYearMonths([]); setYearMonthsPrev([]); setYearMonthsPrev2([]);
-      setDayRows([]); setPl(null); setYoy(null);
+      setDayRows([]); setPl(null); setYoy(null); setLoadErr(null);
     }
     _corpRef.current = corpId;
     // Safety net: never leave the page stuck on "Loading..." If this is still the latest
@@ -1731,8 +1748,8 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
         const endD=`${y}-${pad(m)}-${pad(lastDay(y,m))}`; let sy=y,sm=m-11; while(sm<1){sm+=12;sy--;}
         const startD=`${sy}-${pad(sm)}-01`;
         const [rvT,exT,rt]=await Promise.all([
-          fetchAllRows(()=>sb.from('daily_revenue').select('date,amount,channel_id,source').eq('corporation_id',corpId).gte('date',startD).lte('date',endD).order('date')),
-          fetchAllRows(()=>sb.from('expenses').select('date,amount,category_id,status,source').eq('corporation_id',corpId).gte('date',startD).lte('date',endD).order('date')),
+          fetchAllRows(()=>sb.from('daily_revenue').select('id,date,amount,channel_id,source').eq('corporation_id',corpId).gte('date',startD).lte('date',endD).order('date')),
+          fetchAllRows(()=>sb.from('expenses').select('id,date,amount,category_id,status,source').eq('corporation_id',corpId).gte('date',startD).lte('date',endD).order('date')),
           sb.from('rate_schedule').select('rate_type,rate,effective_from').eq('corporation_id',corpId),
         ]);
         if(!ok()) return;
@@ -1800,12 +1817,14 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
       else if(view==='alltime'){
         const at = await loadAllTimePL(corpId,mt); if(!ok()) return; setAllTime(at);
       }
+      if(ok()) setLoadErr(null);
      }catch(e){
        // Never leave the PREVIOUS store's numbers on screen when a load fails: the
        // reader would be looking at AD's history while BW is selected. Clear the
        // view's data so the empty state shows instead of stale, wrong figures.
        if(ok()){
          console.error('Insights load failed', e);
+         setLoadErr(String((e && e.message) || e));
          if(view==='alltime') setAllTime(null);
          else if(view==='year'){ setYearMonths([]); setYearMonthsPrev([]); setYearMonthsPrev2([]); }
          else if(view==='daily') setDayRows([]);
@@ -1920,6 +1939,11 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
     {compareStores ?
       <StoreCompareView editable={editable} cmpIds={cmpIds} toggleCmp={toggleCmp} data={cmpData} y={y} m={m} period={cmpPeriod} cmpDate={cmpDate}/> :
       loading ? <Spinner/> :
+      loadErr ? <div className="card"><h3>Could not load this store</h3>
+          <div className="hint" style={{marginTop:6}}>The data did not come back, so nothing is shown rather than the previous store's numbers.</div>
+          <div className="mono" style={{marginTop:10,fontSize:12,color:'var(--red)'}}>{loadErr}</div>
+          <button className="btn" style={{marginTop:12}} onClick={()=>setRefresh(x=>x+1)}>Try again</button>
+        </div> :
       view==='month'   ? <MonthView pl={pl} yoy={yoy} trend={trend} y={y} m={m}/> :
       view==='daily'   ? <DailyView rows={dayRows} pl={pl} yoy={yoy} y={y} m={m} isOwner={isOwner} categories={(meta&&meta.categories)||[]} onChanged={()=>setRefresh(x=>x+1)} onMonth={(a,b)=>{setY(a);setM(b);}}/> :
       view==='year'    ? <YearView months={yearMonths} y={y} yearMode={yearMode} onYearMode={setYearMode}
@@ -2497,7 +2521,7 @@ function IncomeBreakdown({agg, label}){
             </span>
             <span className="spendamt mono">{fmt$(c.amount)}</span>
           </div>
-          <div className="spendbar"><div className={'spendbar-fill'+(i<3?' big':'')} style={{width:(Math.abs(c.amount)/maxAmt*100)+'%'}}></div></div>
+          <div className="spendbar"><div className={'spendbar-fill income'+(i<3?' big':'')} style={{width:(Math.abs(c.amount)/maxAmt*100)+'%'}}></div></div>
           <div className="spendmeta">{c.counts_in_total ? fmtPct(pct)+' of sales' : 'not counted in total sales'}</div>
         </div>;
       })}
@@ -2513,7 +2537,13 @@ function YearView({months, y, yearMode, onYearMode, prev, prev2}){
     <button className={'cmp-per-tab'+(yearMode==='1y'?' on':'')} onClick={()=>onYearMode&&onYearMode('1y')}>1 Year</button>
     <button className={'cmp-per-tab'+(yearMode==='3y'?' on':'')} onClick={()=>onYearMode&&onYearMode('3y')}>3 Years</button>
   </div>;
-  if(yearMode==='3y') return <>{toggle}<CompareView cur={months} prev={prev} prev2={prev2} y={y}/></>;
+  // In 3-year mode the breakdown cards follow the SELECTED year (the one the KPI
+  // block and chart lead with). Labeled with that year so it is never mistaken for
+  // a three-year total.
+  if(yearMode==='3y') return <>{toggle}<CompareView cur={months} prev={prev} prev2={prev2} y={y}/>
+    {(()=>{ const agg=aggregatePL(months.map(x=>x.pl));
+      return <><IncomeBreakdown agg={agg} label={String(y)}/><SpendBreakdown agg={agg} label={String(y)}/></>; })()}
+  </>;
   const tot=months.reduce((a,x)=>({s:a.s+x.pl.totalSales,e:a.e+x.pl.totalExpenses,n:a.n+x.pl.net}),{s:0,e:0,n:0});
   const _nYr=new Date();
   const trendPts=months.filter(x=>x.pl.totalSales!==0||x.pl.totalExpenses!==0)
@@ -4361,8 +4391,8 @@ async function loadTrend12(corpId, y, m, meta){
   let sy=y, sm=m-11; while(sm<1){ sm+=12; sy--; }
   const startD = `${sy}-${pad(sm)}-01`;
   const [rvT, exT, rt] = await Promise.all([
-    fetchAllRows(()=>sb.from('daily_revenue').select('date,amount,channel_id,source').eq('corporation_id',corpId).gte('date',startD).lte('date',endD).order('date')),
-    fetchAllRows(()=>sb.from('expenses').select('date,amount,category_id,status,source').eq('corporation_id',corpId).gte('date',startD).lte('date',endD).order('date')),
+    fetchAllRows(()=>sb.from('daily_revenue').select('id,date,amount,channel_id,source').eq('corporation_id',corpId).gte('date',startD).lte('date',endD).order('date')),
+    fetchAllRows(()=>sb.from('expenses').select('id,date,amount,category_id,status,source').eq('corporation_id',corpId).gte('date',startD).lte('date',endD).order('date')),
     sb.from('rate_schedule').select('rate_type,rate,effective_from').eq('corporation_id',corpId),
   ]);
   const pts=[]; let cy=sy, cm=sm;
@@ -5507,9 +5537,9 @@ function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsight
         sb.from('daily_revenue').select('corporation_id,channel_id,amount,source').in('corporation_id',ids).eq('date',date),
         sb.from('expenses').select('corporation_id').in('corporation_id',ids).eq('date',date).eq('status','confirmed'),
         sb.from('expenses').select('corporation_id').in('corporation_id',ids).eq('status','pending'),
-        fetchAllRows(()=>sb.from('daily_revenue').select('corporation_id,date,amount').in('corporation_id',ids).gte('date',monthStart).lte('date',date).gt('amount',0).order('date')),
+        fetchAllRows(()=>sb.from('daily_revenue').select('id,corporation_id,date,amount').in('corporation_id',ids).gte('date',monthStart).lte('date',date).gt('amount',0).order('date')),
         isOwner ? sb.from('monthly_close').select('corporation_id,status').in('corporation_id',ids).eq('year',prev.y).eq('month',prev.m) : Promise.resolve({data:[]}),
-        fetchAllRows(()=>sb.from('daily_revenue').select('corporation_id,channel_id,date,amount').in('corporation_id',ids).gte('date',winStart).lte('date',date).order('date')),
+        fetchAllRows(()=>sb.from('daily_revenue').select('id,corporation_id,channel_id,date,amount').in('corporation_id',ids).gte('date',winStart).lte('date',date).order('date')),
         // hourly snapshots of last week's same day; missing table or rows just
         // falls back to the full-day comparison, so errors are ignored
         sb.from('revenue_snapshots').select('corporation_id,hour,minute,amount').in('corporation_id',ids).eq('date',lwIso).then(r=>r, ()=>({data:[]})),

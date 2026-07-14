@@ -288,9 +288,9 @@ exports.handler = async (event) => {
     return { statusCode: 200, body: JSON.stringify({ ok: true, date: dateLabel, saved: 0, note: 'all duplicates' }) };
   }
   await postSlack(channel,
-    `:white_check_mark: Payroll booked for week ending *${dateLabel}*:\n` +
+    `:white_check_mark: Payroll successfully input in Financial App (week ending *${dateLabel}*):\n` +
     summary.map(s => '• ' + s).join('\n') +
-    `\nThese are recorded in the finance app. Edit them there if anything looks off.`);
+    `\nEdit them in the app if anything looks off.`);
 
   // notify owner via push (best effort)
   try {
