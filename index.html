@@ -1197,19 +1197,33 @@ async function fetchAllRows(build){
   // repeated across page boundaries. Requesting the page range on an explicit id
   // tiebreaker makes the order total and the paging exact. If a caller's table has no
   // id column, we fall back to the caller's own ordering.
-  const PAGE=1000; let from=0, all=[];
-  for(;;){
+  //
+  // Pages are fetched in PARALLEL batches rather than strictly one after another. A store
+  // with several years of per-day rows needs many round trips, and doing them in series is
+  // what made All-Time take long enough to look broken. Each batch requests several pages
+  // at once and stops as soon as a short page proves the end was reached.
+  const PAGE=1000, BATCH=4;
+  const page = async (n) => {
     let q = build();
     if(q && typeof q.order === 'function'){
       try { q = q.order('id', { ascending: true }); } catch(e) { /* no id column: keep caller order */ }
     }
-    const { data, error } = await q.range(from, from+PAGE-1);
+    const { data, error } = await q.range(n*PAGE, n*PAGE + PAGE - 1);
     if(error) throw error;
-    const rows = data||[];
-    all = all.concat(rows);
-    if(rows.length < PAGE) break;
-    from += PAGE;
-    if(from > 500000) break; // safety
+    return data || [];
+  };
+  let all=[], start=0;
+  for(;;){
+    const batch = await Promise.all(
+      Array.from({length:BATCH}, (_,i)=>page(start+i)));
+    let done = false;
+    for(const rows of batch){
+      all = all.concat(rows);
+      if(rows.length < PAGE){ done = true; break; }   // short page: no more rows exist
+    }
+    if(done) break;
+    start += BATCH;
+    if(start*PAGE > 500000) break; // safety
   }
   return all;
 }
@@ -1722,7 +1736,13 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
     _corpRef.current = corpId;
     // Safety net: never leave the page stuck on "Loading..." If this is still the latest
     // run after 4s, clear the spinner no matter what (thrown error, slow/hung network).
-    const safety = setTimeout(()=>{ if(isCurrent()) setLoading(false); }, 4000);
+    // Safety net for a HUNG load. A load that is merely SLOW (All-Time on a store with
+    // years of per-day rows) must keep the spinner: clearing it mid-flight showed the
+    // empty state, which reads as "No history yet" even though data was on its way.
+    // inFlight stays true until the run finishes, so the net only fires if nothing is
+    // actually progressing.
+    let inFlight = true;
+    const safety = setTimeout(()=>{ if(isCurrent() && !inFlight) setLoading(false); }, 4000);
     // Helper: apply a state setter only if this run hasn't been superseded.
     const ok = ()=> isCurrent();
     (async()=>{
@@ -1831,7 +1851,7 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
          else { setPl(null); setYoy(null); }
        }
      }
-     finally{ clearTimeout(safety); if(ok()) setLoading(false); }
+     finally{ inFlight = false; clearTimeout(safety); if(ok()) setLoading(false); }
     })();
     return ()=>{ clearTimeout(safety); };
   },[corpId,y,m,view,yearMode,refresh]);
@@ -1939,6 +1959,7 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
     {compareStores ?
       <StoreCompareView editable={editable} cmpIds={cmpIds} toggleCmp={toggleCmp} data={cmpData} y={y} m={m} period={cmpPeriod} cmpDate={cmpDate}/> :
       loading ? <Spinner/> :
+      (view==='alltime' && !allTime && !loadErr) ? <Spinner/> :
       loadErr ? <div className="card"><h3>Could not load this store</h3>
           <div className="hint" style={{marginTop:6}}>The data did not come back, so nothing is shown rather than the previous store's numbers.</div>
           <div className="mono" style={{marginTop:10,fontSize:12,color:'var(--red)'}}>{loadErr}</div>
