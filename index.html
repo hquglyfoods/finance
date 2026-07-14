@@ -197,32 +197,9 @@ a{color:var(--gold);text-decoration:none}
 .spendname{font-weight:500;font-size:14px}
 .spendamt{font-size:14px}
 .spendbar{height:8px;background:var(--panel2);border-radius:4px;overflow:hidden}
-/* Revenue entry: one block per channel, holding any number of rows. Manual income can
-   repeat on a single day (two royalty payments), each with its own note and amount. */
-.rev-ch{padding:12px 0;border-bottom:1px solid var(--border-soft)}
-.rev-ch:last-child{border-bottom:none}
-.rev-ch-name{font-weight:600;font-size:14px;margin-bottom:8px}
-.rev-row{margin-bottom:8px}
-.rev-row-main{display:flex;gap:8px;align-items:center}
-.rev-memo{flex:1 1 auto;min-width:0;padding:8px 10px;font-size:13px;
-  border:1px solid var(--border-soft);border-radius:7px;background:var(--panel2);color:var(--text)}
-.rev-memo::placeholder{color:var(--text3)}
-.rev-amt-in{flex:0 0 108px;width:108px;text-align:right;padding:8px 10px;font-size:14px;
-  border:1px solid var(--border-soft);border-radius:7px;background:var(--panel2);color:var(--text)}
-.rev-row-meta{display:flex;gap:6px;align-items:center;margin-top:4px;min-height:0}
-.rev-del{border:none;background:transparent;color:var(--red);cursor:pointer;font-size:13px;
-  padding:2px 6px;margin-left:auto;border-radius:5px}
-.rev-del:hover{background:var(--red-soft);color:#fff}
-.rev-add{display:flex;gap:8px;align-items:center;margin-top:4px}
-.rev-add input[type=text]{flex:1 1 auto;min-width:0;padding:8px 10px;font-size:13px;
-  border:1px dashed var(--border);border-radius:7px;background:transparent;color:var(--text)}
-.rev-add input[type=number]{flex:0 0 108px;width:108px;text-align:right;padding:8px 10px;font-size:14px;
-  border:1px dashed var(--border);border-radius:7px;background:transparent;color:var(--text)}
-.rev-add .btn{flex:0 0 auto;white-space:nowrap}
-@media(max-width:820px){
-  .rev-add{flex-wrap:wrap}
-  .rev-add .btn{width:100%;margin-top:2px}
-}
+/* A channel holding several entries shows their total on its line; the entries
+   themselves are listed below, like expenses. */
+.rev-multi-total{display:inline-block;padding:8px 2px;font-size:14px}
 .spin-ring{width:26px;height:26px;margin:0 auto;border-radius:50%;border:2.5px solid var(--border);border-top-color:var(--gold);animation:spin-rot .8s linear infinite}
 @keyframes spin-rot{to{transform:rotate(360deg)}}
 .spendbar-fill{height:100%;background:linear-gradient(90deg,var(--gold-soft),var(--gold));border-radius:4px}
@@ -1155,6 +1132,13 @@ async function loadCorpMeta(corpId, force){
 const AUTO_SOURCES = new Set(['slack','toast','inventory','recurring']);
 // Revenue rows created by a sync rather than typed in by a person.
 const AUTO_REV_SOURCES = new Set(['toast','toast_live','inventory','quickbooks','board']);
+// Which channels can hold SEVERAL entries on one day, each with its own note?
+// Stores take a single figure per channel per day (the POS gives one number), so only
+// Other Income repeats there. HQ and UMMA book individual payments (royalties, invoices,
+// profit shares), so every channel repeats for them.
+const MULTI_REV_CORPS = new Set(['HQ','UMMA']);
+const multiRevAllowed = (corpCode, chCode) =>
+  MULTI_REV_CORPS.has(corpCode) || chCode === 'other_income';
 // Which non-board rows does the Excel board replace?
 //   * slack / toast / inventory are auto-captured estimates: the Excel always supersedes them.
 //   * recurring rows are auto-posted by the cron (rent, utilities, founder payroll). The
@@ -3065,24 +3049,6 @@ function allTimeInsights(active){
 }
 
 // ================= ENTRY (Maria) =================
-// One "add another entry" line per revenue channel. Kept separate so each channel holds
-// its own draft and typing in one does not disturb the others.
-function RevAdd({ch, onAdd, hasRows}){
-  const [amt, setAmt] = useState('');
-  const [memo, setMemo] = useState('');
-  const submit = async ()=>{ await onAdd(ch, amt, memo); setAmt(''); setMemo(''); };
-  return <div className="rev-add">
-    <input type="text" maxLength={300} value={memo} placeholder="Note (optional)"
-      onChange={e=>setMemo(e.target.value)}/>
-    <input type="number" step="0.01" value={amt} placeholder="0.00"
-      onChange={e=>setAmt(e.target.value)}
-      onKeyDown={e=>{ if(e.key==='Enter') submit(); }}/>
-    <button className="btn btn-sm" disabled={!(parseFloat(amt)>0)} onClick={submit}>
-      {hasRows ? '+ Add another' : '+ Add'}
-    </button>
-  </div>;
-}
-
 function Entry({corps, canEditIds, profile, presetCorp, presetMode, activeCorp, onCorp}){
   const editable = corps.filter(c=>canEditIds.has(c.id));
   const [corpId, setCorpId] = useCorpSelection(editable, activeCorp, onCorp, presetCorp);
@@ -3120,35 +3086,87 @@ function Entry({corps, canEditIds, profile, presetCorp, presetMode, activeCorp, 
   // Revenue carries a note, the same way an expense does: a one-off income (a royalty
   // payment, a grant, a catering job) is meaningless later as a bare number.
   //
-  // Editing an EXISTING row, by id, so several manual rows can coexist on one channel.
-  const saveRevRow = async (row, patch) => {
-    const amount = patch.amount!==undefined ? (parseFloat(patch.amount)||0) : Number(row.amount);
-    const memo = patch.memo!==undefined ? String(patch.memo).trim().slice(0,300) : (row.memo||'');
-    if(Number(row.amount)===amount && (row.memo||'')===memo) return;     // nothing changed
-    const upd = { amount, memo: memo||null, updated_by:profile.id, updated_at:new Date().toISOString() };
-    // A synced row that has its AMOUNT overridden by hand becomes manual; a note alone
-    // leaves it synced, so a note never disguises POS sales as hand-entered ones.
-    if(AUTO_REV_SOURCES.has(row.source) && Number(row.amount)!==amount) upd.source='manual';
-    const { error } = await sb.from('daily_revenue').update(upd).eq('id', row.id);
-    if(error) showToast('Save failed: '+error.message); else reload();
+  // Hand-entered income shown as a list under the channel lines, the way expenses are
+  // listed: anything with a note, plus any second-or-later entry on a channel.
+  const noted = React.useMemo(()=>{
+    const out=[];
+    Object.values(dayRev||{}).forEach(list=>{
+      (list||[]).forEach((r,i)=>{
+        if(AUTO_REV_SOURCES.has(r.source)) return;
+        if(r.memo || i>0) out.push(r);
+      });
+    });
+    return out.sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')));
+  },[dayRev]);
+
+  // The inline cell on a channel line. It edits the channel's single row, or creates it.
+  // A channel that already holds several entries shows a total instead of a cell, so this
+  // is never reached for those.
+  const saveRevCell = async (ch, val) => {
+    const rows = dayRev[ch.id] || [];
+    const amount = parseFloat(val)||0;
+    const ex = rows[0];
+    if(!ex){
+      if(amount<=0) return;                                  // nothing typed: create nothing
+      const { error } = await sb.from('daily_revenue').insert({
+        corporation_id:corpId, channel_id:ch.id, date, amount,
+        source:'manual', updated_by:profile.id, updated_at:new Date().toISOString() });
+      if(error) showToast('Save failed: '+error.message); else { showToast(ch.name+' saved'); reload(); }
+      return;
+    }
+    if(Number(ex.amount)===amount) return;                   // unchanged
+    const upd = { amount, updated_by:profile.id, updated_at:new Date().toISOString() };
+    // Overriding a synced figure by hand makes the row manual, so it is never mistaken
+    // for a POS number later.
+    if(AUTO_REV_SOURCES.has(ex.source)) upd.source='manual';
+    const { error } = await sb.from('daily_revenue').update(upd).eq('id', ex.id);
+    if(error) showToast('Save failed: '+error.message); else { showToast(ch.name+' saved'); reload(); }
   };
 
-  // Adding a NEW manual income row. Repeats freely on the same channel and day.
-  const addRevRow = async (ch, amountVal, memoVal) => {
-    const amount = parseFloat(amountVal)||0;
-    const memo = String(memoVal||'').trim().slice(0,300);
-    if(amount<=0){ showToast('Enter an amount'); return; }
-    const { error } = await sb.from('daily_revenue').insert({
-      corporation_id:corpId, channel_id:ch.id, date, amount, memo: memo||null,
-      source:'manual', updated_by:profile.id, updated_at:new Date().toISOString() });
-    if(error) showToast('Save failed: '+error.message);
-    else { showToast(ch.name+' added'); reload(); }
+  // Add / edit an income that carries a note. Several are allowed on HQ and UMMA channels,
+  // and on a store's Other Income; other store channels hold one figure a day.
+  const [revModal, setRevModal] = useState(null);   // 'add' | the row being edited | null
+  const [revForm, setRevForm] = useState({channel_id:'', amount:'', memo:''});
+
+  const saveRevModal = async () => {
+    if(!revForm.channel_id){ showToast('Select a channel'); return; }
+    const amount = sumExpr(revForm.amount);
+    if(isNaN(amount) || amount<=0){ showToast('Enter an amount'); return; }
+    const memo = (revForm.memo||'').trim().slice(0,300);
+    const ch = (meta?meta.channels:[]).find(c=>c.id===revForm.channel_id);
+    const chCode = ch ? ch.code : '';
+    setBusy(true);
+    let error;
+    if(revModal==='add'){
+      const existing = dayRev[revForm.channel_id] || [];
+      // A store channel that is not Other Income holds ONE figure a day: adding a second
+      // would silently split the day's sales across two rows, so update the existing one.
+      if(existing.length && !multiRevAllowed(corp?corp.code:'', chCode)){
+        ({ error } = await sb.from('daily_revenue')
+          .update({ amount:+amount.toFixed(2), memo: memo||null, source:'manual',
+            updated_by:profile.id, updated_at:new Date().toISOString() })
+          .eq('id', existing[0].id));
+      } else {
+        ({ error } = await sb.from('daily_revenue').insert({
+          corporation_id:corpId, channel_id:revForm.channel_id, date,
+          amount:+amount.toFixed(2), memo: memo||null, source:'manual',
+          updated_by:profile.id, updated_at:new Date().toISOString() }));
+      }
+    } else {
+      ({ error } = await sb.from('daily_revenue')
+        .update({ channel_id:revForm.channel_id, amount:+amount.toFixed(2), memo: memo||null,
+          updated_by:profile.id, updated_at:new Date().toISOString() })
+        .eq('id', revModal.id));
+    }
+    setBusy(false);
+    if(error){ showToast('Save failed: '+error.message); return; }
+    setRevModal(null); showToast(revModal==='add'?'Income added':'Income updated'); reload();
   };
 
   const delRevRow = async (row) => {
     if(!confirm('Delete this income entry?')) return;
     const { error } = await sb.from('daily_revenue').delete().eq('id', row.id);
-    if(error) showToast('Delete failed: '+error.message); else reload();
+    if(error) showToast('Delete failed: '+error.message); else { setRevModal(null); reload(); }
   };
 
   const addExp = async () => {
@@ -3248,47 +3266,72 @@ function Entry({corps, canEditIds, profile, presetCorp, presetMode, activeCorp, 
               onClick={e=>{ try{ e.target.showPicker&&e.target.showPicker(); }catch(_){} }}/>
           </label>
         </h3>
-        <div className="rev-entry">
+        {/* One line per channel, as before: name + the day's figure. A channel that holds
+            several entries (HQ/UMMA, or a store's Other Income) shows their TOTAL here and
+            lists them individually below, the same way expenses are listed. */}
+        <table className="t rev-entry"><tbody>
           {(meta?meta.channels.filter(c=>c.active):[]).map(c=>{
             const rows = dayRev[c.id] || [];
-            return <div className="rev-ch" key={c.id}>
-              <div className="rev-ch-name">{c.name}</div>
-              {rows.map(row=>{
-                const auto = AUTO_REV_SOURCES.has(row.source);
-                const badgeLabel =
-                  row.source==='toast_live' ? 'Toast · live' :
-                  row.source==='toast' ? 'Toast' :
-                  row.source==='inventory' ? 'Inventory' :
-                  row.source==='quickbooks' ? 'QuickBooks' :
-                  row.source==='board' ? 'Excel' : row.source;
-                return <div className="rev-row" key={row.id}>
-                  <div className="rev-row-main">
-                    <input className="rev-memo" type="text" maxLength={300}
-                      defaultValue={row.memo||''} placeholder="Note (optional)"
-                      key={'m'+row.id+(row.memo||'')}
-                      onBlur={e=>saveRevRow(row,{memo:e.target.value})}/>
-                    <input className="rev-amt-in" type="number" step="0.01"
-                      defaultValue={Number(row.amount)} placeholder="0.00"
-                      key={'a'+row.id+row.amount}
-                      onBlur={e=>saveRevRow(row,{amount:e.target.value})}/>
-                  </div>
-                  <div className="rev-row-meta">
-                    {auto && <span className={'badge '+(row.source==='toast_live'?'gold':'green')}>{badgeLabel}</span>}
-                    {row.verified && <span className="badge gold">Verified</span>}
-                    {!auto && <button className="rev-del" onClick={()=>delRevRow(row)} aria-label="Delete">✕</button>}
-                  </div>
-                </div>;
-              })}
-              <RevAdd ch={c} onAdd={addRevRow} hasRows={rows.length>0}/>
-            </div>;
+            const multi = rows.length>1;
+            const single = rows.length===1 ? rows[0] : null;
+            const chTotal = rows.reduce((t,r)=>t+Number(r.amount),0);
+            const auto = single && AUTO_REV_SOURCES.has(single.source);
+            const badgeLabel = single ? (
+              single.source==='toast_live' ? 'Toast · live' :
+              single.source==='toast' ? 'Toast' :
+              single.source==='inventory' ? 'Inventory' :
+              single.source==='quickbooks' ? 'QuickBooks' :
+              single.source==='board' ? 'Excel' : '') : '';
+            return <tr key={c.id}>
+              <td>{c.name}
+                {auto && badgeLabel && <span className={'badge '+(single.source==='toast_live'?'gold':'green')}>{badgeLabel}</span>}
+                {single && single.verified && <span className="badge gold">Verified</span>}
+                {multi && <span className="badge">{rows.length} entries</span>}
+              </td>
+              <td className="num rev-amt">
+                {multi
+                  ? <span className="mono rev-multi-total">{fmt$(chTotal)}</span>
+                  : <input type="number" step="0.01" placeholder="0.00"
+                      defaultValue={single?Number(single.amount):''}
+                      key={c.id+date+(single?single.id+single.amount:'empty')}
+                      onBlur={e=>saveRevCell(c, e.target.value)} style={{textAlign:'right'}}/>}
+              </td></tr>;
           })}
-        </div>
+        </tbody></table>
         <div className="big-total"><span className="bt-l">Sales today</span>
           <span className="bt-v">{fmt$((meta?meta.channels:[]).reduce((a,c)=>{
             if(!c.counts_in_total) return a;
             const list = dayRev[c.id] || [];
             return a + list.reduce((t,r)=>t+Number(r.amount)*Number(c.total_multiplier),0);},0))}</span></div>
-        <div className="hint">Amounts and notes save when you click outside the field. Add several entries on one channel when income arrives more than once in a day (two royalty payments, for example).</div>
+        <div className="hint">Amounts save when you click outside the field.</div>
+
+        {/* Add an income that needs its own note, or a second payment on the same channel. */}
+        <button className="btn btn-gold" style={{width:'100%',marginTop:14}}
+          onClick={()=>{ setRevForm({channel_id:'', amount:'', memo:''}); setRevModal('add'); }}>
+          + Add income with a note
+        </button>
+
+        {/* Everything entered by hand today, listed like the expenses below. */}
+        {noted.length>0 && <div style={{marginTop:18}}>
+          <div className="hint" style={{marginBottom:8}}>Added today</div>
+          <table className="t"><tbody>
+            {noted.map(row=>{
+              const ch=(meta?meta.channels:[]).find(x=>x.id===row.channel_id);
+              return <tr key={row.id}>
+                <td>
+                  <div style={{fontWeight:600}}>{ch?ch.name:'Channel'}</div>
+                  {row.memo && <div className="faint" style={{fontSize:12.5,marginTop:2}}>{row.memo}</div>}
+                </td>
+                <td className="num">{fmt$(Number(row.amount))}</td>
+                <td style={{width:76,textAlign:'right',whiteSpace:'nowrap'}}>
+                  <button className="btn btn-sm btn-ghost" aria-label="Edit"
+                    onClick={()=>{ setRevForm({channel_id:row.channel_id, amount:String(row.amount), memo:row.memo||''}); setRevModal(row); }}>✎</button>
+                  <button className="btn btn-sm btn-ghost btn-danger" aria-label="Delete"
+                    onClick={()=>delRevRow(row)}>✕</button>
+                </td></tr>;
+            })}
+          </tbody></table>
+        </div>}
       </div>}
 
     {mode==='expense' &&
@@ -3352,6 +3395,44 @@ function Entry({corps, canEditIds, profile, presetCorp, presetMode, activeCorp, 
             </tr>)}
           </tbody></table>}
       </div>}
+    {revModal && <div className="modal-overlay" onClick={()=>setRevModal(null)}>
+      <div className="modal" onClick={e=>e.stopPropagation()}>
+        <div className="modal-head">
+          <div><div className="modal-title">{revModal==='add'?'Add income':'Edit income'}</div>
+            <div className="faint" style={{fontSize:12.5}}>{date}</div></div>
+          <button className="modal-x" onClick={()=>setRevModal(null)}>✕</button>
+        </div>
+        <label className="hint">Channel</label>
+        <select style={{width:'100%',marginBottom:10}} value={revForm.channel_id}
+          onChange={e=>setRevForm({...revForm, channel_id:e.target.value})}>
+          <option value="">Select a channel</option>
+          {(meta?meta.channels.filter(c=>c.active):[]).map(c=>
+            <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <label className="hint">Amount</label>
+        <input type="text" inputMode="text" style={{width:'100%',marginBottom:10}}
+          placeholder="0.00 or 12+15+16" value={revForm.amount}
+          onChange={e=>setRevForm({...revForm, amount:e.target.value})}/>
+        {String(revForm.amount).includes('+') && !isNaN(sumExpr(revForm.amount)) &&
+          <div className="hint" style={{marginTop:-6,marginBottom:10,color:'var(--gold)'}}>= {fmt$(sumExpr(revForm.amount))}</div>}
+        <label className="hint">Note</label>
+        <input style={{width:'100%',marginBottom:14}} maxLength={300}
+          placeholder="What was this income?" value={revForm.memo}
+          onChange={e=>setRevForm({...revForm, memo:e.target.value})}/>
+        {(()=>{ const ch=(meta?meta.channels:[]).find(c=>c.id===revForm.channel_id);
+          const has=(dayRev[revForm.channel_id]||[]).length>0;
+          if(revModal!=='add' || !ch || !has) return null;
+          return multiRevAllowed(corp?corp.code:'', ch.code)
+            ? <div className="hint" style={{marginTop:-8,marginBottom:12}}>This channel already has an entry today. This will be added as another one.</div>
+            : <div className="hint" style={{marginTop:-8,marginBottom:12,color:'var(--gold)'}}>{ch.name} holds one figure a day, so this will replace today's amount.</div>;
+        })()}
+        <div style={{display:'flex',gap:8}}>
+          <button className="btn btn-gold" style={{flex:1}} disabled={busy} onClick={saveRevModal}>Save</button>
+          {revModal!=='add' && <button className="btn btn-danger" disabled={busy}
+            onClick={()=>delRevRow(revModal)}>Delete</button>}
+        </div>
+      </div>
+    </div>}
     {editExp && <div className="modal-overlay" onClick={()=>setEditExp(null)}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
         <div className="modal-head">
