@@ -197,14 +197,26 @@ exports.handler = async (event) => {
       if (!tipsOnly) for (const chCode of ['cash', 'card', 'uber', 'grubhub', 'doordash', 'online']) {
         if (!chId[chCode]) continue;
         const amount = sums[chCode] || 0;
-        const { data: ex } = await admin.from('daily_revenue').select('id,source')
-          .eq('corporation_id', corp.id).eq('channel_id', chId[chCode]).eq('date', d.iso).maybeSingle();
-        if (ex && ex.source === 'manual') continue;
+        // Manual income can now repeat on the same channel and day (several royalty
+        // payments, each with its own note), so this must look ONLY at the row this sync
+        // owns. Selecting by source keeps hand-entered rows untouched and keeps the sync
+        // to exactly one row per day, which is what daily_revenue_auto_unique enforces.
+        const { data: exRows } = await admin.from('daily_revenue').select('id,amount')
+          .eq('corporation_id', corp.id).eq('channel_id', chId[chCode]).eq('date', d.iso)
+          .in('source', ['toast', 'toast_live']).limit(1);
+        const ex = (exRows || [])[0];
         if (!ex && amount === 0) continue;
-        await admin.from('daily_revenue').upsert({
-          corporation_id: corp.id, channel_id: chId[chCode], date: d.iso,
-          amount, source: src, updated_at: new Date().toISOString(),
-        }, { onConflict: 'corporation_id,channel_id,date' });
+        if (ex) {
+          if (Number(ex.amount) === amount) continue;             // unchanged: no write
+          await admin.from('daily_revenue').update({
+            amount, source: src, updated_at: new Date().toISOString(),
+          }).eq('id', ex.id);
+        } else {
+          await admin.from('daily_revenue').insert({
+            corporation_id: corp.id, channel_id: chId[chCode], date: d.iso,
+            amount, source: src, updated_at: new Date().toISOString(),
+          });
+        }
       }
 
       // tips -> expense (only for completed days, not the live provisional one,

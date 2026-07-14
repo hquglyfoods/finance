@@ -231,15 +231,25 @@ exports.handler = async (event) => {
   }
 
   const upsertRev = async (corp, chId, date, amount) => {
-    const { data: ex } = await fin.from('daily_revenue').select('id,source,amount')
-      .eq('corporation_id', corp).eq('channel_id', chId).eq('date', date).maybeSingle();
-    if (ex && ex.source === 'manual') return;
+    // Manual income can repeat on the same channel and day now, so target only the row
+    // this sync owns (source='inventory'). Hand-entered rows are never touched, and the
+    // sync still holds exactly one row per day.
+    const { data: exRows } = await fin.from('daily_revenue').select('id,amount')
+      .eq('corporation_id', corp).eq('channel_id', chId).eq('date', date)
+      .eq('source', 'inventory').limit(1);
+    const ex = (exRows || [])[0];
     if (!ex && amount === 0) return;
     if (ex && Number(ex.amount) === +amount.toFixed(2)) return;   // unchanged: no write
-    await fin.from('daily_revenue').upsert({
-      corporation_id: corp, channel_id: chId, date, amount: +amount.toFixed(2),
-      source: 'inventory', updated_at: new Date().toISOString(),
-    }, { onConflict: 'corporation_id,channel_id,date' });
+    if (ex) {
+      await fin.from('daily_revenue').update({
+        amount: +amount.toFixed(2), updated_at: new Date().toISOString(),
+      }).eq('id', ex.id);
+    } else {
+      await fin.from('daily_revenue').insert({
+        corporation_id: corp, channel_id: chId, date, amount: +amount.toFixed(2),
+        source: 'inventory', updated_at: new Date().toISOString(),
+      });
+    }
   };
   const upsertExp = async (corp, catId, date, amount) => {
     const { data: ex } = await fin.from('expenses').select('id,amount')
