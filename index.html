@@ -1682,6 +1682,7 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
 
   const _loadKeyRef = React.useRef('');
   const _genRef = React.useRef(0);
+  const _corpRef = React.useRef(null);   // which store the on-screen data belongs to
   useEffect(()=>{
     // If there's no store selected yet, don't sit on a spinner forever.
     if(!corpId){ setLoading(false); return; }
@@ -1694,6 +1695,14 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
     const silent = (key === _loadKeyRef.current);
     _loadKeyRef.current = key;
     if(!silent) setLoading(true);
+    // The store changed: drop the previous store's data immediately. Otherwise a slow
+    // query leaves the old store's history on screen (this is why All-Time kept showing
+    // AD's numbers no matter which store was picked).
+    if(_corpRef.current && _corpRef.current !== corpId){
+      setAllTime(null); setYearMonths([]); setYearMonthsPrev([]); setYearMonthsPrev2([]);
+      setDayRows([]); setPl(null); setYoy(null);
+    }
+    _corpRef.current = corpId;
     // Safety net: never leave the page stuck on "Loading..." If this is still the latest
     // run after 4s, clear the spinner no matter what (thrown error, slow/hung network).
     const safety = setTimeout(()=>{ if(isCurrent()) setLoading(false); }, 4000);
@@ -1791,7 +1800,18 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
       else if(view==='alltime'){
         const at = await loadAllTimePL(corpId,mt); if(!ok()) return; setAllTime(at);
       }
-     }catch(e){ if(ok()) console.error('Insights load failed', e); }
+     }catch(e){
+       // Never leave the PREVIOUS store's numbers on screen when a load fails: the
+       // reader would be looking at AD's history while BW is selected. Clear the
+       // view's data so the empty state shows instead of stale, wrong figures.
+       if(ok()){
+         console.error('Insights load failed', e);
+         if(view==='alltime') setAllTime(null);
+         else if(view==='year'){ setYearMonths([]); setYearMonthsPrev([]); setYearMonthsPrev2([]); }
+         else if(view==='daily') setDayRows([]);
+         else { setPl(null); setYoy(null); }
+       }
+     }
      finally{ clearTimeout(safety); if(ok()) setLoading(false); }
     })();
     return ()=>{ clearTimeout(safety); };
@@ -2401,6 +2421,93 @@ function DailyView({rows, pl, yoy, y, m, isOwner, categories, onChanged, onMonth
 }
 
 // ---- YEAR VIEW (12 months across) ----
+// Sum a list of monthly P&Ls into one set of expense lines / revenue channels.
+// The monthly cards read pl.categoryRows / pl.ruleRows / pl.channelRows; the yearly
+// and all-time views hold the same monthly P&Ls, so the breakdown is just those rows
+// added up. Nothing is recomputed, so these totals always agree with the P&L tables.
+function aggregatePL(pls){
+  const cats={}, rules={}, chans={};
+  let totalSales=0, totalExpenses=0;
+  pls.forEach(pl=>{
+    if(!pl) return;
+    totalSales += pl.totalSales||0;
+    totalExpenses += pl.totalExpenses||0;
+    (pl.categoryRows||[]).forEach(c=>{ if(!c.amount) return;
+      cats[c.name] = (cats[c.name]||0) + c.amount; });
+    (pl.ruleRows||[]).forEach(r=>{ if(!r.amount) return;
+      rules[r.name] = (rules[r.name]||0) + r.amount; });
+    (pl.channelRows||[]).forEach(c=>{ if(!c.amount) return;
+      const k=c.name;
+      if(!chans[k]) chans[k]={name:c.name, amount:0, counts_in_total:c.counts_in_total, total_multiplier:c.total_multiplier};
+      chans[k].amount += c.amount; });
+  });
+  const items=[
+    ...Object.entries(cats).map(([name,amount])=>({name, amount, auto:false})),
+    ...Object.entries(rules).map(([name,amount])=>({name, amount, auto:true})),
+  ].filter(i=>i.amount!==0).sort((a,b)=>b.amount-a.amount);
+  const channels=Object.values(chans).sort((a,b)=>b.amount-a.amount);
+  return { items, channels, totalSales, totalExpenses };
+}
+
+// "Where the Money Went" for any period (same layout as the monthly card).
+function SpendBreakdown({agg, label}){
+  const {items, totalSales, totalExpenses} = agg;
+  if(!items.length) return null;
+  const maxAmt=Math.max(1,...items.map(i=>i.amount));
+  return <div className="card">
+    <h3>Where the Money Went · {label}</h3>
+    <div className="hint" style={{marginTop:0,marginBottom:14}}>Every expense line, largest first. The bar shows each category's share of total expenses.</div>
+    <div className="spendlist">
+      {items.map((it,i)=>{
+        const pctExp=totalExpenses?it.amount/totalExpenses:0;
+        const pctSales=totalSales?it.amount/totalSales:0;
+        return <div className="spendrow" key={i}>
+          <div className="spendhead">
+            <span className="spendname">{it.name}{it.auto && <span className="badge gold" style={{marginLeft:6}}>Auto</span>}</span>
+            <span className="spendamt mono">{fmt$(it.amount)}</span>
+          </div>
+          <div className="spendbar"><div className={'spendbar-fill'+(i<3?' big':'')} style={{width:(it.amount/maxAmt*100)+'%'}}></div></div>
+          <div className="spendmeta">{fmtPct(pctExp)} of expenses · {fmtPct(pctSales)} of sales</div>
+        </div>;
+      })}
+    </div>
+    <div className="spendtotal">
+      <span>Total Expenses</span><span className="mono">{fmt$(totalExpenses)}</span>
+    </div>
+  </div>;
+}
+
+// "Where the Money Came From": the same treatment for revenue channels.
+function IncomeBreakdown({agg, label}){
+  const {channels, totalSales} = agg;
+  if(!channels.length) return null;
+  const counted=channels.filter(c=>c.counts_in_total);
+  const maxAmt=Math.max(1,...channels.map(c=>Math.abs(c.amount)));
+  return <div className="card">
+    <h3>Where the Money Came From · {label}</h3>
+    <div className="hint" style={{marginTop:0,marginBottom:14}}>Every revenue channel, largest first. The bar shows each channel's share of total sales.</div>
+    <div className="spendlist">
+      {channels.map((c,i)=>{
+        const pct=totalSales?c.amount/totalSales:0;
+        return <div className="spendrow" key={i}>
+          <div className="spendhead">
+            <span className="spendname">{c.name}
+              {!c.counts_in_total && <span className="badge" style={{marginLeft:6}}>Excluded</span>}
+              {Number(c.total_multiplier)!==1 && c.counts_in_total && <span className="badge" style={{marginLeft:6}}>x{c.total_multiplier}</span>}
+            </span>
+            <span className="spendamt mono">{fmt$(c.amount)}</span>
+          </div>
+          <div className="spendbar"><div className={'spendbar-fill'+(i<3?' big':'')} style={{width:(Math.abs(c.amount)/maxAmt*100)+'%'}}></div></div>
+          <div className="spendmeta">{c.counts_in_total ? fmtPct(pct)+' of sales' : 'not counted in total sales'}</div>
+        </div>;
+      })}
+    </div>
+    <div className="spendtotal">
+      <span>Total Sales</span><span className="mono">{fmt$(totalSales)}</span>
+    </div>
+  </div>;
+}
+
 function YearView({months, y, yearMode, onYearMode, prev, prev2}){
   const toggle = <div className="cmp-period" style={{marginBottom:16}}>
     <button className={'cmp-per-tab'+(yearMode==='1y'?' on':'')} onClick={()=>onYearMode&&onYearMode('1y')}>1 Year</button>
@@ -2442,6 +2549,8 @@ function YearView({months, y, yearMode, onYearMode, prev, prev2}){
         </tbody>
       </table>
     </div>
+    {(()=>{ const agg=aggregatePL(months.map(x=>x.pl));
+      return <><IncomeBreakdown agg={agg} label={String(y)}/><SpendBreakdown agg={agg} label={String(y)}/></>; })()}
   </>;
 }
 
@@ -2452,15 +2561,24 @@ function CompareView({cur, prev, prev2, y}){
   const prevBy={}; prev.forEach(x=>prevBy[x.m]=x.pl);
   const prev2By={}; (prev2||[]).forEach(x=>prev2By[x.m]=x.pl);
   const has2=(prev2||[]).some(x=>x.pl.totalSales!==0||x.pl.totalExpenses!==0);
+  // Three-Year Comparison: show a KPI block per YEAR, not just the current one. Each
+  // year gets its own Sales / Expenses / Net, with the delta against the year before it,
+  // so all three years are readable side by side instead of only the latest.
+  const yearBlocks = [
+    has2 ? {yr:y-2, t:tp2, base:null} : null,
+    {yr:y-1, t:tp, base:has2?tp2:null},
+    {yr:y,   t:tc, base:tp},
+  ].filter(Boolean);
   return <>
-    <div className="kpis kpis-3">
-      <div className="kpi"><div className="k-lbl">{y} Sales</div><div className="k-val"><KVal v={tc.s}/></div>
-        <div className="k-sub"><YoYDelta cur={tc.s} prev={tp.s} bare/> vs {y-1}</div></div>
-      <div className="kpi"><div className="k-lbl">{y} Expenses</div><div className="k-val"><KVal v={tc.e}/></div>
-        <div className="k-sub"><YoYDelta cur={tc.e} prev={tp.e} bare/> vs {y-1}</div></div>
-      <div className="kpi"><div className="k-lbl">{y} Net</div><div className={"k-val "+(tc.n>=0?"pos":"neg")}><KVal v={tc.n}/></div>
-        <div className="k-sub"><YoYDelta cur={tc.n} prev={tp.n} bare/> vs {y-1}</div></div>
-    </div>
+    {yearBlocks.map(b=>
+      <div className="kpis kpis-3" key={b.yr} style={{marginBottom:10}}>
+        <div className="kpi"><div className="k-lbl">{b.yr} Sales</div><div className="k-val"><KVal v={b.t.s}/></div>
+          {b.base && <div className="k-sub"><YoYDelta cur={b.t.s} prev={b.base.s} bare/> vs {b.yr-1}</div>}</div>
+        <div className="kpi"><div className="k-lbl">{b.yr} Expenses</div><div className="k-val"><KVal v={b.t.e}/></div>
+          {b.base && <div className="k-sub"><YoYDelta cur={b.t.e} prev={b.base.e} bare/> vs {b.yr-1}</div>}</div>
+        <div className="kpi"><div className="k-lbl">{b.yr} Net</div><div className={"k-val "+(b.t.n>=0?"pos":"neg")}><KVal v={b.t.n}/></div>
+          <div className="k-sub">Margin {fmtPct(b.t.s?b.t.n/b.t.s:null)}</div></div>
+      </div>)}
     <div className="card">
       <h3>Sales by Month · {y-2}–{y}</h3>
       <MultiYearChart series={[
@@ -2613,6 +2731,9 @@ function AllTimeView({data}){
         </tbody>
       </table>
     </div>
+    {(()=>{ const label = data.firstYear===data.lastYear ? String(data.lastYear) : `${data.firstYear} to ${data.lastYear}`;
+      const agg=aggregatePL(years.flatMap(yr=>yr.months.map(x=>x.pl)));
+      return <><IncomeBreakdown agg={agg} label={label}/><SpendBreakdown agg={agg} label={label}/></>; })()}
   </>;
 }
 
