@@ -197,6 +197,8 @@ a{color:var(--gold);text-decoration:none}
 .spendname{font-weight:500;font-size:14px}
 .spendamt{font-size:14px}
 .spendbar{height:8px;background:var(--panel2);border-radius:4px;overflow:hidden}
+.spin-ring{width:26px;height:26px;margin:0 auto;border-radius:50%;border:2.5px solid var(--border);border-top-color:var(--gold);animation:spin-rot .8s linear infinite}
+@keyframes spin-rot{to{transform:rotate(360deg)}}
 .spendbar-fill{height:100%;background:linear-gradient(90deg,var(--gold-soft),var(--gold));border-radius:4px}
 .spendbar-fill.big{background:linear-gradient(90deg,var(--red-soft),var(--red))}
 /* income bars read as money coming IN, so they are green, never red */
@@ -1202,7 +1204,11 @@ async function fetchAllRows(build){
   // with several years of per-day rows needs many round trips, and doing them in series is
   // what made All-Time take long enough to look broken. Each batch requests several pages
   // at once and stops as soon as a short page proves the end was reached.
-  const PAGE=1000, BATCH=4;
+  // Page size is deliberately modest. A large range on a store with years of history
+  // makes Postgres sort a lot of rows per statement, which is what tripped Supabase's
+  // statement timeout on All-Time for the bigger stores. Smaller pages keep every
+  // statement cheap; the batching below keeps the total wall time down anyway.
+  const PAGE=500, BATCH=6;
   const page = async (n) => {
     let q = build();
     if(q && typeof q.order === 'function'){
@@ -1226,6 +1232,33 @@ async function fetchAllRows(build){
     if(start*PAGE > 500000) break; // safety
   }
   return all;
+}
+
+// Load a P&L for an arbitrary month range (Custom view). Same shape as loadYearPL: one
+// computePL per month, so every number matches the Month and Year views to the cent.
+async function loadRangePL(corpId, meta, fromY, fromM, toY, toM){
+  const start = `${fromY}-${pad(fromM)}-01`;
+  const end   = `${toY}-${pad(toM)}-${pad(lastDay(toY,toM))}`;
+  const [rvData, exData, inp, rt] = await Promise.all([
+    fetchAllRows(()=>sb.from('daily_revenue').select('id,date,amount,channel_id,source').eq('corporation_id',corpId).gte('date',start).lte('date',end).order('date')),
+    fetchAllRows(()=>sb.from('expenses').select('id,date,amount,category_id,status,source').eq('corporation_id',corpId).gte('date',start).lte('date',end).order('date')),
+    sb.from('monthly_inputs').select('*').eq('corporation_id',corpId),
+    sb.from('rate_schedule').select('rate_type,rate,effective_from').eq('corporation_id',corpId),
+  ]);
+  const inps=inp.data||[], rates=rt.data||[];
+  const months=[];
+  let y=fromY, m=fromM;
+  for(;;){
+    const pref=`${y}-${pad(m)}`;
+    const raw={ revenue:rvData.filter(r=>r.date.startsWith(pref)),
+      expenses:exData.filter(r=>r.date.startsWith(pref)),
+      inputs:inps.filter(r=>r.year===y&&r.month===m), rates, monthKey:pref };
+    months.push({ y, m, pl: computePL(meta, raw) });
+    if(y===toY && m===toM) break;
+    m++; if(m>12){ m=1; y++; }
+    if(months.length>600) break;   // safety
+  }
+  return months;
 }
 
 async function loadAllTimePL(corpId, meta){
@@ -1507,7 +1540,19 @@ function KVal({v}){
     {pop && <span className="kval-pop">{fmt$(v)}</span>}
   </span>;
 }
-function Spinner(){ return <div className="faint" style={{padding:'30px 0',textAlign:'center'}}>Loading...</div>; }
+function Spinner({note}){
+  // A moving indicator, not just the word "Loading". A static line of text on a slow
+  // load (All-Time on a big store) looks like the app has frozen. After a few seconds
+  // it also says the load is still running, so the wait is understood as normal.
+  const [secs,setSecs]=useState(0);
+  useEffect(()=>{ const iv=setInterval(()=>setSecs(s=>s+1),1000); return ()=>clearInterval(iv); },[]);
+  return <div style={{padding:'40px 0',textAlign:'center'}}>
+    <div className="spin-ring" aria-label="Loading"></div>
+    <div className="faint" style={{marginTop:12,fontSize:13}}>
+      {note || 'Loading'}{secs>=4 ? ' · still working, this store has a lot of history' : ''}
+    </div>
+  </div>;
+}
 
 // simple SVG trend chart: bars = sales, line = net profit
 // pick a "nice" round step so the axis has ~4-5 labelled gridlines
@@ -1706,6 +1751,15 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
   const [yearMonthsPrev2, setYearMonthsPrev2] = useState([]); // 3-year
   const [allTime, setAllTime] = useState(null); // all-time view
   const [loadErr, setLoadErr] = useState(null);  // shown instead of an empty state when a load fails
+  // Custom view: any month range. Defaults to the last 6 months ending this month.
+  const [rangeMonths, setRangeMonths] = useState(null);
+  const [range, setRange] = useState(()=>{
+    // ends at the last COMPLETED month; the running month is never included
+    const n=new Date(); let ty=n.getFullYear(), tm=n.getMonth();   // getMonth() is already "last month" 1-indexed
+    if(tm<1){ tm=12; ty--; }
+    const f=new Date(ty, tm-1-5, 1);
+    return { fromY:f.getFullYear(), fromM:f.getMonth()+1, toY:ty, toM:tm };
+  });
   // store comparison: pick up to 3 stores, compare the selected month side by side
   const [cmpIds, setCmpIds] = useState(()=>editable.slice(0,3).map(c=>c.id));
   const [cmpData, setCmpData] = useState(null);
@@ -1722,7 +1776,7 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
     // Only show the spinner when the actual view changed (store, month, year, view mode).
     // A background refresh (returning to the app) reloads silently so the screen doesn't
     // flicker while the user is looking at it.
-    const key = [corpId,y,m,view,yearMode].join('|');
+    const key = [corpId,y,m,view,yearMode,range.fromY,range.fromM,range.toY,range.toM].join('|');
     const silent = (key === _loadKeyRef.current);
     _loadKeyRef.current = key;
     if(!silent) setLoading(true);
@@ -1731,7 +1785,7 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
     // AD's numbers no matter which store was picked).
     if(_corpRef.current && _corpRef.current !== corpId){
       setAllTime(null); setYearMonths([]); setYearMonthsPrev([]); setYearMonthsPrev2([]);
-      setDayRows([]); setPl(null); setYoy(null); setLoadErr(null);
+      setDayRows([]); setPl(null); setYoy(null); setLoadErr(null); setRangeMonths(null);
     }
     _corpRef.current = corpId;
     // Safety net: never leave the page stuck on "Loading..." If this is still the latest
@@ -1837,6 +1891,10 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
       else if(view==='alltime'){
         const at = await loadAllTimePL(corpId,mt); if(!ok()) return; setAllTime(at);
       }
+      else if(view==='custom'){
+        const rows = await loadRangePL(corpId,mt,range.fromY,range.fromM,range.toY,range.toM);
+        if(!ok()) return; setRangeMonths(rows);
+      }
       if(ok()) setLoadErr(null);
      }catch(e){
        // Never leave the PREVIOUS store's numbers on screen when a load fails: the
@@ -1846,6 +1904,7 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
          console.error('Insights load failed', e);
          setLoadErr(String((e && e.message) || e));
          if(view==='alltime') setAllTime(null);
+         else if(view==='custom') setRangeMonths(null);
          else if(view==='year'){ setYearMonths([]); setYearMonthsPrev([]); setYearMonthsPrev2([]); }
          else if(view==='daily') setDayRows([]);
          else { setPl(null); setYoy(null); }
@@ -1854,7 +1913,7 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
      finally{ inFlight = false; clearTimeout(safety); if(ok()) setLoading(false); }
     })();
     return ()=>{ clearTimeout(safety); };
-  },[corpId,y,m,view,yearMode,refresh]);
+  },[corpId,y,m,view,yearMode,refresh,range.fromY,range.fromM,range.toY,range.toM]);
 
   // load side-by-side comparison for the selected stores + chosen period
   // (period is the shared top tab: daily->day, month, year, alltime)
@@ -1924,8 +1983,8 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
 
   if(!editable.length) return <div className="card">No corporations available for your account.</div>;
 
-  const VIEWS=[['daily','Daily'],['month','Month'],['year','Year'],['alltime','All-Time']];
-  const showPicker = view!=='alltime';
+  const VIEWS=[['daily','Daily'],['month','Month'],['year','Year'],['alltime','All-Time'],['custom','Custom']];
+  const showPicker = view!=='alltime' && view!=='custom';
   const toggleCmp = (id)=>{
     setCmpData(null);
     setCmpIds(prev=> prev.includes(id) ? prev.filter(x=>x!==id) : (prev.length>=3 ? prev : [...prev,id]));
@@ -1939,9 +1998,10 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
   const singlePicker = view==='daily' ? <MonthPick y={y} m={m} onChange={(a,b)=>{setY(a);setM(b);}}/>
     : view==='year' ? <YearPick y={y} onChange={setY}/>
     : view==='alltime' ? null
+    : view==='custom' ? <RangePick {...range} onChange={(fy,fm,ty,tm)=>setRange({fromY:fy,fromM:fm,toY:ty,toM:tm})}/>
     : <MonthPick y={y} m={m} onChange={(a,b)=>{setY(a);setM(b);}}/>;
   const title = compareStores ? 'Compare Stores'
-    : view==='daily'?'Daily Breakdown':view==='year'?(yearMode==='3y'?'Three-Year Comparison':'Yearly P&L'):view==='alltime'?'All-Time':'Monthly P&L';
+    : view==='daily'?'Daily Breakdown':view==='year'?(yearMode==='3y'?'Three-Year Comparison':'Yearly P&L'):view==='alltime'?'All-Time':view==='custom'?'Custom Range':'Monthly P&L';
   return <div>
     <div className="page-head">
       <div><div className="eyebrow">Insights</div><h2>{title}</h2></div>
@@ -1960,6 +2020,7 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
       <StoreCompareView editable={editable} cmpIds={cmpIds} toggleCmp={toggleCmp} data={cmpData} y={y} m={m} period={cmpPeriod} cmpDate={cmpDate}/> :
       loading ? <Spinner/> :
       (view==='alltime' && !allTime && !loadErr) ? <Spinner/> :
+      (view==='custom' && !rangeMonths && !loadErr) ? <Spinner/> :
       loadErr ? <div className="card"><h3>Could not load this store</h3>
           <div className="hint" style={{marginTop:6}}>The data did not come back, so nothing is shown rather than the previous store's numbers.</div>
           <div className="mono" style={{marginTop:10,fontSize:12,color:'var(--red)'}}>{loadErr}</div>
@@ -1970,6 +2031,7 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
       view==='year'    ? <YearView months={yearMonths} y={y} yearMode={yearMode} onYearMode={setYearMode}
                            prev={yearMonthsPrev} prev2={yearMonthsPrev2}/> :
       view==='alltime' ? <AllTimeView data={allTime}/> :
+      view==='custom'  ? <CustomView months={rangeMonths} fromY={range.fromY} fromM={range.fromM} toY={range.toY} toM={range.toM}/> :
                          <MonthView pl={pl} yoy={yoy} trend={trend} y={y} m={m}/>}
   </div>;
 }
@@ -2553,6 +2615,90 @@ function IncomeBreakdown({agg, label}){
   </div>;
 }
 
+// ---- CUSTOM VIEW (any month range: from ... to) ----
+function CustomView({months, fromY, fromM, toY, toM}){
+  if(!months || !months.length) return <div className="card faint">Pick a range to see its P&L.</div>;
+  const tot=months.reduce((a,x)=>({s:a.s+x.pl.totalSales,e:a.e+x.pl.totalExpenses,n:a.n+x.pl.net}),{s:0,e:0,n:0});
+  const label = (fromY===toY && fromM===toM)
+    ? `${MONTHS[fromM-1]} ${fromY}`
+    : `${MONTHS[fromM-1]} ${fromY} to ${MONTHS[toM-1]} ${toY}`;
+  const withData=months.filter(x=>x.pl.totalSales!==0||x.pl.totalExpenses!==0);
+  const trendPts=withData.map(x=>({label:(x.y===fromY&&x.y===toY)?pad(x.m):`${pad(x.m)}/${String(x.y).slice(2)}`,
+    sales:x.pl.totalSales,net:x.pl.net,payrollPct:x.pl.payrollPct,suppliesPct:x.pl.suppliesPct}));
+  const agg=aggregatePL(months.map(x=>x.pl));
+  return <>
+    <div className="kpis kpis-3">
+      <div className="kpi"><div className="k-lbl">Sales</div><div className="k-val"><KVal v={tot.s}/></div>
+        <div className="k-sub">{months.length} month{months.length===1?'':'s'}</div></div>
+      <div className="kpi"><div className="k-lbl">Expenses</div><div className="k-val"><KVal v={tot.e}/></div></div>
+      <div className="kpi"><div className="k-lbl">Net Profit</div><div className={"k-val "+(tot.n>=0?"pos":"neg")}><KVal v={tot.n}/></div>
+        <div className="k-sub">Margin {fmtPct(tot.s?tot.n/tot.s:null)}</div></div>
+    </div>
+    <div className="card"><h3>{label}</h3><TrendChart points={trendPts}/></div>
+    <div className="card">
+      <h3>Month by Month · {label}</h3>
+      <table className="t ypl-t">
+        <thead><tr><th>Month</th><th className="num">Sales</th><th className="num">Expenses</th><th className="num">Net</th><th className="num margin-col">Margin</th></tr></thead>
+        <tbody>
+          {months.map(x=>{ const has=x.pl.totalSales!==0||x.pl.totalExpenses!==0;
+            return <tr key={`${x.y}-${x.m}`} style={{opacity:has?1:0.35}}>
+              <td>{MONTHS[x.m-1].slice(0,3)} {x.y}</td>
+              <td className="num mono">{has?fmt$(x.pl.totalSales,0):'-'}</td>
+              <td className="num mono">{has?fmt$(x.pl.totalExpenses,0):'-'}</td>
+              <td className={'num mono '+(x.pl.net>=0?'pos':'neg')}>{has?fmt$(x.pl.net,0):'-'}
+                {has && x.pl.margin!=null && <div className="cell-margin">{fmtPct(x.pl.margin)}</div>}
+              </td>
+              <td className="num mono faint margin-col">{has?fmtPct(x.pl.margin):'-'}</td>
+            </tr>; })}
+          <tr className="total"><td>Total</td><td className="num">{fmt$(tot.s,0)}</td><td className="num">{fmt$(tot.e,0)}</td>
+            <td className={'num '+(tot.n>=0?'pos':'neg')}>{fmt$(tot.n,0)}
+              <div className="cell-margin">{fmtPct(tot.s?tot.n/tot.s:null)}</div>
+            </td><td className="num margin-col">{fmtPct(tot.s?tot.n/tot.s:null)}</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <IncomeBreakdown agg={agg} label={label}/>
+    <SpendBreakdown agg={agg} label={label}/>
+  </>;
+}
+
+// Month range picker: from (month, year) to (month, year).
+// The range stops at the LAST COMPLETED month. The month in progress is deliberately
+// not selectable: a part-finished month sitting in a range total makes the whole period
+// look like a downturn, and its P&L is not final until the month is closed.
+const lastClosedMonth = () => {
+  const n=new Date(); let y=n.getFullYear(), m=n.getMonth()+1;
+  m--; if(m<1){ m=12; y--; }
+  return { y, m };
+};
+function RangePick({fromY, fromM, toY, toM, onChange}){
+  const cap = lastClosedMonth();
+  const capIdx = cap.y*12 + cap.m;
+  const years = []; for(let yr=2022; yr<=cap.y; yr++) years.push(yr);
+  const sel = (val, on, opts) => <select className="mp-sel" value={val} onChange={e=>on(parseInt(e.target.value))}>
+    {opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}</select>;
+  // months only up to the cap when the chosen year IS the cap year
+  const mOptsFor = (yr) => MONTHS.map((mn,i)=>({v:i+1,l:mn.slice(0,3)}))
+    .filter(o => yr < cap.y || o.v <= cap.m);
+  const yOpts = years.map(yr=>({v:yr,l:String(yr)}));
+  // keep the range valid: never past the cap, and the end never before the start
+  const clamp = (yy,mm)=>{ const i=yy*12+mm; return i>capIdx ? {y:cap.y,m:cap.m} : {y:yy,m:mm}; };
+  const set = (fy,fm,ty,tm)=>{
+    ({y:fy,m:fm} = clamp(fy,fm));
+    ({y:ty,m:tm} = clamp(ty,tm));
+    if(ty*12+tm < fy*12+fm){ ty=fy; tm=fm; }
+    onChange(fy,fm,ty,tm);
+  };
+  return <div className="month-pick" style={{gap:6,flexWrap:'wrap'}}>
+    <span className="faint" style={{fontSize:12}}>From</span>
+    {sel(fromM, v=>set(fromY,v,toY,toM), mOptsFor(fromY))}
+    {sel(fromY, v=>set(v,fromM,toY,toM), yOpts)}
+    <span className="faint" style={{fontSize:12}}>to</span>
+    {sel(toM, v=>set(fromY,fromM,toY,v), mOptsFor(toY))}
+    {sel(toY, v=>set(fromY,fromM,v,toM), yOpts)}
+  </div>;
+}
+
 function YearView({months, y, yearMode, onYearMode, prev, prev2}){
   const toggle = <div className="cmp-period" style={{marginBottom:16}}>
     <button className={'cmp-per-tab'+(yearMode==='1y'?' on':'')} onClick={()=>onYearMode&&onYearMode('1y')}>1 Year</button>
@@ -2609,6 +2755,15 @@ function YearView({months, y, yearMode, onYearMode, prev, prev2}){
 function CompareView({cur, prev, prev2, y}){
   const sum=arr=>arr.reduce((a,x)=>({s:a.s+x.pl.totalSales,e:a.e+x.pl.totalExpenses,n:a.n+x.pl.net}),{s:0,e:0,n:0});
   const tc=sum(cur), tp=sum(prev), tp2=sum(prev2||[]);
+  // Which months of the displayed year are done / running / not yet reached?
+  const _n=new Date(), _cy=_n.getFullYear(), _cm=_n.getMonth()+1;
+  const monthState=(m)=> y>_cy ? 'future'
+    : y<_cy ? 'past'
+    : (m<_cm ? 'past' : m===_cm ? 'current' : 'future');
+  // The year TOTAL row compares this year against last year over the SAME months only,
+  // otherwise a part-finished year always looks like a collapse against a full one.
+  const doneMonths=cur.filter(x=>monthState(x.m)!=='future').map(x=>x.m);
+  const tpDone=sum((prev||[]).filter(x=>doneMonths.includes(x.m)));
   const prevBy={}; prev.forEach(x=>prevBy[x.m]=x.pl);
   const prev2By={}; (prev2||[]).forEach(x=>prev2By[x.m]=x.pl);
   const has2=(prev2||[]).some(x=>x.pl.totalSales!==0||x.pl.totalExpenses!==0);
@@ -2659,15 +2814,22 @@ function CompareView({cur, prev, prev2, y}){
         <tbody>
           {cur.map(x=>{ const p=prevBy[x.m]||{totalSales:0}; const p2=prev2By[x.m]||{totalSales:0};
             const anyv=x.pl.totalSales!==0||p.totalSales!==0||p2.totalSales!==0;
+            // A month that has not finished yet is not a real comparison: an unstarted
+            // month has no sales, which would print as -100% against last year. Show the
+            // running month as "in progress" and leave future months blank.
+            const st=monthState(x.m);
             return <tr key={x.m} style={{opacity:anyv?1:0.35}}>
               <td>{MONTHS[x.m-1].slice(0,3)}</td>
               {has2 && <td className="num mono faint">{fmt$(p2.totalSales,0)}</td>}
               <td className="num mono faint">{fmt$(p.totalSales,0)}</td>
-              <td className="num mono">{fmt$(x.pl.totalSales,0)}</td>
-              <td className="num"><YoYDelta cur={x.pl.totalSales} prev={p.totalSales}/></td>
+              <td className="num mono">{st==='future'?'-':fmt$(x.pl.totalSales,0)}</td>
+              <td className="num">{
+                st==='future'  ? <span className="faint">—</span> :
+                st==='current' ? <span className="faint">in progress</span> :
+                <YoYDelta cur={x.pl.totalSales} prev={p.totalSales}/>}</td>
             </tr>; })}
           <tr className="total"><td>Total</td>{has2 && <td className="num">{fmt$(tp2.s,0)}</td>}<td className="num">{fmt$(tp.s,0)}</td>
-            <td className="num">{fmt$(tc.s,0)}</td><td className="num"><YoYDelta cur={tc.s} prev={tp.s}/></td></tr>
+            <td className="num">{fmt$(tc.s,0)}</td><td className="num"><YoYDelta cur={tc.s} prev={tpDone.s}/></td></tr>
         </tbody>
       </table>
     </div>
