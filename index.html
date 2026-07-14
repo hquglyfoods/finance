@@ -629,9 +629,10 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   /* Monthly P&L table: margin column tucks under Net */
   .ypl-t .margin-col{display:none}
   .cell-margin{display:block;font-size:9.5px;color:var(--text3);font-family:var(--font-n);margin-top:1px;line-height:1}
-  /* view tabs: horizontal scroll if they don't fit */
-  .viewbar{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap}
-  .viewtab{white-space:nowrap;flex:0 0 auto}
+  /* view tabs: all five must fit the screen. They share the width equally and the
+     padding shrinks, so nothing scrolls sideways. */
+  .viewbar{width:100%;overflow-x:visible;flex-wrap:nowrap;gap:2px;padding:3px}
+  .viewtab{white-space:nowrap;flex:1 1 0;min-width:0;padding:8px 4px;font-size:12px;text-align:center}
   /* top bar: brand + sign out only */
   .side{width:100%;height:auto;position:sticky;top:0;z-index:20;flex-direction:row;align-items:center;
     gap:10px;padding:12px 16px;border-right:none;border-bottom:1px solid var(--border-soft)}
@@ -1262,36 +1263,70 @@ async function loadRangePL(corpId, meta, fromY, fromM, toY, toM){
 }
 
 async function loadAllTimePL(corpId, meta){
-  const [rev, exp, inp, rt] = await Promise.all([
-    fetchAllRows(()=>sb.from('daily_revenue').select('id,date,amount,channel_id,source').eq('corporation_id',corpId).order('date')),
-    fetchAllRows(()=>sb.from('expenses').select('id,date,amount,category_id,status,source').eq('corporation_id',corpId).order('date')),
-    sb.from('monthly_inputs').select('*').eq('corporation_id',corpId),
-    sb.from('rate_schedule').select('rate_type,rate,effective_from').eq('corporation_id',corpId),
+  // All-Time used to pull every daily row of a store's history into the browser and sum
+  // them here. On the larger stores that is enough work for Postgres to hit Supabase's
+  // statement timeout, and the query is cancelled server-side, which no amount of waiting
+  // in the app can fix.
+  //
+  // The view only ever shows monthly and yearly totals, so the summing is done in the
+  // database instead (sql/alltime_monthly_rpc.sql). It returns ONE ROW PER MONTH, a few
+  // dozen rows for an entire history. The functions apply exactly the same board-lock and
+  // channel rules as computePL, verified to the cent against it.
+  const [revRes, expRes, daysRes, catRes, chRes] = await Promise.all([
+    sb.rpc('monthly_revenue_totals', { p_corp: corpId }),
+    sb.rpc('monthly_expense_totals', { p_corp: corpId }),
+    // distinct selling days per year, for the per-operating-day comparison. Cheap: one
+    // small row per year.
+    sb.from('daily_revenue').select('date').eq('corporation_id',corpId).gt('amount',0).limit(50000),
+    // lifetime breakdowns for the two cards, also aggregated server-side
+    sb.rpc('alltime_expense_by_category', { p_corp: corpId }),
+    sb.rpc('alltime_revenue_by_channel',  { p_corp: corpId }),
   ]);
-  const inps=inp.data||[], rates=rt.data||[];
-  // find year span from data
-  const allDates=[...rev.map(r=>r.date), ...exp.map(e=>e.date)].filter(Boolean);
-  if(!allDates.length) return { years:[], firstYear:null, lastYear:null };
-  const firstYear=parseInt(allDates.reduce((a,b)=>a<b?a:b).slice(0,4));
-  const lastYear=parseInt(allDates.reduce((a,b)=>a>b?a:b).slice(0,4));
+  if(revRes.error) throw revRes.error;
+  if(expRes.error) throw expRes.error;
+
+  const revBy={}, expBy={};
+  (revRes.data||[]).forEach(r=>{ revBy[r.month]=Number(r.total)||0; });
+  (expRes.data||[]).forEach(r=>{ expBy[r.month]=Number(r.total)||0; });
+
+  const keys=[...new Set([...Object.keys(revBy), ...Object.keys(expBy)])].sort();
+  if(!keys.length) return { years:[], firstYear:null, lastYear:null };
+  const firstYear=parseInt(keys[0].slice(0,4));
+  const lastYear=parseInt(keys[keys.length-1].slice(0,4));
+
+  // selling days per year
+  const daysByYear={};
+  (daysRes.data||[]).forEach(d=>{
+    const yr=d.date.slice(0,4);
+    (daysByYear[yr]=daysByYear[yr]||new Set()).add(d.date);
+  });
+
   const years=[];
   for(let y=firstYear; y<=lastYear; y++){
     const months=[];
     for(let m=1;m<=12;m++){
-      const pref=`${y}-${pad(m)}`;
-      const raw={ revenue:rev.filter(r=>r.date.startsWith(pref)),
-        expenses:exp.filter(e=>e.date.startsWith(pref)),
-        inputs:inps.filter(r=>r.year===y&&r.month===m), rates, monthKey:pref };
-      months.push({ m, pl: computePL(meta, raw) });
+      const key=`${y}-${pad(m)}`;
+      const s=revBy[key]||0, e=expBy[key]||0;
+      // Same fields the All-Time view reads. Breakdown rows are not produced here: the
+      // per-category split would require the raw rows this change exists to avoid.
+      months.push({ m, pl: { totalSales:s, totalExpenses:e, net:s-e,
+        margin: s ? (s-e)/s : null, payrollPct:null, suppliesPct:null,
+        categoryRows:[], ruleRows:[], channelRows:[] } });
     }
     const totals=months.reduce((a,x)=>({s:a.s+x.pl.totalSales,e:a.e+x.pl.totalExpenses,n:a.n+x.pl.net}),{s:0,e:0,n:0});
-    // count distinct days that had any sales, so a partial first year (opened in Dec)
-    // can be compared on a per-operating-day basis instead of full-year totals.
-    const yPref=`${y}-`;
-    const activeDays=new Set(rev.filter(r=>r.date.startsWith(yPref)&&Number(r.amount)>0).map(r=>r.date)).size;
+    const activeDays=(daysByYear[String(y)]||new Set()).size;
     years.push({ y, months, totals, activeDays });
   }
-  return { years, firstYear, lastYear };
+  // Lifetime breakdown, shaped like aggregatePL's output so the cards render unchanged.
+  const lifeSales=years.reduce((a,yr)=>a+yr.totals.s,0);
+  const lifeExp=years.reduce((a,yr)=>a+yr.totals.e,0);
+  const breakdown={
+    items: (catRes.data||[]).map(r=>({name:r.name, amount:Number(r.total), auto:false})),
+    channels: (chRes.data||[]).map(r=>({name:r.name, amount:Number(r.total),
+      counts_in_total:r.counts_in_total, total_multiplier:Number(r.total_multiplier)})),
+    totalSales: lifeSales, totalExpenses: lifeExp,
+  };
+  return { years, firstYear, lastYear, breakdown };
 }
 
 async function loadYearPL(corpId, meta, y){
@@ -2009,13 +2044,15 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
         <button className={'cmp-toggle'+(compareStores?' on':'')} onClick={()=>setCompareStores(v=>!v)}>
           <span className="cmp-toggle-ic">⇄</span>{compareStores?'Comparing stores':'Compare stores'}</button>
         {!compareStores && <CorpTabs corps={editable} sel={corpId} onSel={setCorpId}/>}
-        {compareStores ? periodPicker : singlePicker}
+        {compareStores ? periodPicker : (view==='custom' ? null : singlePicker)}
       </div>
     </div>
     <div className="viewbar">
       {VIEWS.map(([id,label])=>
         <button key={id} className={'viewtab'+(view===id?' on':'')} onClick={()=>setView(id)}>{label}</button>)}
     </div>
+    {!compareStores && view==='custom' &&
+      <div style={{margin:'-10px 0 18px'}}>{singlePicker}</div>}
     {compareStores ?
       <StoreCompareView editable={editable} cmpIds={cmpIds} toggleCmp={toggleCmp} data={cmpData} y={y} m={m} period={cmpPeriod} cmpDate={cmpDate}/> :
       loading ? <Spinner/> :
@@ -2945,7 +2982,10 @@ function AllTimeView({data}){
       </table>
     </div>
     {(()=>{ const label = data.firstYear===data.lastYear ? String(data.lastYear) : `${data.firstYear} to ${data.lastYear}`;
-      const agg=aggregatePL(years.flatMap(yr=>yr.months.map(x=>x.pl)));
+      // The breakdown is aggregated in the database (the monthly P&Ls here carry totals
+      // only, on purpose: pulling every daily row is what used to time this view out).
+      const agg=data.breakdown;
+      if(!agg) return null;
       return <><IncomeBreakdown agg={agg} label={label}/><SpendBreakdown agg={agg} label={label}/></>; })()}
   </>;
 }
