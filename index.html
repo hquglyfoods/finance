@@ -359,7 +359,8 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .cal .day{height:96px;border:1px solid var(--border-soft);border-radius:8px;padding:7px 8px;background:var(--panel2);position:relative;overflow:hidden;box-sizing:border-box}
 .cal .day.empty{background:transparent;border-color:transparent}
 .cal .day .d{font-family:var(--font-n);font-size:11px;color:var(--text3)}
-.cal .day .amt{font-family:var(--font-n);font-size:12.5px;margin-top:6px}
+.cal .day{overflow:hidden}
+.cal .day .amt{font-family:var(--font-n);font-size:12.5px;margin-top:6px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cal .day.verified{background:var(--gold-dim);border-color:var(--gold-soft)}
 .cal .day.verified .d{color:var(--gold)}
 .cal .day.verified::after{content:'✓';position:absolute;top:6px;right:8px;color:var(--gold);font-size:11px}
@@ -367,6 +368,13 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .cal .day.has-cashexp::before{content:'';position:absolute;top:7px;right:8px;width:7px;height:7px;border-radius:50%;background:var(--red)}
 .cal .day .cashexp{font-family:var(--font-n);font-size:11px;color:var(--red);margin-top:2px}
 .cal .day .envelope{font-family:var(--font-n);font-size:11px;color:var(--gold-strong);margin-top:1px;font-weight:600}
+/* tiny cash pickup status by the day number: Picked (collected) vs Store (still in store).
+   It sits on its own line under the number so a narrow cell never overflows. */
+.cal .day .pick-tag{display:inline-block;max-width:100%;font-family:var(--font-n);font-size:8px;
+  font-weight:700;line-height:1;padding:1px 3px;margin-top:1px;border-radius:3px;
+  letter-spacing:0.01em;white-space:nowrap;overflow:hidden;text-overflow:clip;box-sizing:border-box}
+.cal .day .pick-tag.picked{background:var(--gold-dim);color:var(--gold-strong)}
+.cal .day .pick-tag.instore{background:var(--panel2);color:var(--text3);border:1px solid var(--border-soft)}
 .cal-legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:12px;color:var(--text2);align-items:center}
 .cal-legend .lg-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}
 .cal-legend .lg-dot.gold{background:var(--gold)}
@@ -3553,6 +3561,18 @@ function CashLedger({corps, canEditIds, profile}){
 
   const save = async()=>{
     const m = modal;
+    // Counted-cash note: the amount is trigger-owned (mirrors the Cash tab count), so this
+    // saves the note only. Clearing it stores null, and the trigger no longer overwrites it.
+    if(m.mode==='count_note'){
+      setBusy(true);
+      try{
+        const { error } = await sb.from('cash_ledger').update({ memo:(m.memo||'').trim()||null }).eq('id', m.editId);
+        if(error) throw error;
+        setModal(null); showToast('Note saved'); reload();
+      }catch(e){ showToast('Save failed: '+(e.message||e)); }
+      setBusy(false);
+      return;
+    }
     // Opening balance can be negative (a corp may start with a cash deficit). It is a single
     // number (not additive). A negative value is stored as an 'out' row so the balance nets down.
     if(m.mode==='opening'){
@@ -3639,6 +3659,12 @@ function CashLedger({corps, canEditIds, profile}){
     setBusy(false);
   };
 
+  // The counted-cash row's amount is owned by the Cash tab count, but its NOTE is yours,
+  // so a short-day explanation can be added, changed, or cleared here.
+  const openCountNote = (r)=>{
+    setModal({ mode:'count_note', editId:r.id, corp:r.corporation_id, date:r.date,
+      amount:String(r.amount), memo:r.memo||'' });
+  };
   // Open the modal pre-filled to edit an existing (manual) row. Auto rows are not editable.
   const openEdit = async(r)=>{
     if(r.auto_source==='cash_count') return;
@@ -3770,7 +3796,7 @@ function CashLedger({corps, canEditIds, profile}){
           <td className="rec-cat">{r.date}</td>
           <td className="num rec-amt" style={{color:r.direction==='in'?'var(--green)':'var(--red)'}}>{r.direction==='in'?'+':'\u2212'}{fmt$(Number(r.amount))}</td>
           <td className="rec-act" style={{textAlign:'right'}}>{r.auto_source==='cash_count'
-            ? <span className="faint" style={{fontSize:11}}>Cash tab</span>
+            ? <button className="btn btn-sm" disabled={busy} onClick={()=>openCountNote(r)}>{r.memo?'Note':'+ Note'}</button>
             : <><button className="btn btn-sm" disabled={busy} onClick={()=>openEdit(r)}>Edit</button>
                <button className="btn btn-sm btn-danger" style={{marginLeft:6}} disabled={busy} onClick={()=>del(r)}>&#10005;</button></>}</td>
         </tr>)}
@@ -3779,10 +3805,12 @@ function CashLedger({corps, canEditIds, profile}){
     {modal && <div className="modal-overlay" onClick={()=>setModal(null)}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
         <div className="modal-head">
-          <div className="modal-title" style={{textTransform:'capitalize'}}>{(modal.editId||modal.editGroup)?'Edit ':''}{modal.mode==='in'?'cash in':modal.mode==='out'?'cash out':modal.mode==='transfer'?'transfer':'opening balance'}</div>
+          <div className="modal-title" style={{textTransform:'capitalize'}}>{modal.mode==='count_note'?'Counted cash note':((modal.editId||modal.editGroup)?'Edit ':'')+(modal.mode==='in'?'cash in':modal.mode==='out'?'cash out':modal.mode==='transfer'?'transfer':'opening balance')}</div>
           <button className="modal-x" onClick={()=>setModal(null)}>✕</button>
         </div>
-        {modal.mode==='transfer' ? <>
+        {modal.mode==='count_note' ? <>
+          <div className="hint" style={{marginBottom:10}}>Counted cash for {modal.date}: <b>{fmt$(Number(modal.amount))}</b>. The amount follows the Cash tab count; add or clear a note here (for example, why the drawer was short).</div>
+        </> : modal.mode==='transfer' ? <>
           <label className="hint">From</label>
           <select style={{width:'100%',marginBottom:8}} disabled={!!modal.editGroup} value={modal.from} onChange={e=>setModal({...modal,from:e.target.value})}>{ledgerCorps.map(c=><option key={c.id} value={c.id}>{c.name||c.code}</option>)}</select>
           <label className="hint">To</label>
@@ -3791,7 +3819,7 @@ function CashLedger({corps, canEditIds, profile}){
           <label className="hint">Corporation</label>
           <select style={{width:'100%',marginBottom:8}} value={modal.corp} onChange={e=>{ const v=e.target.value; setModal({...modal,corp:v}); if(modal.mode==='out') loadCats(v); }}>{ledgerCorps.map(c=><option key={c.id} value={c.id}>{c.name||c.code}</option>)}</select>
         </>}
-        {modal.mode==='in' && <><label className="hint">Type</label>
+        {modal.mode!=='count_note' && modal.mode==='in' && <><label className="hint">Type</label>
           <select style={{width:'100%',marginBottom:8}} value={modal.kind} onChange={e=>setModal({...modal,kind:e.target.value})}>{CL_IN_KINDS.map(k=><option key={k[0]} value={k[0]}>{k[1]}</option>)}</select></>}
         {modal.mode==='out' && <><label className="hint">Type</label>
           <select style={{width:'100%',marginBottom:6}} value={modal.kind} onChange={e=>{ const k=e.target.value; setModal({...modal, kind:k, includePL: k==='cash_expense' ? true : modal.includePL}); }}>{(()=>{
@@ -3811,12 +3839,12 @@ function CashLedger({corps, canEditIds, profile}){
                   <button type="button" className="btn btn-sm btn-danger" onClick={()=>removeType(t)}>&#10005;</button>
                 </div>)}
           </div>}</>}
-        <div className="modal-2col" style={{display:'flex',gap:8,marginBottom:8}}>
+        {modal.mode!=='count_note' && <div className="modal-2col" style={{display:'flex',gap:8,marginBottom:8}}>
           <div style={{flex:1,minWidth:0}}><label className="hint">Amount</label>
             <input type="text" inputMode="text" style={{width:'100%'}} placeholder={modal.mode==='opening'?'e.g. 500 or -500':'0.00'} value={modal.amount} onChange={e=>setModal({...modal,amount:e.target.value})}/></div>
           <div style={{flex:1,minWidth:0}}><label className="hint">Date</label>
             <input type="date" style={{width:'100%'}} value={modal.date} onChange={e=>setModal({...modal,date:e.target.value})}/></div>
-        </div>
+        </div>}
         {modal.mode==='out' && <div style={{marginBottom:8}}>
           <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
             <input type="checkbox" checked={!!modal.includePL} onChange={e=>setModal({...modal,includePL:e.target.checked})}/>
@@ -4068,6 +4096,7 @@ function CashPage({corps, canEditIds, profile, isOwner, activeCorp, onCorp}){
             return <div key={date} onClick={()=>{ if(hasCash && isOwner) setDayModal({date}); }}
               className={'day'+(r&&r.verified?' verified':'')+(ce?' has-cashexp':'')+(countOk?' count-ok':'')+(countBad?' count-bad':'')+(hasCash&&isOwner?' tappable':'')}>
               <div className="d">{d}{countOk && <span className="day-check">✓</span>}{countBad && <span className="day-x">✕</span>}</div>
+              {hasCash && <div className={"pick-tag "+(r&&r.verified?"picked":"instore")}>{r&&r.verified?"Picked":"Store"}</div>}
               {r && sales!==0 && <div className="amt">{fmt$(sales,0)}</div>}
               {ce && <div className="cashexp" title={ce.items.map(x=>x.memo).filter(Boolean).join(', ')}>-{fmt$(expd,0)}</div>}
               {ce && sales!==0 && <div className="envelope">={fmt$(envelope,0)}</div>}
