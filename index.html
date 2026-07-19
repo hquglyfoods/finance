@@ -4069,6 +4069,16 @@ function CashPage({corps, canEditIds, profile, isOwner, activeCorp, onCorp}){
   };
 
   // per-day envelopes within the chosen pickup period: expected = cash sales - cash spent
+  // One rule for "picked up", shared by the calendar and the Count Envelopes list so they
+  // never disagree: a day is picked up if it lies within any recorded pickup period, or its
+  // daily_revenue row is flagged verified. Older pickups only set the period, not the flag,
+  // so the period check is what makes those show correctly.
+  const isPickedUp = React.useCallback((date)=>{
+    if(days[date] && days[date].verified) return true;
+    return (pickups||[]).some(pk=> pk.period_start && pk.period_end
+      && date >= pk.period_start && date <= pk.period_end);
+  },[days, pickups]);
+
   const envelopeDays = (()=>{
     if(!pk.period_start || !pk.period_end) return [];
     const out=[];
@@ -4079,7 +4089,7 @@ function CashPage({corps, canEditIds, profile, isOwner, activeCorp, onCorp}){
       if(sales===0 && spent===0) return;
       // A day can be counted only once its envelope has been picked up (verified). Until
       // then the cash is still in the store and there is nothing in hand to count.
-      out.push({date, sales, spent, expected:sales-spent, verified: !!days[date].verified});
+      out.push({date, sales, spent, expected:sales-spent, verified: isPickedUp(date)});
     });
     return out;
   })();
@@ -4186,9 +4196,9 @@ function CashPage({corps, canEditIds, profile, isOwner, activeCorp, onCorp}){
             const countBad = counted!=null && counted < envelope - SHORT_TOL + 0.001;
             const hasCash = sales!==0 || expd!==0;
             return <div key={date} onClick={()=>{ if(hasCash && isOwner) setDayModal({date}); }}
-              className={'day'+(r&&r.verified?' verified':'')+(ce?' has-cashexp':'')+(countOk?' count-ok':'')+(countBad?' count-bad':'')+(hasCash&&isOwner?' tappable':'')}>
+              className={'day'+(isPickedUp(date)?' verified':'')+(ce?' has-cashexp':'')+(countOk?' count-ok':'')+(countBad?' count-bad':'')+(hasCash&&isOwner?' tappable':'')}>
               <div className="d">{d}{countOk && <span className="day-check">✓</span>}{countBad && <span className="day-x">✕</span>}</div>
-              {hasCash && <div className={"pick-tag "+(r&&r.verified?"picked":"instore")}>{r&&r.verified?"Picked":"Store"}</div>}
+              {hasCash && <div className={"pick-tag "+(isPickedUp(date)?"picked":"instore")}>{isPickedUp(date)?"Picked":"Store"}</div>}
               {r && sales!==0 && <div className="amt">{fmt$(sales,0)}</div>}
               {ce && <div className="cashexp" title={ce.items.map(x=>x.memo).filter(Boolean).join(', ')}>-{fmt$(expd,0)}</div>}
               {ce && sales!==0 && <div className="envelope">={fmt$(envelope,0)}</div>}
@@ -4263,7 +4273,7 @@ function CashPage({corps, canEditIds, profile, isOwner, activeCorp, onCorp}){
     {dayModal && (()=>{
       const date=dayModal.date;
       const r=days[date]; const ce=cashExp[date];
-      const isVerified = !!(r && r.verified);
+      const isVerified = isPickedUp(date);
       const sales=r?Number(r.amount):0; const spent=ce?ce.total:0; const expected=sales-spent;
       const cnt=counts[date]; const has=cnt!==''&&cnt!=null; const diff=has?parseFloat(cnt||0)-expected:null;
       const ok=diff!==null&&diff> -SHORT_TOL; const short=diff!==null&&diff<=-SHORT_TOL;
