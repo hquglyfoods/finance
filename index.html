@@ -217,7 +217,11 @@ a{color:var(--gold);text-decoration:none}
 .date-chip::before{content:'📅';font-size:11px}
 .date-chip input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
 .method-seg{display:flex;gap:6px;margin:4px 0 8px;background:var(--panel2);border-radius:8px;padding:4px;width:fit-content}
-.method-opt{padding:7px 16px;border-radius:6px;border:none;background:transparent;color:var(--text2);font-weight:600;font-size:13px;cursor:pointer}
+.method-opt{padding:7px 16px;border-radius:6px;border:none;background:transparent;color:var(--text2);font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+@media(max-width:820px){
+  .method-seg{width:100%;gap:4px}
+  .method-opt{flex:1 1 0;padding:8px 4px;font-size:12.5px;text-align:center}
+}
 .method-opt.on{background:var(--panel);color:var(--gold-strong);box-shadow:var(--shadow)}
 .ie-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:11px;border-radius:10px;border:1.5px solid var(--border);background:var(--panel);color:var(--text2);font-size:14px;font-weight:600;cursor:pointer}
 .ie-btn .ie-ic{font-size:16px;font-weight:700;line-height:1}
@@ -3395,7 +3399,7 @@ function Entry({corps, canEditIds, profile, presetCorp, presetMode, activeCorp, 
         </div>
         <label className="hint">Paid with</label>
         <div className="method-seg">
-          {[['card','Card'],['cash','Cash'],['transfer','Transfer']].map(([v,l])=>
+          {[['card','Card'],['cash','Cash'],['transfer','Transfer'],['check','Check']].map(([v,l])=>
             <button key={v} type="button" className={'method-opt'+(form.method===v?' on':'')}
               onClick={()=>setForm({...form,method:v})}>{l}</button>)}
         </div>
@@ -3491,7 +3495,7 @@ function Entry({corps, canEditIds, profile, presetCorp, presetMode, activeCorp, 
         <input style={{width:'100%',marginBottom:10}} value={eForm.payee} onChange={e=>setEForm({...eForm,payee:e.target.value})} placeholder="Vendor / person"/>
         <label className="hint">Paid with</label>
         <div className="method-seg" style={{marginBottom:14}}>
-          {[['card','Card'],['cash','Cash'],['transfer','Transfer']].map(([v,l])=>
+          {[['card','Card'],['cash','Cash'],['transfer','Transfer'],['check','Check']].map(([v,l])=>
             <button key={v} type="button" className={'method-opt'+(eForm.method===v?' on':'')}
               onClick={()=>setEForm({...eForm,method:v})}>{l}</button>)}
         </div>
@@ -3912,29 +3916,59 @@ function CashPage({corps, canEditIds, profile, isOwner, activeCorp, onCorp}){
   const [cnotes, setCnotes] = useState({});   // date -> note explaining a shortage
   const [editingId, setEditingId] = useState(null);
   const [dayModal, setDayModal] = useState(null);   // {date} when a calendar day is tapped
+  const _genRef = React.useRef(0);       // guards against a slow load overwriting a newer one
+  const _corpRef = React.useRef(null);   // which store the on-screen data belongs to
+  const _ymRef = React.useRef(null);     // which month the on-screen counts/notes belong to
 
   const reload = useCallback(async()=>{
-    if(!corpId) return;
-    const ch = await sb.from('revenue_channels').select('id,code').eq('corporation_id',corpId).eq('code','cash').maybeSingle();
-    if(!ch.data){ setCashChId(null); setDays({}); return; }
-    setCashChId(ch.data.id);
+    if(!corpId){ setDays({}); setPickups([]); setCashExp({}); setCounts({}); setCnotes({}); setCashChId(null); return; }
+    // This run's generation. If the store (or month) changes before the awaits below
+    // return, a newer run bumps the generation and this stale one must not write state.
+    const gen = ++_genRef.current;
+    const isCurrent = ()=> _genRef.current===gen;
+    const forCorp = corpId;
+
+    const ch = await sb.from('revenue_channels').select('id,code').eq('corporation_id',forCorp).eq('code','cash').maybeSingle();
+    if(!isCurrent()) return;
+    if(!ch.data){ setCashChId(null); setDays({}); setPickups([]); setCashExp({}); setCounts({}); setCnotes({}); return; }
     const start=`${y}-${pad(m)}-01`, end=`${y}-${pad(m)}-${pad(lastDay(y,m))}`;
     const [rv, pks, cex] = await Promise.all([
-      sb.from('daily_revenue').select('*').eq('corporation_id',corpId).eq('channel_id',ch.data.id).gte('date',start).lte('date',end),
-      sb.from('cash_pickups').select('*').eq('corporation_id',corpId).order('pickup_date',{ascending:false}).limit(10),
-      sb.from('expenses').select('date,amount,memo,method,status').eq('corporation_id',corpId).eq('method','cash').eq('status','confirmed').gte('date',start).lte('date',end),
+      sb.from('daily_revenue').select('*').eq('corporation_id',forCorp).eq('channel_id',ch.data.id).gte('date',start).lte('date',end),
+      sb.from('cash_pickups').select('*').eq('corporation_id',forCorp).order('pickup_date',{ascending:false}).limit(10),
+      sb.from('expenses').select('date,amount,memo,method,status').eq('corporation_id',forCorp).eq('method','cash').eq('status','confirmed').gte('date',start).lte('date',end),
     ]);
+    // A newer run (different store/month) started while we awaited: drop this result so it
+    // cannot paint the previous store's numbers over the current one.
+    if(!isCurrent()) return;
+    setCashChId(ch.data.id);
     const map={}; (rv.data||[]).forEach(r=>map[r.date]=r);
-    // cash expenses grouped by day
     const cexMap={}; (cex.data||[]).forEach(e=>{ (cexMap[e.date]=cexMap[e.date]||{total:0,items:[]}); cexMap[e.date].total+=Number(e.amount); cexMap[e.date].items.push(e); });
-    // load any previously-counted amounts so the check persists across reloads
     const savedCounts={}; (rv.data||[]).forEach(r=>{ if(r.counted_amount!=null) savedCounts[r.date]=String(r.counted_amount); });
     const savedNotes={}; (rv.data||[]).forEach(r=>{ if(r.count_note) savedNotes[r.date]=r.count_note; });
     setDays(map); setPickups(pks.data||[]); setCashExp(cexMap);
-    setCounts(prev=>({...savedCounts, ...prev}));
-    setCnotes(prev=>({...savedNotes, ...prev}));
+    // Replace, do NOT merge with prev. Merging carried the previous store's counts/notes
+    // onto the new store, which is what showed "strange data" after switching stores.
+    setCounts(savedCounts);
+    setCnotes(savedNotes);
   },[corpId,y,m]);
-  useEffect(()=>{ reload(); },[reload]);
+
+  useEffect(()=>{
+    const ym = y+'-'+m;
+    const storeChanged = _corpRef.current && _corpRef.current !== corpId;
+    const monthChanged = _ymRef.current && _ymRef.current !== ym;
+    // Clear the on-screen count/note state the instant the store OR the month changes, so a
+    // slow reload never leaves last month's (or another store's) counts painted on the new
+    // view. This is what made weeks-old test entries appear to "come back": the state from
+    // the previous month/store lingered until the new query returned.
+    if(storeChanged || monthChanged){
+      setDays({}); setCashExp({}); setCounts({}); setCnotes({});
+      setEditingId(null); setDayModal(null);
+      if(storeChanged){ setPickups([]); setCashChId(null); setPickupOpen(false); }
+    }
+    _corpRef.current = corpId;
+    _ymRef.current = ym;
+    reload();
+  },[reload]);
 
   const savePickup = async()=>{
     if(!pk.period_start || !pk.period_end){ showToast('Enter the pickup period'); return; }
@@ -3975,15 +4009,37 @@ function CashPage({corps, canEditIds, profile, isOwner, activeCorp, onCorp}){
   // persist a single day's counted cash immediately (so the check survives reloads)
   const saveCount = async(date, val)=>{
     if(!cashChId) return;
-    const num = (val===''||val==null) ? null : parseFloat(val);
-    await sb.from('daily_revenue').update({counted_amount:num})
-      .eq('corporation_id',corpId).eq('channel_id',cashChId).eq('date',date);
+    const num = (val===''||val==null||isNaN(parseFloat(val))) ? null : parseFloat(val);
+    // Update the cash row for this day. Capture the store this write is for, so a store
+    // switch mid-edit cannot misfile it.
+    const forCorp = corpId, forCh = cashChId;
+    const { data, error } = await sb.from('daily_revenue')
+      .update({counted_amount:num})
+      .eq('corporation_id',forCorp).eq('channel_id',forCh).eq('date',date)
+      .select('id');
+    if(error){ showToast('Count save failed: '+error.message); return; }
+    // No cash row exists for this day (a zero-sales day never got one). If the user typed a
+    // real amount, create the row so the count is not silently dropped; if they cleared it,
+    // there is nothing to store.
+    if((!data || data.length===0) && num!=null){
+      const { error: insErr } = await sb.from('daily_revenue').insert({
+        corporation_id:forCorp, channel_id:forCh, date, amount:0, counted_amount:num, source:'manual' });
+      if(insErr){ showToast('Count save failed: '+insErr.message); return; }
+    }
+    // Keep local state exact: drop the key entirely when cleared, so an emptied count can
+    // never be re-shown from a stale entry.
+    if(num==null) setCounts(prev=>{ const n={...prev}; delete n[date]; return n; });
   };
   // note explaining a shortage (e.g. "bill stuck in register")
   const saveNote = async(date, val)=>{
     if(!cashChId) return;
-    await sb.from('daily_revenue').update({count_note: val||null})
-      .eq('corporation_id',corpId).eq('channel_id',cashChId).eq('date',date);
+    const clean = (val||'').trim() || null;
+    const forCorp = corpId, forCh = cashChId;
+    const { error } = await sb.from('daily_revenue')
+      .update({count_note: clean})
+      .eq('corporation_id',forCorp).eq('channel_id',forCh).eq('date',date);
+    if(error){ showToast('Note save failed: '+error.message); return; }
+    if(clean==null) setCnotes(prev=>{ const n={...prev}; delete n[date]; return n; });
   };
 
   const editPickup = (p)=>{    setEditingId(p.id);
@@ -4170,7 +4226,7 @@ function CashPage({corps, canEditIds, profile, isOwner, activeCorp, onCorp}){
             <td className="num mono"><b>{fmt$(e.expected,0)}</b></td>
             <td className="num env-cnt">
               <input type="number" step="0.01" className="env-input" placeholder={fmt$(e.expected,0)}
-                value={cnt||''} onChange={ev=>setCounts({...counts,[e.date]:ev.target.value})}
+                value={cnt||''} onChange={ev=>{const v=ev.target.value; setCounts(prev=>({...prev,[e.date]:v}));}}
                 onBlur={ev=>saveCount(e.date, ev.target.value)}/>
               {diff!==null && <div className={'env-diff '+(ok?'pos':'neg')}>{ok?'✓ ':'✕ '}{(diff>0?'+':'')+fmt$(diff,0)}</div>}
             </td>
@@ -4178,7 +4234,7 @@ function CashPage({corps, canEditIds, profile, isOwner, activeCorp, onCorp}){
             {showNote && <tr className="env-note-row">
               <td colSpan={5}>
                 <input className="env-note" placeholder="Why was it short? (e.g. bill stuck in register, found next day)"
-                  value={note} onChange={ev=>setCnotes({...cnotes,[e.date]:ev.target.value})}
+                  value={note} onChange={ev=>{const v=ev.target.value; setCnotes(prev=>({...prev,[e.date]:v}));}}
                   onBlur={ev=>saveNote(e.date, ev.target.value)}/>
               </td>
             </tr>}
@@ -4211,7 +4267,7 @@ function CashPage({corps, canEditIds, profile, isOwner, activeCorp, onCorp}){
           {cnotes[date] && <div className="day-memo"><span className="day-memo-lbl">Note</span>{cnotes[date]}</div>}
           <label className="hint" style={{marginTop:8}}>Counted (what was actually in the envelope)</label>
           <input type="number" step="0.01" className="env-input" style={{width:'100%',fontSize:16}} placeholder={fmt$(expected,0)}
-            value={cnt||''} onChange={ev=>setCounts({...counts,[date]:ev.target.value})}
+            value={cnt||''} onChange={ev=>{const v=ev.target.value; setCounts(prev=>({...prev,[date]:v}));}}
             onBlur={ev=>saveCount(date, ev.target.value)}/>
           {diff!==null && <div className={'modal-diff '+(ok?'pos':'neg')}>
             {ok ? <>✓ Envelope has enough{diff>0?` (+${fmt$(diff,0)} over)`:''}</> : <>✕ Short by {fmt$(Math.abs(diff),0)}</>}
@@ -4219,7 +4275,7 @@ function CashPage({corps, canEditIds, profile, isOwner, activeCorp, onCorp}){
           {(short||cnotes[date]) && <>
             <label className="hint" style={{marginTop:10}}>Note (why was it short? update later if you find the cause)</label>
             <input className="env-note" style={{width:'100%'}} placeholder="e.g. bill stuck in register, found next day"
-              value={cnotes[date]||''} onChange={ev=>setCnotes({...cnotes,[date]:ev.target.value})}
+              value={cnotes[date]||''} onChange={ev=>{const v=ev.target.value; setCnotes(prev=>({...prev,[date]:v}));}}
               onBlur={ev=>saveNote(date, ev.target.value)}/>
           </>}
           <button className="btn btn-gold" style={{width:'100%',marginTop:14}} onClick={()=>{ setDayModal(null); showToast('Saved'); }}>Done</button>
