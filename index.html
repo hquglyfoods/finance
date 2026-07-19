@@ -4233,6 +4233,11 @@ function CashPage({corps, canEditIds, profile, isOwner, activeCorp, onCorp}){
     </div>
     {isOwner && <div className="card">
       <h3>Count Envelopes · {MONTHS[m-1]} {y}</h3>
+      <div style={{background:'#1A1712',color:'#F5F0E6',font:'11px/1.4 monospace',padding:'8px 10px',borderRadius:8,marginBottom:10,whiteSpace:'pre-wrap',wordBreak:'break-all'}}>
+        {'DEBUG pickups ('+(pickups||[]).length+'): '+JSON.stringify((pickups||[]).map(pk=>({s:pk.period_start,e:pk.period_end})))}
+        {'\nsample day 2026-07-05 -> isPickedUp='+String(isPickedUp('2026-07-05'))+', days row='+JSON.stringify(days['2026-07-05']?{v:days['2026-07-05'].verified,pid:days['2026-07-05'].pickup_id}:null)}
+        {'\nmonthEnvelopes verified flags: '+JSON.stringify(monthEnvelopes.map(e=>({d:e.date.slice(5),v:e.verified})))}
+      </div>
       {monthEnvelopes.length===0 ? <div className="faint">No cash days this month yet.</div> :
       <table className="t env-table"><thead><tr>
         <th>Day</th><th className="num">Sales</th><th className="num">Spent</th><th className="num">Expected</th><th className="num">Counted</th>
