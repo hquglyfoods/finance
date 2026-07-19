@@ -6063,9 +6063,13 @@ function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsight
         timed('revToday', sb.from('daily_revenue').select('corporation_id,channel_id,amount,source').in('corporation_id',ids).eq('date',date)),
         timed('expToday', sb.from('expenses').select('corporation_id').in('corporation_id',ids).eq('date',date).eq('status','confirmed')),
         timed('pending', sb.from('expenses').select('corporation_id').in('corporation_id',ids).eq('status','pending')),
-        timed('revMonth', fetchAllRows(()=>sb.from('daily_revenue').select('id,corporation_id,date,amount').in('corporation_id',ids).gte('date',monthStart).lte('date',date).gt('amount',0).order('date'))),
+        // Month-to-date: only need WHICH DAYS have revenue (for the "days entered" count).
+        // The server returns one row per (store, day) instead of every revenue row.
+        timed('revMonth', sb.rpc('home_days_with_revenue', { p_corp_ids: ids, p_start: monthStart, p_end: date })),
         timed('closes', isOwner ? sb.from('monthly_close').select('corporation_id,status').in('corporation_id',ids).eq('year',prev.y).eq('month',prev.m) : Promise.resolve({data:[]})),
-        timed('rev14', fetchAllRows(()=>sb.from('daily_revenue').select('id,corporation_id,channel_id,date,amount').in('corporation_id',ids).gte('date',winStart).lte('date',date).order('date'))),
+        // 14-day window: the server returns each store's per-day counted-in total (channel
+        // multiplier and counts_in_total already applied), not the raw rows.
+        timed('rev14', sb.rpc('home_daily_sales', { p_corp_ids: ids, p_start: winStart, p_end: date })),
         // hourly snapshots of last week's same day; missing table or rows just
         // falls back to the full-day comparison, so errors are ignored
         timed('snapshots', sb.from('revenue_snapshots').select('corporation_id,hour,minute,amount').in('corporation_id',ids).eq('date',lwIso).then(r=>r, ()=>({data:[]}))),
@@ -6086,13 +6090,13 @@ function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsight
       });
       (expToday.data||[]).forEach(r=>{ if(per[r.corporation_id]) per[r.corporation_id].exp++; });
       (pend.data||[]).forEach(r=>{ if(per[r.corporation_id]) per[r.corporation_id].pending++; });
-      (revMonth||[]).forEach(r=>{ if(per[r.corporation_id]) per[r.corporation_id].daysDone.add(r.date); });
+      ((revMonth&&revMonth.data)||[]).forEach(r=>{ if(per[r.corporation_id]) per[r.corporation_id].daysDone.add(r.date); });
       (closes.data||[]).forEach(r=>{ if(per[r.corporation_id]) per[r.corporation_id].closed = r.status==='published'; });
-      // per-day totals over the 14-day window (respecting counts_in_total + multiplier)
+      // per-day totals over the 14-day window. The server already applied counts_in_total
+      // and the channel multiplier, so each row is a store's finished daily total.
       const dayTot = {}; ids.forEach(id=>dayTot[id]={});
-      (rev14||[]).forEach(r=>{ const ch=chBy[r.channel_id]; if(!ch||!ch.counts_in_total) return;
-        const t=dayTot[r.corporation_id]; if(!t) return;
-        t[r.date]=(t[r.date]||0)+Number(r.amount)*Number(ch.total_multiplier); });
+      ((rev14&&rev14.data)||[]).forEach(r=>{ const t=dayTot[r.corporation_id]; if(!t) return;
+        t[r.date]=(t[r.date]||0)+Number(r.total); });
       const dstr = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
       editable.forEach(c=>{ const t=dayTot[c.id]||{};
         const week=[]; for(let i=6;i>=0;i--){ const d=new Date(now); d.setDate(d.getDate()-i);
