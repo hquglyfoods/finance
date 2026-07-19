@@ -1013,6 +1013,18 @@ const SUPABASE_KEY = 'sb_publishable_yB8d3pf-ZqUiMiSKIGl69A_FZQgQbF1';
 const FN_BASE = '/.netlify/functions';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// ---- Boot timing (measurement only; does not change any loading logic) ----
+// Records how long each startup step takes so we can see the real bottleneck.
+// Turn off by setting localStorage 'ft_perf' to '0'. Nothing here alters data flow.
+window.__perf = { t0: (window.performance && performance.now) ? performance.now() : Date.now(), marks: [] };
+window.__mark = (label)=>{
+  try{
+    const now = (window.performance && performance.now) ? performance.now() : Date.now();
+    window.__perf.marks.push({ label, at: Math.round(now - window.__perf.t0) });
+  }catch(e){}
+};
+window.__mark('script parsed');
+
 // ================= HELPERS =================
 // Every tab with a store picker uses this so the store you chose follows you across tabs.
 // It takes the app-wide selection when that store is available on this tab, otherwise falls
@@ -6094,6 +6106,7 @@ function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsight
           .map(x=>({name:x.name, amount:x.amount}));
       });
       setData(per);
+      if(!window.__perf.firstDataDone){ window.__perf.firstDataDone=true; window.__mark('home data ready'); }
     })();
     return ()=>{dead=true};
   },[ids.join(','), date, tick]);
@@ -6386,6 +6399,39 @@ const NAV = [
   {id:'alerts',    label:'Install', full:'Install App',     ic:'⬇', roles:['owner','assistant','investor','viewer']},
 ];
 
+// Boot-timing panel (measurement only). Shows how long each startup step took, so we can
+// see the real bottleneck. It reads window.__perf, which is filled by __mark() calls placed
+// around the existing loads; it does not change any loading behaviour. Hidden unless the
+// URL has ?perf=1 or localStorage ft_perf==='1'. Tap the header to collapse.
+function PerfPanel(){
+  const on = (()=>{ try{ return new URLSearchParams(location.search).get('perf')==='1' || localStorage.getItem('ft_perf')==='1'; }catch(e){ return false; } })();
+  const [open,setOpen]=useState(true);
+  const [rows,setRows]=useState([]);
+  useEffect(()=>{
+    if(!on) return;
+    const ti=setInterval(()=>{
+      const m=(window.__perf&&window.__perf.marks)||[];
+      setRows(m.map((x,i)=>({...x, delta: i>0 ? x.at-m[i-1].at : x.at})));
+    }, 300);
+    return ()=>clearInterval(ti);
+  },[on]);
+  if(!on) return null;
+  const total = rows.length ? rows[rows.length-1].at : 0;
+  return <div style={{position:'fixed',left:8,right:8,bottom:8,zIndex:9998,background:'#1A1712',color:'#F5F0E6',
+    borderRadius:10,padding:'10px 12px',font:'12px/1.4 IBM Plex Mono, monospace',boxShadow:'0 6px 24px rgba(0,0,0,.35)',maxHeight:'46vh',overflow:'auto'}}>
+    <div onClick={()=>setOpen(o=>!o)} style={{cursor:'pointer',display:'flex',justifyContent:'space-between',fontWeight:700,marginBottom:open?8:0}}>
+      <span>Boot timing — total {total} ms</span><span>{open?'▾':'▸'}</span></div>
+    {open && <table style={{width:'100%',borderCollapse:'collapse'}}><tbody>
+      {rows.map((r,i)=><tr key={i}>
+        <td style={{padding:'2px 6px 2px 0',color:'#C9C0AE'}}>{r.label}</td>
+        <td style={{padding:'2px 6px',textAlign:'right'}}>{r.at} ms</td>
+        <td style={{padding:'2px 0 2px 6px',textAlign:'right',color: r.delta>800?'#E0736A':(r.delta>300?'#E7C15A':'#8FBF8F')}}>+{r.delta}</td>
+      </tr>)}
+      {!rows.length && <tr><td style={{color:'#948B7C'}}>collecting…</td></tr>}
+    </tbody></table>}
+  </div>;
+}
+
 function App(){
   const [session,setSession] = useState(undefined);
   const [profile,setProfile] = useState(null);
@@ -6422,21 +6468,26 @@ function App(){
   const [fatal,setFatal] = useState(null);
 
   useEffect(()=>{
-    sb.auth.getSession().then(({data})=>setSession(data.session||null));
+    window.__mark('getSession start');
+    sb.auth.getSession().then(({data})=>{ window.__mark('getSession done'); setSession(data.session||null); });
     const { data:sub } = sb.auth.onAuthStateChange((_e,s)=>setSession(s));
     return ()=>sub.subscription.unsubscribe();
   },[]);
 
   useEffect(()=>{ if(!session){ setProfile(null); return; } let dead=false;
     (async()=>{
+      window.__mark('profile fetch start');
       const p = await sb.from('profiles').select('*').eq('id',session.user.id).maybeSingle();
+      window.__mark('profile fetch done');
       if(dead) return;
       if(!p.data || !p.data.active){ setFatal('This account does not have access to Finance Tool.'); return; }
       setProfile(p.data);
+      window.__mark('corps+perms start');
       const [c, pm] = await Promise.all([
         sb.from('corporations').select('*').order('display_order'),
         sb.from('permissions').select('*').eq('profile_id',session.user.id),
       ]);
+      window.__mark('corps+perms done');
       if(dead) return;
       setCorps(c.data||[]); setPerms(pm.data||[]);
     })();
@@ -6534,6 +6585,7 @@ function App(){
       </div>
     </div>
     <div className="main">{page}</div>
+    <PerfPanel/>
     <nav className="tabbar">
       {coreNav.map(n=><button key={n.id} className={effTab===n.id?'on':''} onClick={()=>setTab(n.id)}>
         <span className="ic">{n.ic}{n.id==='approvals' && pendingCount>0 && <span className="tab-dot">{pendingCount>9?'9+':pendingCount}</span>}</span>{n.label}</button>)}
