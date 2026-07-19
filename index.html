@@ -6049,17 +6049,26 @@ function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsight
       const _tp = new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'numeric',hourCycle:'h23'}).formatToParts(new Date());
       const _g = t => Number((_tp.find(x=>x.type===t)||{}).value||0);
       const nowMin = _g('hour')*60 + _g('minute');
+      // Measurement only: time each of the eight parallel queries so we can see which one
+      // dominates the ~740ms 'home data ready' step. timed() wraps a promise and records
+      // its own duration; it changes nothing about what is fetched.
+      const _firstBoot = !window.__perf.firstDataDone;
+      const timed = (label, promise)=>{
+        if(!_firstBoot) return promise;
+        const s0 = performance.now();
+        return promise.then(r=>{ window.__perf.marks.push({label:'q: '+label, at: Math.round(performance.now()-window.__perf.t0), q:Math.round(performance.now()-s0)}); return r; });
+      };
       const [chAll, revToday, expToday, pend, revMonth, closes, rev14, snaps] = await Promise.all([
-        sb.from('revenue_channels').select('id,corporation_id,code,name,counts_in_total,total_multiplier').in('corporation_id',ids),
-        sb.from('daily_revenue').select('corporation_id,channel_id,amount,source').in('corporation_id',ids).eq('date',date),
-        sb.from('expenses').select('corporation_id').in('corporation_id',ids).eq('date',date).eq('status','confirmed'),
-        sb.from('expenses').select('corporation_id').in('corporation_id',ids).eq('status','pending'),
-        fetchAllRows(()=>sb.from('daily_revenue').select('id,corporation_id,date,amount').in('corporation_id',ids).gte('date',monthStart).lte('date',date).gt('amount',0).order('date')),
-        isOwner ? sb.from('monthly_close').select('corporation_id,status').in('corporation_id',ids).eq('year',prev.y).eq('month',prev.m) : Promise.resolve({data:[]}),
-        fetchAllRows(()=>sb.from('daily_revenue').select('id,corporation_id,channel_id,date,amount').in('corporation_id',ids).gte('date',winStart).lte('date',date).order('date')),
+        timed('channels', sb.from('revenue_channels').select('id,corporation_id,code,name,counts_in_total,total_multiplier').in('corporation_id',ids)),
+        timed('revToday', sb.from('daily_revenue').select('corporation_id,channel_id,amount,source').in('corporation_id',ids).eq('date',date)),
+        timed('expToday', sb.from('expenses').select('corporation_id').in('corporation_id',ids).eq('date',date).eq('status','confirmed')),
+        timed('pending', sb.from('expenses').select('corporation_id').in('corporation_id',ids).eq('status','pending')),
+        timed('revMonth', fetchAllRows(()=>sb.from('daily_revenue').select('id,corporation_id,date,amount').in('corporation_id',ids).gte('date',monthStart).lte('date',date).gt('amount',0).order('date'))),
+        timed('closes', isOwner ? sb.from('monthly_close').select('corporation_id,status').in('corporation_id',ids).eq('year',prev.y).eq('month',prev.m) : Promise.resolve({data:[]})),
+        timed('rev14', fetchAllRows(()=>sb.from('daily_revenue').select('id,corporation_id,channel_id,date,amount').in('corporation_id',ids).gte('date',winStart).lte('date',date).order('date'))),
         // hourly snapshots of last week's same day; missing table or rows just
         // falls back to the full-day comparison, so errors are ignored
-        sb.from('revenue_snapshots').select('corporation_id,hour,minute,amount').in('corporation_id',ids).eq('date',lwIso).then(r=>r, ()=>({data:[]})),
+        timed('snapshots', sb.from('revenue_snapshots').select('corporation_id,hour,minute,amount').in('corporation_id',ids).eq('date',lwIso).then(r=>r, ()=>({data:[]}))),
       ]);
       if(dead) return;
       const chBy = {}; (chAll.data||[]).forEach(c=>chBy[c.id]=c);
@@ -6423,9 +6432,9 @@ function PerfPanel(){
       <span>Boot timing — total {total} ms</span><span>{open?'▾':'▸'}</span></div>
     {open && <table style={{width:'100%',borderCollapse:'collapse'}}><tbody>
       {rows.map((r,i)=><tr key={i}>
-        <td style={{padding:'2px 6px 2px 0',color:'#C9C0AE'}}>{r.label}</td>
+        <td style={{padding:'2px 6px 2px 0',color: r.q!=null?'#E7C15A':'#C9C0AE'}}>{r.label}</td>
         <td style={{padding:'2px 6px',textAlign:'right'}}>{r.at} ms</td>
-        <td style={{padding:'2px 0 2px 6px',textAlign:'right',color: r.delta>800?'#E0736A':(r.delta>300?'#E7C15A':'#8FBF8F')}}>+{r.delta}</td>
+        <td style={{padding:'2px 0 2px 6px',textAlign:'right',color: (r.q!=null?r.q:r.delta)>800?'#E0736A':((r.q!=null?r.q:r.delta)>300?'#E7C15A':'#8FBF8F')}}>{r.q!=null?('took '+r.q):('+'+r.delta)}</td>
       </tr>)}
       {!rows.length && <tr><td style={{color:'#948B7C'}}>collecting…</td></tr>}
     </tbody></table>}
