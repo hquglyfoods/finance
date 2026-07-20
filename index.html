@@ -97,7 +97,7 @@ a{color:var(--gold);text-decoration:none}
 .bell{position:relative;flex:0 0 auto}
 .bell-btn{position:relative;background:none;border:none;cursor:pointer;padding:6px;border-radius:8px;display:flex;align-items:center;justify-content:center}
 .bell-btn:hover{background:var(--panel2)}
-.bell-ic{font-size:18px;line-height:1;filter:grayscale(.3)}
+.bell-ic{display:flex;align-items:center;justify-content:center;line-height:1;color:var(--text2)}
 .bell-badge{position:absolute;top:0;right:0;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:var(--red);color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center}
 .bell-panel{position:absolute;bottom:calc(100% + 8px);left:0;background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-lg);width:290px;max-height:60vh;overflow-y:auto;z-index:250}
 .bell-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border-soft);font-weight:700;font-size:13.5px;position:sticky;top:0;background:var(--panel)}
@@ -376,22 +376,22 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 /* cash calendar */
 .cal{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:96px;gap:6px}
 .cal .dow{font-family:var(--font-n);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);text-align:center;padding:4px 0}
-.cal .day{height:96px;border:1px solid var(--border-soft);border-radius:8px;padding:7px 8px;background:var(--panel2);position:relative;overflow:hidden;box-sizing:border-box}
+.cal .day{height:134px;border:1px solid var(--border-soft);border-radius:8px;padding:6px 7px;background:var(--panel2);position:relative;overflow:hidden;box-sizing:border-box}
 .cal .day.empty{background:transparent;border-color:transparent}
 .cal .day .d{font-family:var(--font-n);font-size:11px;color:var(--text3)}
 .cal .day{overflow:hidden}
-.cal .day .amt{font-family:var(--font-n);font-size:12.5px;margin-top:6px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal .day .amt{font-family:var(--font-n);font-size:12px;margin-top:2px;line-height:1.25;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cal .day.verified{background:var(--gold-dim);border-color:var(--gold-soft)}
 .cal .day.verified .d{color:var(--gold)}
 .cal .day.verified::after{content:'✓';position:absolute;top:6px;right:8px;color:var(--gold);font-size:11px}
 .cal .day.has-cashexp{border-color:var(--red-soft)}
 .cal .day.has-cashexp::before{content:'';position:absolute;top:7px;right:8px;width:7px;height:7px;border-radius:50%;background:var(--red)}
-.cal .day .cashexp{font-family:var(--font-n);font-size:11px;color:var(--red);margin-top:2px}
-.cal .day .envelope{font-family:var(--font-n);font-size:11px;color:var(--gold-strong);margin-top:1px;font-weight:600}
+.cal .day .cashexp{font-family:var(--font-n);font-size:10px;color:var(--red);margin-top:1px;line-height:1.2}
+.cal .day .envelope{font-family:var(--font-n);font-size:10px;color:var(--gold-strong);margin-top:0;font-weight:600;line-height:1.2}
 /* tiny cash pickup status by the day number: Picked (collected) vs Store (still in store).
    It sits on its own line under the number so a narrow cell never overflows. */
 .cal .day .pick-tag{display:inline-block;max-width:100%;font-family:var(--font-n);font-size:8px;
-  font-weight:700;line-height:1;padding:1px 3px;margin-top:1px;border-radius:3px;
+  font-weight:700;line-height:1;padding:1px 3px;margin-top:0;border-radius:3px;
   letter-spacing:0.01em;white-space:nowrap;overflow:hidden;text-overflow:clip;box-sizing:border-box}
 .cal .day .pick-tag.picked{background:var(--gold-dim);color:var(--gold-strong)}
 .cal .day .pick-tag.instore{background:var(--panel2);color:var(--text3);border:1px solid var(--border-soft)}
@@ -407,6 +407,7 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .pickup-chev{color:var(--gold-strong);font-size:16px;background:var(--panel);width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 2px rgba(0,0,0,0.08)}
 .pickup-body{padding:0 20px 20px;border-top:1px solid var(--border-soft)}
 .env-table .env-locked{font-size:12px;color:var(--text3);font-style:italic;white-space:nowrap}
+.env-input-disabled{background:var(--panel2);color:var(--text3);cursor:not-allowed;opacity:.65}
 .env-locked-box{font-size:13px;color:var(--text2);line-height:1.5;background:var(--panel2);
   border:1px solid var(--border-soft);border-radius:8px;padding:11px 13px;margin-top:2px}
 .env-input{width:100%;padding:6px 8px;font-family:var(--font-n);text-align:right;font-size:13px}
@@ -417,7 +418,7 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .env-day .env-day-d{display:block;line-height:1.3}
 /* pickup status under the day. Every row has one (Picked up / In store) so labelled
    and unlabelled rows keep the same height and the columns stay aligned. */
-.env-pick{display:inline-block;margin-top:3px;font-size:9.5px;font-weight:700;line-height:1;
+.env-pick{display:block;width:fit-content;font-family:var(--font-n);margin-top:3px;font-size:9.5px;font-weight:700;line-height:1;
   padding:2px 5px;border-radius:4px;letter-spacing:.02em;white-space:nowrap;font-family:var(--font-n)}
 .env-pick.picked{background:var(--gold-dim);color:var(--gold-strong)}
 .env-pick.instore{background:var(--panel2);color:var(--text3);border:1px solid var(--border-soft)}
@@ -469,7 +470,7 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 .cal .day.count-bad .d{color:var(--red)}
 .cal .day .day-check{color:var(--green);font-weight:700;margin-left:3px;font-size:11px}
 .cal .day .day-x{color:var(--red);font-weight:700;margin-left:3px;font-size:11px}
-.cal .day .counted-lbl{font-family:var(--font-n);font-size:9.5px;color:var(--green);margin-top:1px}
+.cal .day .counted-lbl{font-family:var(--font-n);font-size:8.5px;color:var(--green);margin-top:0;line-height:1.15}
 .cal-legend .lg-dot.green{background:var(--green)}
 .wc-card{padding:0;overflow:hidden;border:1px solid var(--gold-soft)}
 .wc-head{display:flex;align-items:center;justify-content:space-between;width:100%;background:var(--gold-dim);border:none;padding:12px 18px;cursor:pointer;text-align:left}
@@ -805,7 +806,7 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
   .env-diff{font-size:9.5px;font-weight:700;text-align:right;margin-top:2px;line-height:1.1}
   /* cash calendar tighter */
   .cal{gap:3px;grid-auto-rows:88px}
-  .cal .day{height:88px;padding:5px 5px}
+  .cal .day{height:130px;padding:5px 5px}
   .cal .day .amt{font-size:11px}
   .toast{bottom:92px}
 }
@@ -4220,11 +4221,10 @@ function CashPage({corps, canEditIds, profile, isOwner, activeCorp, onCorp}){
         <div className="card">
           <h3>Recent Pickups</h3>
           {pickups.length===0 ? <div className="faint">No records</div> :
-          <table className="t"><thead><tr><th>Pickup</th><th>Period</th><th className="num">Counted</th><th></th></tr></thead><tbody>
+          <table className="t"><thead><tr><th>Pickup</th><th>Period</th><th></th></tr></thead><tbody>
             {pickups.map(p=><tr key={p.id}>
               <td className="mono">{p.pickup_date}</td>
               <td className="mono" style={{fontSize:12}}>{p.period_start} ~ {p.period_end}</td>
-              <td className="num">{p.counted_amount!=null?fmt$(Number(p.counted_amount)):'-'}</td>
               <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
                 {isOwner && <button className="btn btn-sm" onClick={()=>editPickup(p)}>Edit</button>}
                 {isOwner && <button className="btn btn-sm btn-danger" style={{marginLeft:6}} onClick={()=>deletePickup(p)}>✕</button>}
@@ -4249,12 +4249,12 @@ function CashPage({corps, canEditIds, profile, isOwner, activeCorp, onCorp}){
             <td className="num mono" style={{color:e.spent?'var(--red)':'var(--text3)'}}>{e.spent?'-'+fmt$(e.spent,0):'-'}</td>
             <td className="num mono"><b>{fmt$(e.expected,0)}</b></td>
             <td className="num env-cnt">
-              {e.verified
-                ? <><input type="number" step="0.01" className="env-input" placeholder={fmt$(e.expected,0)}
-                    value={cnt||''} onChange={ev=>{const v=ev.target.value; setCounts(prev=>({...prev,[e.date]:v}));}}
-                    onBlur={ev=>saveCount(e.date, ev.target.value)}/>
-                  {diff!==null && <div className={'env-diff '+(ok?'pos':'neg')}>{ok?'✓ ':'✕ '}{(diff>0?'+':'')+fmt$(diff,0)}</div>}</>
-                : <span className="env-locked">Not picked up yet</span>}
+              <input type="number" step="0.01" className={'env-input'+(e.verified?'':' env-input-disabled')}
+                placeholder={fmt$(e.expected,0)} disabled={!e.verified}
+                value={e.verified?(cnt||''):''}
+                onChange={ev=>{const v=ev.target.value; setCounts(prev=>({...prev,[e.date]:v}));}}
+                onBlur={ev=>saveCount(e.date, ev.target.value)}/>
+              {e.verified && diff!==null && <div className={'env-diff '+(ok?'pos':'neg')}>{ok?'✓ ':'✕ '}{(diff>0?'+':'')+fmt$(diff,0)}</div>}
             </td>
             </tr>
             {showNote && <tr className="env-note-row">
@@ -6296,7 +6296,12 @@ function NotificationBell({profile, onNavigate, currentTab}){
   const timeAgo=(ts)=>{ const s=(Date.now()-new Date(ts))/1000; if(s<60)return'just now'; if(s<3600)return Math.floor(s/60)+'m ago'; if(s<86400)return Math.floor(s/3600)+'h ago'; return Math.floor(s/86400)+'d ago'; };
   return <div className="bell" ref={ref}>
     <button className="bell-btn" onClick={openPanel} aria-label="Notifications">
-      <span className="bell-ic">🔔</span>
+      <span className="bell-ic" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2.5a5.5 5.5 0 0 0-5.5 5.5c0 4-1.5 5.5-2.5 6.5h16c-1-1-2.5-2.5-2.5-6.5A5.5 5.5 0 0 0 12 2.5z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/>
+          <path d="M10 19a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>
+        </svg>
+      </span>
       {unread>0 && <span className="bell-badge">{unread>9?'9+':unread}</span>}
     </button>
     {open && <div className="bell-panel">
