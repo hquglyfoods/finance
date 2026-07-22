@@ -48,7 +48,19 @@ exports.handler = async (event) => {
   const map = {};
   (process.env.TOAST_RESTAURANTS || '').split(',').map(s => s.trim()).filter(Boolean)
     .forEach(p => { const [c, g] = p.split(':'); map[c] = g; });
-  const guid = map[q.store || 'AD'];
+  const wantCode = (q.store || 'AD').toUpperCase();
+  let guid = map[wantCode];
+  // Fall back to the DB (corporations.toast_guid) so franchises like Pearland that aren't
+  // in the env list can still be diagnosed.
+  if (!guid) {
+    try {
+      const cr = await fetch(`${process.env.SUPABASE_URL}/rest/v1/corporations?code=eq.${wantCode}&select=toast_guid`, {
+        headers: { apikey: process.env.SUPABASE_SERVICE_KEY, Authorization: 'Bearer ' + process.env.SUPABASE_SERVICE_KEY },
+      });
+      const rows = await cr.json();
+      if (Array.isArray(rows) && rows[0] && rows[0].toast_guid) guid = rows[0].toast_guid;
+    } catch (e) {}
+  }
   if (!guid) return { statusCode: 400, body: JSON.stringify({ error: 'unknown store' }) };
   const date = q.date || (() => { const d = new Date(); d.setDate(d.getDate() - 1);
     return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`; })();

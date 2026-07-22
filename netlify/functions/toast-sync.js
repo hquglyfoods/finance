@@ -108,11 +108,22 @@ async function diningNameMap(token, guid) {
   return map;
 }
 
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
 async function fetchOrders(token, guid, businessDate) {
   let orders = [], page = 1;
   while (page < 100) {
-    const res = await fetch(`${HOST}/orders/v2/ordersBulk?businessDate=${businessDate}&pageSize=100&page=${page}`,
-      { headers: { Authorization: 'Bearer ' + token, 'Toast-Restaurant-External-ID': guid } });
+    let res, tries = 0;
+    // Toast rate-limits bursts (HTTP 429). Retry a few times with growing backoff so a
+    // backfill doesn't drop days. Give up after 5 tries and surface the error.
+    while (true) {
+      res = await fetch(`${HOST}/orders/v2/ordersBulk?businessDate=${businessDate}&pageSize=100&page=${page}`,
+        { headers: { Authorization: 'Bearer ' + token, 'Toast-Restaurant-External-ID': guid } });
+      if (res.status !== 429) break;
+      tries++;
+      if (tries > 5) throw new Error(`orders ${businessDate} 429 (rate limited)`);
+      await sleep(1000 * tries);   // 1s, 2s, 3s, 4s, 5s
+    }
     if (!res.ok) throw new Error(`orders ${businessDate} ${res.status}`);
     const batch = await res.json();
     orders.push(...batch);
@@ -348,6 +359,8 @@ exports.handler = async (event) => {
     const offset = offsetForTz(storeTz);
     const dates = backfill ? rangeDates(backfill.start, backfill.end) : bizDates(offset);
     for (const d of dates) {
+      // gentle pacing during a backfill so we don't trip Toast's rate limit (429)
+      if (backfill) await sleep(250);
       let orders;
       try { orders = await fetchOrders(token, guid, d.ymd); }
       catch (e) { log.push(`${code} ${d.ymd}: ${e.message}`); continue; }
