@@ -2218,7 +2218,7 @@ function Dashboard({corps, franchiseCorps=[], allStoreCorps=[], canEditIds, pres
           <div className="mono" style={{marginTop:10,fontSize:12,color:'var(--red)'}}>{loadErr}</div>
           <button className="btn" style={{marginTop:12}} onClick={()=>setRefresh(x=>x+1)}>Try again</button>
         </div> :
-      isFranchise ? <FranchiseRevenueView pl={pl} dayRows={dayRows} y={y} m={m} view={view}/> :
+      isFranchise ? <FranchiseRevenueView pl={pl} dayRows={dayRows} y={y} m={m} view={view} corpId={corpId}/> :
       view==='month'   ? <MonthView pl={pl} yoy={yoy} trend={trend} y={y} m={m}/> :
       view==='daily'   ? <DailyView rows={dayRows} pl={pl} yoy={yoy} y={y} m={m} isOwner={isOwner} categories={(meta&&meta.categories)||[]} onChanged={()=>setRefresh(x=>x+1)} onMonth={(a,b)=>{setY(a);setM(b);}}/> :
       view==='year'    ? <YearView months={yearMonths} y={y} yearMode={yearMode} onYearMode={setYearMode}
@@ -2390,8 +2390,14 @@ function AllStoresView({corps, y, m, view='month'}){
       setRows(null); setErr(null);
       try{
         const ids = corps.map(c=>c.id);
-        const start = `${y}-${pad(m)}-01`;
-        const end = `${y}-${pad(m)}-${pad(new Date(y,m,0).getDate())}`;
+        const nowD0 = new Date();
+        const start = view==='alltime' ? '2020-01-01'
+          : view==='year' ? `${y}-01-01`
+          : `${y}-${pad(m)}-01`;
+        const end = (view==='alltime')
+          ? `${nowD0.getFullYear()}-${pad(nowD0.getMonth()+1)}-${pad(nowD0.getDate())}`
+          : view==='year' ? `${y}-12-31`
+          : `${y}-${pad(m)}-${pad(new Date(y,m,0).getDate())}`;
         const { data, error } = await sb.rpc('home_daily_sales', { p_corp_ids: ids, p_start: start, p_end: end });
         if(error) throw error;
         // data: [{corporation_id, date, total}]
@@ -2408,15 +2414,65 @@ function AllStoresView({corps, y, m, view='month'}){
       }catch(e){ if(alive) setErr(e.message||String(e)); }
     })();
     return ()=>{ alive=false; };
-  },[corps.map(c=>c.id).join(','), y, m]);
+  },[corps.map(c=>c.id).join(','), y, m, view]);
 
   if(err) return <div className="card"><h3>Could not load system totals</h3><div className="mono" style={{color:'var(--red)',marginTop:8,fontSize:12}}>{err}</div></div>;
   if(!rows) return <Spinner/>;
   const grand = rows.reduce((a,r)=>a+r.total,0);
-
-  // per-day system totals across every store, for the Daily list
-  const daysInMonth = new Date(y, m, 0).getDate();
   const nowD = new Date();
+
+  // ---- Year / All-Time: aggregate across stores by month or year, with a chart ----
+  if(view==='year' || view==='alltime'){
+    const buckets = {};   // 'YYYY-MM' or 'YYYY' -> total
+    rows.forEach(r=>Object.entries(r.days).forEach(([ds,amt])=>{
+      const key = view==='year' ? ds.slice(0,7) : ds.slice(0,4);
+      buckets[key] = (buckets[key]||0) + amt;
+    }));
+    let aggRows;
+    if(view==='year'){
+      aggRows = [];
+      for(let mm=1; mm<=12; mm++) aggRows.push({ lbl:MONTHS[mm-1].slice(0,3), total:buckets[`${y}-${pad(mm)}`]||0 });
+    } else {
+      aggRows = Object.keys(buckets).sort().map(k=>({ lbl:k, total:buckets[k] }));
+    }
+    const label = view==='year' ? `${y}` : 'All Time';
+    const chartPoints = aggRows.map(r=>({ v:r.total, lbl:r.lbl, wknd:false }));
+    return <>
+      <div className="kpis kpis-1">
+        <div className="kpi accent-gold"><div className="k-lbl">All Ugly Donuts stores · {label}</div>
+          <div className="k-val"><KVal v={grand}/></div>
+          <div className="k-sub faint">{rows.length} stores · system-wide sales (revenue only)</div></div>
+      </div>
+      <div className="card" style={{marginTop:16}}>
+        <h3>Sales trend · {label}</h3>
+        <FranchiseSalesChart points={chartPoints}/>
+      </div>
+      <div className="card" style={{marginTop:16}}>
+        <h3>Sales by store · {label}</h3>
+        <table className="t" style={{marginTop:8}}><tbody>
+          {rows.map(r=><tr key={r.corp.id}>
+            <td>{r.corp.display_name || r.corp.name || r.corp.code}
+              {r.corp.corp_type==='franchisee' && <span className="faint" style={{fontSize:11,marginLeft:6}}>franchise</span>}</td>
+            <td className="num mono" style={{fontWeight:600}}>{fmt$(r.total)}</td>
+            <td className="num faint" style={{width:70}}>{grand?Math.round(r.total/grand*100):0}%</td>
+          </tr>)}
+        </tbody></table>
+      </div>
+      <div className="card" style={{marginTop:16}}>
+        <h3>{view==='year' ? `${y} by Month` : 'By Year'}</h3>
+        <table className="t" style={{marginTop:8}}><tbody>
+          {aggRows.map((r,i)=><tr key={i}>
+            <td className="mono">{r.lbl}</td>
+            <td className="num mono" style={{fontWeight:600}}>{r.total?fmt$(r.total):'-'}</td>
+            <td className="num faint" style={{width:70}}>{grand?Math.round(r.total/grand*100):0}%</td>
+          </tr>)}
+        </tbody></table>
+      </div>
+    </>;
+  }
+
+  // ---- Daily / Month ----
+  const daysInMonth = new Date(y, m, 0).getDate();
   const isCurMonth = nowD.getFullYear()===y && (nowD.getMonth()+1)===m;
   const lastDay = isCurMonth ? nowD.getDate() : daysInMonth;
   const dayTotals = [];
@@ -2432,6 +2488,19 @@ function AllStoresView({corps, y, m, view='month'}){
     ? `All Ugly Donuts stores · ${MONTHS[m-1]} ${todayRow?todayRow.d:''}${isCurMonth?' (today)':''}`
     : `All Ugly Donuts stores · ${MONTHS[m-1]} ${y}`;
 
+  // best / slowest system day (among days with sales)
+  const withSales = dayTotals.filter(r=>r.total>0);
+  let bestDay=null, slowDay=null;
+  if(withSales.length>=2){
+    bestDay = withSales.reduce((a,r)=>r.total>a.total?r:a).d;
+    slowDay = withSales.reduce((a,r)=>r.total<a.total?r:a).d;
+  }
+  const chartPoints = dayTotals.map(r=>{
+    const dt = new Date(y, m-1, r.d);
+    const dow = dt.getDay();
+    return { v:r.total, lbl:String(r.d), wknd:dow===0||dow===6 };
+  });
+
   return <>
     <div className="kpis kpis-1">
       <div className="kpi accent-gold"><div className="k-lbl">{headLbl}</div>
@@ -2439,6 +2508,11 @@ function AllStoresView({corps, y, m, view='month'}){
         <div className="k-sub faint">{rows.length} stores · system-wide sales (revenue only)
           {isDaily && <span> · month to date {fmt$(grand,0)}</span>}</div></div>
     </div>
+
+    {chartPoints.length>0 && <div className="card" style={{marginTop:16}}>
+      <h3>Sales trend · {MONTHS[m-1]} {y} <span className="faint" style={{fontWeight:400,fontSize:12}}>all stores combined</span></h3>
+      <FranchiseSalesChart points={chartPoints}/>
+    </div>}
 
     <div className="card" style={{marginTop:16}}>
       <h3>Sales by store · {isDaily && todayRow ? `${MONTHS[m-1]} ${todayRow.d}` : `${MONTHS[m-1]} ${y}`}</h3>
@@ -2458,15 +2532,19 @@ function AllStoresView({corps, y, m, view='month'}){
 
     {isDaily && <div className="card" style={{marginTop:16}}>
       <h3>{MONTHS[m-1]} {y} · Day by Day <span className="faint" style={{fontWeight:400,fontSize:12}}>all stores combined</span></h3>
-      <table className="t" style={{marginTop:8}}><thead><tr>
+      <table className="t daily-t" style={{marginTop:8}}><thead><tr>
         <th>Date</th><th className="num">Total Sales</th>
       </tr></thead><tbody>
         {dayTotals.map(r=>{
           const dt = new Date(y, m-1, r.d);
           const dow = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()];
           const wknd = dt.getDay()===0 || dt.getDay()===6;
-          return <tr key={r.d} className={wknd?'wkend':''}>
-            <td className="mono">{String(r.d).padStart(2,'0')} <span className={wknd?'':'faint'}>{dow}</span></td>
+          const isToday = isCurMonth && r.d===nowD.getDate();
+          return <tr key={r.d} className={(wknd?'is-weekend':'')+(isToday?' is-today':'')}>
+            <td className="mono">{String(r.d).padStart(2,'0')} <span className={'dow'+(wknd?'':' faint')}>{dow}</span>
+              {r.d===bestDay && <span className="day-star best" title="Best sales day">★</span>}
+              {r.d===slowDay && r.d!==bestDay && <span className="day-star slow" title="Slowest sales day">★</span>}
+            </td>
             <td className="num mono">{r.total?fmt$(r.total):'$0.00'}</td>
           </tr>;
         })}
@@ -2541,7 +2619,73 @@ function ChannelMixBar({chRows, total}){
   </div>;
 }
 
-function FranchiseRevenueView({pl, dayRows, y, m, view}){
+function FranchiseRevenueView({pl, dayRows, y, m, view, corpId}){
+  // Year / All-Time need their own aggregates: the monthly `pl` only covers one month.
+  // Load daily sales for the whole span via the same RPC Home uses, then roll up.
+  const needAgg = view==='year' || view==='alltime';
+  const [agg, setAgg] = useState(null);   // {rows:[{lbl,total}], grand}
+  const [aggErr, setAggErr] = useState(null);
+  useEffect(()=>{
+    if(!needAgg || !corpId){ setAgg(null); return; }
+    let alive = true;
+    (async()=>{
+      setAgg(null); setAggErr(null);
+      try{
+        const start = view==='year' ? `${y}-01-01` : '2020-01-01';
+        const nowD = new Date();
+        const end = `${nowD.getFullYear()}-${pad(nowD.getMonth()+1)}-${pad(nowD.getDate())}`;
+        const { data, error } = await sb.rpc('home_daily_sales', { p_corp_ids: [corpId], p_start: start, p_end: end });
+        if(error) throw error;
+        const buckets = {};   // 'YYYY-MM' or 'YYYY' -> total
+        (data||[]).forEach(r=>{
+          const key = view==='year' ? r.date.slice(0,7) : r.date.slice(0,4);
+          buckets[key] = (buckets[key]||0) + Number(r.total||0);
+        });
+        let rows;
+        if(view==='year'){
+          rows = [];
+          for(let mm=1; mm<=12; mm++){
+            const key = `${y}-${pad(mm)}`;
+            rows.push({ lbl: MONTHS[mm-1].slice(0,3), total: buckets[key]||0 });
+          }
+        } else {
+          rows = Object.keys(buckets).sort().map(k=>({ lbl:k, total:buckets[k] }));
+        }
+        const grand = rows.reduce((a,r)=>a+r.total,0);
+        if(alive) setAgg({ rows, grand });
+      }catch(e){ if(alive) setAggErr(e.message||String(e)); }
+    })();
+    return ()=>{ alive=false; };
+  },[needAgg, corpId, view, y]);
+
+  if(needAgg){
+    if(aggErr) return <div className="card"><h3>Could not load</h3><div className="mono" style={{color:'var(--red)',marginTop:8,fontSize:12}}>{aggErr}</div></div>;
+    if(!agg) return <Spinner/>;
+    const label = view==='year' ? `${y}` : 'All Time';
+    const chartPoints = agg.rows.map(r=>({ v:r.total, lbl:r.lbl, wknd:false }));
+    return <>
+      <div className="kpis kpis-1">
+        <div className="kpi accent-gold"><div className="k-lbl">Total Sales · {label}</div>
+          <div className="k-val"><KVal v={agg.grand}/></div>
+          <div className="k-sub faint">Franchise store (revenue only)</div></div>
+      </div>
+      <div className="card" style={{marginTop:16}}>
+        <h3>Sales trend · {label}</h3>
+        <FranchiseSalesChart points={chartPoints}/>
+      </div>
+      <div className="card" style={{marginTop:16}}>
+        <h3>{view==='year' ? `${y} by Month` : 'By Year'}</h3>
+        <table className="t" style={{marginTop:8}}><tbody>
+          {agg.rows.map((r,i)=><tr key={i}>
+            <td className="mono">{r.lbl}</td>
+            <td className="num mono" style={{fontWeight:600}}>{r.total?fmt$(r.total):'-'}</td>
+            <td className="num faint" style={{width:70}}>{agg.grand?Math.round(r.total/agg.grand*100):0}%</td>
+          </tr>)}
+        </tbody></table>
+      </div>
+    </>;
+  }
+
   if(!pl) return <Spinner/>;
   const chRows = (pl.channelRows||[]).filter(c=>(c.amount||0)!==0)
     .sort((a,b)=>(b.amount||0)-(a.amount||0));
