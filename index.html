@@ -2209,7 +2209,7 @@ function Dashboard({corps, franchiseCorps=[], allStoreCorps=[], canEditIds, pres
       <div style={{margin:'-10px 0 18px'}}>{singlePicker}</div>}
     {compareStores ?
       <StoreCompareView editable={editable} cmpIds={cmpIds} toggleCmp={toggleCmp} data={cmpData} y={y} m={m} period={cmpPeriod} cmpDate={cmpDate}/> :
-      isAll ? <AllStoresView corps={allStoreCorps} y={y} m={m}/> :
+      isAll ? <AllStoresView corps={allStoreCorps} y={y} m={m} view={view}/> :
       loading ? <Spinner/> :
       (view==='alltime' && !allTime && !loadErr) ? <Spinner/> :
       (view==='custom' && !rangeMonths && !loadErr) ? <Spinner/> :
@@ -2381,7 +2381,7 @@ function StoreCompareView({editable, cmpIds, toggleCmp, data, y, m, period, cmpD
 // System-wide revenue view: sums sales across every operating store (corporate + franchise,
 // HQ/UMMA excluded). Revenue-only, since franchises have no expenses on our books. Loads
 // each store's monthly daily-sales via the same RPC Home uses, then aggregates.
-function AllStoresView({corps, y, m}){
+function AllStoresView({corps, y, m, view='month'}){
   const [rows, setRows] = useState(null);   // per-store: {corp, total, days:{date:amt}}
   const [err, setErr] = useState(null);
   useEffect(()=>{
@@ -2413,39 +2413,185 @@ function AllStoresView({corps, y, m}){
   if(err) return <div className="card"><h3>Could not load system totals</h3><div className="mono" style={{color:'var(--red)',marginTop:8,fontSize:12}}>{err}</div></div>;
   if(!rows) return <Spinner/>;
   const grand = rows.reduce((a,r)=>a+r.total,0);
+
+  // per-day system totals across every store, for the Daily list
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const nowD = new Date();
+  const isCurMonth = nowD.getFullYear()===y && (nowD.getMonth()+1)===m;
+  const lastDay = isCurMonth ? nowD.getDate() : daysInMonth;
+  const dayTotals = [];
+  for(let d=1; d<=lastDay; d++){
+    const ds = `${y}-${pad(m)}-${pad(d)}`;
+    const sum = rows.reduce((a,r)=>a+(r.days[ds]||0),0);
+    dayTotals.push({ d, date:ds, total:sum });
+  }
+  const todayRow = dayTotals[dayTotals.length-1];
+  const isDaily = view==='daily';
+  const headTotal = isDaily ? (todayRow?todayRow.total:0) : grand;
+  const headLbl = isDaily
+    ? `All Ugly Donuts stores · ${MONTHS[m-1]} ${todayRow?todayRow.d:''}${isCurMonth?' (today)':''}`
+    : `All Ugly Donuts stores · ${MONTHS[m-1]} ${y}`;
+
   return <>
     <div className="kpis kpis-1">
-      <div className="kpi accent-gold"><div className="k-lbl">All Ugly Donuts stores · {MONTHS[m-1]} {y}</div>
-        <div className="k-val"><KVal v={grand}/></div>
-        <div className="k-sub faint">{rows.length} stores · system-wide sales (revenue only)</div></div>
+      <div className="kpi accent-gold"><div className="k-lbl">{headLbl}</div>
+        <div className="k-val"><KVal v={headTotal}/></div>
+        <div className="k-sub faint">{rows.length} stores · system-wide sales (revenue only)
+          {isDaily && <span> · month to date {fmt$(grand,0)}</span>}</div></div>
     </div>
+
     <div className="card" style={{marginTop:16}}>
-      <h3>Sales by store</h3>
+      <h3>Sales by store · {isDaily && todayRow ? `${MONTHS[m-1]} ${todayRow.d}` : `${MONTHS[m-1]} ${y}`}</h3>
       <table className="t" style={{marginTop:8}}><tbody>
-        {rows.map(r=><tr key={r.corp.id}>
-          <td>{r.corp.display_name || r.corp.name || r.corp.code}
-            {r.corp.corp_type==='franchisee' && <span className="faint" style={{fontSize:11,marginLeft:6}}>franchise</span>}</td>
-          <td className="num mono" style={{fontWeight:600}}>{fmt$(r.total)}</td>
-          <td className="num faint" style={{width:70}}>{grand?Math.round(r.total/grand*100):0}%</td>
-        </tr>)}
+        {rows.map(r=>{
+          const amt = isDaily && todayRow ? (r.days[todayRow.date]||0) : r.total;
+          const base = isDaily && todayRow ? todayRow.total : grand;
+          return <tr key={r.corp.id}>
+            <td>{r.corp.display_name || r.corp.name || r.corp.code}
+              {r.corp.corp_type==='franchisee' && <span className="faint" style={{fontSize:11,marginLeft:6}}>franchise</span>}</td>
+            <td className="num mono" style={{fontWeight:600}}>{fmt$(amt)}</td>
+            <td className="num faint" style={{width:70}}>{base?Math.round(amt/base*100):0}%</td>
+          </tr>;
+        })}
       </tbody></table>
     </div>
+
+    {isDaily && <div className="card" style={{marginTop:16}}>
+      <h3>{MONTHS[m-1]} {y} · Day by Day <span className="faint" style={{fontWeight:400,fontSize:12}}>all stores combined</span></h3>
+      <table className="t" style={{marginTop:8}}><thead><tr>
+        <th>Date</th><th className="num">Total Sales</th>
+      </tr></thead><tbody>
+        {dayTotals.map(r=>{
+          const dt = new Date(y, m-1, r.d);
+          const dow = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()];
+          const wknd = dt.getDay()===0 || dt.getDay()===6;
+          return <tr key={r.d} className={wknd?'wkend':''}>
+            <td className="mono">{String(r.d).padStart(2,'0')} <span className={wknd?'':'faint'}>{dow}</span></td>
+            <td className="num mono">{r.total?fmt$(r.total):'$0.00'}</td>
+          </tr>;
+        })}
+      </tbody></table>
+    </div>}
   </>;
 }
 
 // Revenue-only view for franchise stores. We don't hold a franchise's expenses, so this
 // shows sales figures only: total sales, per-channel breakdown, and the daily sales rows.
 // No expense, net, payroll, or P&L cards ever appear here.
+// Simple revenue-only bar chart for franchise stores: daily (or monthly) sales bars with
+// a hover value. No net/expense series, since franchises are revenue-only on our books.
+function FranchiseSalesChart({points, labelFor}){
+  const [sel,setSel] = React.useState(null);
+  if(!points || !points.length) return null;
+  const W = Math.max(560, points.length*26), H = 180, padL = 46, padR = 10, padB = 22, padT = 12;
+  const plotH = H - padB - padT;
+  const maxV = Math.max(1, ...points.map(p=>p.v));
+  const step = niceStep(maxV, 4);
+  const axisMax = Math.ceil(maxV/step)*step;
+  const yOf = v => padT + plotH * (1 - v/axisMax);
+  const gap = (W - padL - padR)/points.length;
+  const bw = Math.min(18, Math.max(6, gap*0.62));
+  const cx = i => padL + gap*i + gap/2;
+  const grid = []; for(let g=0; g<=axisMax+1e-6; g+=step) grid.push(g);
+  return <div className="chart-wrap" style={{overflowX:'auto'}}>
+    <svg width={W} height={H} onMouseLeave={()=>setSel(null)}>
+      {grid.map((g,i)=><g key={i}>
+        <line x1={padL} x2={W-padR} y1={yOf(g)} y2={yOf(g)} stroke={i===0?'#E7E4DD':'#F0EEE9'} strokeWidth="1"/>
+        <text x={padL-6} y={yOf(g)+3} fontSize="9.5" fill="#948B7C" textAnchor="end" fontFamily="IBM Plex Mono">{fmt$k(g)}</text>
+      </g>)}
+      {points.map((p,i)=><g key={i} onMouseEnter={()=>setSel(i)}>
+        <rect x={cx(i)-bw/2} y={yOf(p.v)} width={bw} height={Math.max(1,(padT+plotH)-yOf(p.v))}
+          fill={p.wknd?'#D9A441':'#EABF70'} opacity={sel===i?1:.85} rx="2"/>
+        <text x={cx(i)} y={H-8} fontSize="9" fill={p.wknd?'#C25B4A':'#948B7C'} textAnchor="middle"
+          fontFamily="IBM Plex Mono">{p.lbl}</text>
+      </g>)}
+      {sel!=null && <g>
+        <text x={cx(sel)} y={Math.max(12,yOf(points[sel].v)-6)} fontSize="10" fill="#6B6353" textAnchor="middle"
+          fontFamily="IBM Plex Mono" fontWeight="600">{fmt$(points[sel].v,0)}</text>
+      </g>}
+    </svg>
+  </div>;
+}
+
+// Horizontal stacked bar showing the channel mix (card / cash / delivery / other) so the
+// composition of franchise revenue is visible at a glance.
+function ChannelMixBar({chRows, total}){
+  if(!chRows.length || !total) return null;
+  const DELIVERY = new Set(['uber','grubhub','doordash']);
+  const groups = { card:{lbl:'Card',v:0,color:'#B9975B'}, cash:{lbl:'Cash',v:0,color:'#7FA06A'},
+    delivery:{lbl:'Delivery',v:0,color:'#C25B4A'}, other:{lbl:'Other',v:0,color:'#A9A093'} };
+  chRows.forEach(c=>{
+    const code=(c.code||'').toLowerCase();
+    if(code==='card'||code==='online') groups.card.v+=c.amount;
+    else if(code==='cash') groups.cash.v+=c.amount;
+    else if(DELIVERY.has(code)) groups.delivery.v+=c.amount;
+    else groups.other.v+=c.amount;
+  });
+  const parts = Object.values(groups).filter(g=>g.v>0);
+  return <div style={{marginTop:12}}>
+    <div style={{display:'flex',height:14,borderRadius:7,overflow:'hidden'}}>
+      {parts.map((g,i)=><div key={i} title={`${g.lbl} ${fmt$(g.v,0)}`}
+        style={{width:(g.v/total*100)+'%',background:g.color,minWidth:6}}/>)}
+    </div>
+    <div style={{display:'flex',gap:14,flexWrap:'wrap',marginTop:7}}>
+      {parts.map((g,i)=><span key={i} style={{fontSize:11,color:'var(--text2)',display:'inline-flex',alignItems:'center',gap:5}}>
+        <span style={{width:9,height:9,borderRadius:2,background:g.color,display:'inline-block'}}></span>
+        {g.lbl} {Math.round(g.v/total*100)}%</span>)}
+    </div>
+  </div>;
+}
+
 function FranchiseRevenueView({pl, dayRows, y, m, view}){
   if(!pl) return <Spinner/>;
   const chRows = (pl.channelRows||[]).filter(c=>(c.amount||0)!==0)
     .sort((a,b)=>(b.amount||0)-(a.amount||0));
+
+  // best / slowest sales day (among days with sales), and month-end projection on the
+  // current pace, same spirit as the corporate Daily view but revenue-only.
+  const rows = dayRows||[];
+  const withSales = rows.filter(r=>r.rev>0);
+  let bestDay=null, slowDay=null;
+  if(withSales.length>=2){
+    bestDay = withSales.reduce((a,r)=>r.rev>a.rev?r:a).d;
+    slowDay = withSales.reduce((a,r)=>r.rev<a.rev?r:a).d;
+  }
+  const nowD = new Date();
+  const isCurMonth = nowD.getFullYear()===y && (nowD.getMonth()+1)===m;
+  const daysInMonth = new Date(y, m, 0).getDate();
+  let projection = null;
+  if(isCurMonth && withSales.length>=3){
+    const dayOf = nowD.getDate();
+    const mtd = rows.reduce((a,r)=> r.d<=dayOf ? a+r.rev : a, 0);
+    if(mtd>0 && dayOf>0) projection = mtd/dayOf*daysInMonth;
+  }
+
+  // chart points: daily bars for the daily view, from dayRows
+  const chartPoints = rows.map(r=>{
+    const dt = new Date(y, m-1, r.d);
+    const dow = dt.getDay();
+    return { v:r.rev||0, lbl:String(r.d), wknd:dow===0||dow===6 };
+  });
+
   return <>
     <div className="kpis kpis-1">
       <div className="kpi accent-gold"><div className="k-lbl">Total Sales</div>
         <div className="k-val"><KVal v={pl.totalSales}/></div>
         <div className="k-sub faint">Franchise store (revenue only)</div></div>
     </div>
+
+    {projection!=null && <div className="card" style={{marginTop:16}}>
+      <h3>What stands out</h3>
+      <div style={{marginTop:8,fontSize:13.5,color:'var(--text2)'}}>
+        <span className="faint" style={{marginRight:6}}>•</span>
+        On this pace, {MONTHS[m-1]} sales project to about {fmt$(projection,0)} by month end.
+      </div>
+    </div>}
+
+    {chartPoints.length>0 && <div className="card" style={{marginTop:16}}>
+      <h3>Sales trend · {MONTHS[m-1]} {y}</h3>
+      <FranchiseSalesChart points={chartPoints}/>
+      <ChannelMixBar chRows={chRows} total={pl.totalSales}/>
+    </div>}
 
     {chRows.length>0 && <div className="card" style={{marginTop:16}}>
       <h3>Revenue by channel · {MONTHS[m-1]} {y}</h3>
@@ -2459,16 +2605,21 @@ function FranchiseRevenueView({pl, dayRows, y, m, view}){
       </tbody></table>
     </div>}
 
-    {view==='daily' && (dayRows||[]).length>0 && <div className="card" style={{marginTop:16}}>
+    {view==='daily' && rows.length>0 && <div className="card" style={{marginTop:16}}>
       <h3>{MONTHS[m-1]} {y} · Day by Day</h3>
-      <table className="t" style={{marginTop:8}}><thead><tr>
+      <table className="t daily-t" style={{marginTop:8}}><thead><tr>
         <th>Date</th><th className="num">Sales</th>
       </tr></thead><tbody>
-        {dayRows.map((r,i)=>{
+        {rows.map((r,i)=>{
           const dt = new Date(y, m-1, r.d);
           const dow = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()];
-          return <tr key={i}>
-            <td className="mono">{String(r.d).padStart(2,'0')} <span className="faint">{dow}</span></td>
+          const wknd = dt.getDay()===0 || dt.getDay()===6;
+          const isToday = isCurMonth && r.d===nowD.getDate();
+          return <tr key={i} className={(wknd?'is-weekend':'')+(isToday?' is-today':'')}>
+            <td className="mono">{String(r.d).padStart(2,'0')} <span className={'dow'+(wknd?'':' faint')}>{dow}</span>
+              {r.d===bestDay && <span className="day-star best" title="Best sales day">★</span>}
+              {r.d===slowDay && r.d!==bestDay && <span className="day-star slow" title="Slowest sales day">★</span>}
+            </td>
             <td className="num mono">{r.rev?fmt$(r.rev):'$0.00'}</td>
           </tr>;
         })}
@@ -6336,7 +6487,7 @@ function Home({corps, franchiseCorps=[], allStoreCorps=[], canEditIds, profile, 
       if(dead) return;
       const chBy = {}; (chAll.data||[]).forEach(c=>chBy[c.id]=c);
       const per = {};
-      editable.forEach(c=>per[c.id]={sales:0,revRows:0,synced:false,exp:0,pending:0,daysDone:new Set(),closed:false,week:[],lastSameDay:null,channels:[]});
+      loadCorps.forEach(c=>per[c.id]={sales:0,revRows:0,synced:false,exp:0,pending:0,daysDone:new Set(),closed:false,week:[],lastSameDay:null,channels:[]});
       const chTot = {}; ids.forEach(id=>chTot[id]={});
       (revToday.data||[]).forEach(r=>{
         const p=per[r.corporation_id]; if(!p) return;
@@ -6357,7 +6508,7 @@ function Home({corps, franchiseCorps=[], allStoreCorps=[], canEditIds, profile, 
       ((rev14&&rev14.data)||[]).forEach(r=>{ const t=dayTot[r.corporation_id]; if(!t) return;
         t[r.date]=(t[r.date]||0)+Number(r.total); });
       const dstr = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-      editable.forEach(c=>{ const t=dayTot[c.id]||{};
+      loadCorps.forEach(c=>{ const t=dayTot[c.id]||{};
         const week=[]; for(let i=6;i>=0;i--){ const d=new Date(now); d.setDate(d.getDate()-i);
           const ds=dstr(d); week.push({date:ds, dow:d.getDay(), amount:t[ds]||0}); }
         per[c.id].week=week;
