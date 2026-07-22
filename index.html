@@ -175,6 +175,25 @@ a{color:var(--gold);text-decoration:none}
 .cal-nav:hover{border-color:var(--gold);color:var(--gold)}
 .settings-tab.on{background:var(--gold-dim);border-color:var(--gold-soft);color:var(--gold-strong)}
 .corp-tab{padding:7px 14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text2);font-weight:500;font-size:13px;cursor:pointer}
+.fr-picker{position:relative;display:inline-block}
+.fr-toggle{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:6px;
+  border:1px solid var(--border);background:var(--panel);color:var(--text2);font-weight:500;font-size:13px;cursor:pointer}
+.fr-toggle.on{border-color:var(--gold);color:var(--gold-strong);background:var(--gold-dim)}
+.fr-toggle-ic{font-size:13px;line-height:1}
+.fr-caret{font-size:9px;opacity:.7}
+.fr-menu{position:absolute;top:calc(100% + 4px);right:0;z-index:50;width:240px;
+  background:var(--panel);border:1px solid var(--border);border-radius:10px;
+  box-shadow:0 8px 28px rgba(0,0,0,.14);padding:8px}
+.fr-search{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border-soft);
+  border-radius:7px;font-size:13px;margin-bottom:6px;background:var(--panel2);color:var(--text)}
+.fr-list{max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+.fr-item{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;
+  padding:8px 10px;border:none;background:transparent;border-radius:7px;cursor:pointer;text-align:left}
+.fr-item:hover{background:var(--panel2)}
+.fr-item.on{background:var(--gold-dim)}
+.fr-item-name{font-size:13px;color:var(--text);font-weight:500}
+.fr-item-code{font-size:11px;color:var(--text3);font-family:var(--font-n)}
+.fr-empty{padding:10px;font-size:12px;color:var(--text3);text-align:center}
 .corp-tab.on{border-color:var(--gold-soft);color:var(--gold-strong);background:var(--gold-dim)}
 .viewbar{display:flex;gap:4px;margin-bottom:22px;background:var(--panel2);border-radius:10px;padding:4px;width:fit-content}
 .viewtab{padding:8px 18px;border-radius:7px;border:none;background:transparent;color:var(--text2);font-weight:600;font-size:13px;cursor:pointer}
@@ -238,6 +257,7 @@ a{color:var(--gold);text-decoration:none}
 /* cards */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:22px}
 .kpis.kpis-3{grid-template-columns:repeat(3,1fr)}
+.kpis.kpis-1{grid-template-columns:minmax(220px,340px)}
 .rev-break{padding:0;overflow:hidden}
 .rev-break-h{width:100%;display:flex;align-items:center;justify-content:space-between;background:none;border:none;cursor:pointer;padding:16px 18px;font-size:15px;font-weight:600;color:var(--text);text-align:left}
 .rev-break-h:hover{background:var(--panel2)}
@@ -826,6 +846,17 @@ table.t tr.total td{border-top:1px solid var(--border);font-weight:600;color:var
 
 /* ---------- home (today) ---------- */
 .home-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;margin-bottom:22px}
+.home-section-head{font-size:14px;font-weight:600;color:var(--text2);margin:6px 0 12px}
+.fr-name-input{width:100%;max-width:220px;box-sizing:border-box;padding:6px 9px;border:1px solid var(--border-soft);border-radius:6px;font-size:13px;background:var(--panel2);color:var(--text)}
+.fr-vis-btn{padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text3);font-size:12px;font-weight:600;cursor:pointer}
+.fr-vis-btn.on{border-color:var(--gold);background:var(--gold-dim);color:var(--gold-strong)}
+.home-card-fr{border-style:dashed}
+.allstores-card{background:linear-gradient(180deg,var(--gold-dim),var(--panel));border:1px solid var(--gold)}
+.allstores-card .as-row{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.allstores-card .as-lbl{font-size:14px;font-weight:600;color:var(--text)}
+.allstores-card .as-sub{font-size:12px;margin-top:2px}
+.allstores-card .as-amt{font-size:26px;font-weight:700;color:var(--gold-strong);white-space:nowrap}
+.allstores-card .as-amt .cur{font-size:16px;font-weight:600}
 .home-card{background:var(--panel);border:1px solid var(--border-soft);border-radius:12px;padding:20px;cursor:pointer;transition:border-color .15s, transform .1s;position:relative;display:flex;flex-direction:column;min-width:0}
 .home-card:hover{border-color:var(--gold-soft);transform:translateY(-1px)}
 .home-card.done{border-color:var(--gold-soft);background:linear-gradient(180deg, var(--gold-dim), var(--panel))}
@@ -1594,6 +1625,50 @@ function CorpTabs({corps, sel, onSel}){
     {corps.map(c => <button key={c.id} className={'corp-tab'+(sel===c.id?' on':'')} onClick={()=>onSel(c.id)}>{c.code}</button>)}
   </div>;
 }
+
+// Searchable dropdown for franchise stores. Keeps the store buttons clean when the
+// number of franchises grows: corporate stores stay as buttons, all franchises live
+// here behind one control with a type-to-filter box.
+function FranchisePicker({corps, sel, onSel}){
+  const [open, setOpen] = React.useState(false);
+  const [q, setQ] = React.useState('');
+  const selCorp = corps.find(c=>c.id===sel);
+  const isSel = !!selCorp;
+  const ref = React.useRef(null);
+  React.useEffect(()=>{
+    if(!open) return;
+    const onDoc = e => { if(ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return ()=>document.removeEventListener('mousedown', onDoc);
+  },[open]);
+  const label = c => c.display_name || c.name || c.code;
+  const shown = corps.filter(c=>{
+    if(!q.trim()) return true;
+    const t = (label(c)+' '+c.code).toLowerCase();
+    return t.includes(q.trim().toLowerCase());
+  });
+  if(!corps.length) return null;
+  return <div className="fr-picker" ref={ref}>
+    <button className={'fr-toggle'+(isSel?' on':'')} onClick={()=>setOpen(o=>!o)}>
+      <span className="fr-toggle-ic">🏬</span>
+      {isSel ? label(selCorp) : 'Franchise'}
+      <span className="fr-caret">▾</span>
+    </button>
+    {open && <div className="fr-menu">
+      <input className="fr-search" autoFocus placeholder="Search franchise…"
+        value={q} onChange={e=>setQ(e.target.value)}/>
+      <div className="fr-list">
+        {shown.length===0 && <div className="fr-empty">No match</div>}
+        {shown.map(c=>
+          <button key={c.id} className={'fr-item'+(sel===c.id?' on':'')}
+            onClick={()=>{ onSel(c.id); setOpen(false); setQ(''); }}>
+            <span className="fr-item-name">{label(c)}</span>
+            <span className="fr-item-code">{c.code}</span>
+          </button>)}
+      </div>
+    </div>}
+  </div>;
+}
 function MonthPick({y, m, onChange}){
   const mv = (d) => { let ny=y, nm=m+d; if(nm<1){nm=12;ny--;} if(nm>12){nm=1;ny++;} onChange(ny,nm); };
   const nowY = new Date().getFullYear();
@@ -1798,9 +1873,17 @@ function YoYDelta({cur, prev, bare, invert}){
 }
 
 // ================= DASHBOARD =================
-function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp}){
+function Dashboard({corps, franchiseCorps=[], allStoreCorps=[], canEditIds, presetCorp, isOwner, activeCorp, onCorp}){
   const editable = corps.filter(c=>canEditIds.has(c.id));
-  const [corpId, setCorpId] = useCorpSelection(editable, activeCorp, onCorp);
+  // Selection can be a corporate store (buttons) OR a franchise (dropdown). The
+  // selection hook must know about both, otherwise picking a franchise gets reset
+  // back to the first corporate store on the next render.
+  const selectable = [...editable, ...franchiseCorps];
+  const [corpId, setCorpId] = useCorpSelection(selectable, activeCorp, onCorp);
+  // Which store is selected, and is it a franchise? Franchises are revenue-only on our
+  // books (we don't hold their expenses), so their view hides all cost/P&L cards.
+  const selCorp = selectable.find(c=>c.id===corpId);
+  const isFranchise = !!(selCorp && selCorp.corp_type==='franchisee');
   const now = new Date();
   const [y, setY] = useState(now.getFullYear());
   const [m, setM] = useState(now.getMonth()+1);
@@ -2097,6 +2180,8 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
         <button className={'cmp-toggle'+(compareStores?' on':'')} onClick={()=>setCompareStores(v=>!v)}>
           <span className="cmp-toggle-ic">⇄</span>{compareStores?'Comparing stores':'Compare stores'}</button>
         {!compareStores && <CorpTabs corps={editable} sel={corpId} onSel={setCorpId}/>}
+        {!compareStores && franchiseCorps.length>0 &&
+          <FranchisePicker corps={franchiseCorps} sel={corpId} onSel={setCorpId}/>}
         {compareStores ? periodPicker : (view==='custom' ? null : singlePicker)}
       </div>
     </div>
@@ -2116,6 +2201,7 @@ function Dashboard({corps, canEditIds, presetCorp, isOwner, activeCorp, onCorp})
           <div className="mono" style={{marginTop:10,fontSize:12,color:'var(--red)'}}>{loadErr}</div>
           <button className="btn" style={{marginTop:12}} onClick={()=>setRefresh(x=>x+1)}>Try again</button>
         </div> :
+      isFranchise ? <FranchiseRevenueView pl={pl} dayRows={dayRows} y={y} m={m} view={view}/> :
       view==='month'   ? <MonthView pl={pl} yoy={yoy} trend={trend} y={y} m={m}/> :
       view==='daily'   ? <DailyView rows={dayRows} pl={pl} yoy={yoy} y={y} m={m} isOwner={isOwner} categories={(meta&&meta.categories)||[]} onChanged={()=>setRefresh(x=>x+1)} onMonth={(a,b)=>{setY(a);setM(b);}}/> :
       view==='year'    ? <YearView months={yearMonths} y={y} yearMode={yearMode} onYearMode={setYearMode}
@@ -2273,6 +2359,51 @@ function StoreCompareView({editable, cmpIds, toggleCmp, data, y, m, period, cmpD
       </div>
      </>}
   </div>;
+}
+
+// Revenue-only view for franchise stores. We don't hold a franchise's expenses, so this
+// shows sales figures only: total sales, per-channel breakdown, and the daily sales rows.
+// No expense, net, payroll, or P&L cards ever appear here.
+function FranchiseRevenueView({pl, dayRows, y, m, view}){
+  if(!pl) return <Spinner/>;
+  const chRows = (pl.channelRows||[]).filter(c=>(c.amount||0)!==0)
+    .sort((a,b)=>(b.amount||0)-(a.amount||0));
+  return <>
+    <div className="kpis kpis-1">
+      <div className="kpi accent-gold"><div className="k-lbl">Total Sales</div>
+        <div className="k-val"><KVal v={pl.totalSales}/></div>
+        <div className="k-sub faint">Franchise store (revenue only)</div></div>
+    </div>
+
+    {chRows.length>0 && <div className="card" style={{marginTop:16}}>
+      <h3>Revenue by channel · {MONTHS[m-1]} {y}</h3>
+      <table className="t" style={{marginTop:8}}><tbody>
+        {chRows.map(c=><tr key={c.id}>
+          <td>{c.name}</td>
+          <td className="num mono" style={{fontWeight:600}}>{fmt$(c.amount)}</td>
+          <td className="num faint" style={{width:70}}>
+            {pl.totalSales? Math.round((c.amount/pl.totalSales)*100):0}%</td>
+        </tr>)}
+      </tbody></table>
+    </div>}
+
+    {view==='daily' && (dayRows||[]).length>0 && <div className="card" style={{marginTop:16}}>
+      <h3>{MONTHS[m-1]} {y} · Day by Day</h3>
+      <table className="t" style={{marginTop:8}}><thead><tr>
+        <th>Date</th><th className="num">Sales</th>
+      </tr></thead><tbody>
+        {dayRows.map((r,i)=>{
+          const dt = r.date ? new Date(r.date+'T00:00') : null;
+          const dow = dt ? ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()] : '';
+          const dd = r.date ? r.date.slice(8) : '';
+          return <tr key={i}>
+            <td className="mono">{dd} <span className="faint">{dow}</span></td>
+            <td className="num mono">{fmt$(r.sales!=null?r.sales:(r.totalSales||0))}</td>
+          </tr>;
+        })}
+      </tbody></table>
+    </div>}
+  </>;
 }
 
 function MonthView({pl, yoy, trend, y, m}){
@@ -5996,10 +6127,53 @@ function SlackAutoApprove({profile}){
 }
 
 // ================= SETTINGS =================
-function Settings({corps, canEditIds, profile, isOwner, session, activeCorp, onCorp}){
+// Lets the owner rename franchise stores (Toast names are all identical, so a friendly
+// display name is set here) and hide/show them. Auto-created stores appear here as they
+// come in from the Toast sync.
+function FranchisesManager({franchiseCorps}){
+  const [rows, setRows] = useState(()=>franchiseCorps.map(c=>({...c})));
+  const [savingId, setSavingId] = useState(null);
+  const [msg, setMsg] = useState('');
+  const save = async (id, patch) => {
+    setSavingId(id);
+    const { error } = await sb.from('corporations').update(patch).eq('id', id);
+    setSavingId(null);
+    if(error){ setMsg('Could not save: '+error.message); return; }
+    setRows(rs=>rs.map(r=>r.id===id?{...r, ...patch}:r));
+    setMsg('Saved.');
+    setTimeout(()=>setMsg(''), 1500);
+  };
+  if(!rows.length) return <div className="card">No franchise stores yet. They appear here automatically once Toast syncs them.</div>;
+  return <div className="card">
+    <h3>Franchise stores</h3>
+    <div className="hint" style={{marginTop:4,marginBottom:12}}>Rename a store for display, or hide one that has closed. These are revenue-only on our books.</div>
+    <table className="t"><thead><tr>
+      <th>Display name</th><th>Code</th><th>Timezone</th><th className="num">Visible</th>
+    </tr></thead><tbody>
+      {rows.map(c=><tr key={c.id}>
+        <td>
+          <input className="fr-name-input" defaultValue={c.display_name || c.name || ''}
+            onBlur={e=>{ const v=e.target.value.trim(); if(v && v!==(c.display_name||c.name)) save(c.id,{display_name:v}); }}/>
+        </td>
+        <td className="mono faint">{c.code}</td>
+        <td className="faint" style={{fontSize:12}}>{c.timezone || '—'}</td>
+        <td className="num">
+          <button className={'fr-vis-btn'+(c.hidden?'':' on')} disabled={savingId===c.id}
+            onClick={()=>save(c.id,{hidden:!c.hidden})}>
+            {c.hidden ? 'Hidden' : 'Shown'}
+          </button>
+        </td>
+      </tr>)}
+    </tbody></table>
+    {msg && <div className="hint" style={{marginTop:10}}>{msg}</div>}
+  </div>;
+}
+
+function Settings({corps, franchiseCorps=[], canEditIds, profile, isOwner, session, activeCorp, onCorp}){
   const [sub, setSub] = useState('recurring');
   const TABS = [['recurring','Recurring'],['rates','Rates'],['owners','Investors'],['accounts','Accounts'],
     ...(isOwner?[['slack','Slack']]:[]),
+    ...(isOwner && franchiseCorps.length>0?[['franchises','Franchises']]:[]),
     ['device','App & Alerts'],['diag','Diagnostics']];
   return <div>
     <div className="page-head">
@@ -6014,15 +6188,21 @@ function Settings({corps, canEditIds, profile, isOwner, session, activeCorp, onC
     {sub==='owners' && <OwnersManager corps={corps} canEditIds={canEditIds} activeCorp={activeCorp} onCorp={onCorp}/>}
     {sub==='accounts' && <Admin corps={corps} session={session} embedded={true}/>}
     {sub==='slack' && isOwner && <SlackAutoApprove profile={profile}/>}
+    {sub==='franchises' && isOwner && <FranchisesManager franchiseCorps={franchiseCorps}/>}
     {sub==='device' && <PwaCard profile={profile}/>}
     {sub==='diag' && <ToastDiag session={session}/>}
   </div>;
 }
 
 // ================= HOME (TODAY) =================
-function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsights, goClose, goApprovals}){
+function Home({corps, franchiseCorps=[], allStoreCorps=[], canEditIds, profile, isOwner, readOnly, goEntry, goInsights, goClose, goApprovals}){
   const editable = corps.filter(c=>canEditIds.has(c.id));
-  const ids = editable.map(c=>c.id);
+  // Franchise stores are revenue-only; still load their sales so Home can show them in
+  // their own section and roll them into the system-wide total. Their expense figures
+  // come back as 0 (we don't hold their costs), which is correct.
+  const franchises = franchiseCorps;
+  const loadCorps = [...editable, ...franchises];
+  const ids = loadCorps.map(c=>c.id);
   const [data, setData] = useState(null);
   const [detail, setDetail] = useState(null);   // {corp, store-data} for the day-breakdown popup
   const [date, setDate] = useState(todayStr()); // the day the cards are showing
@@ -6138,6 +6318,48 @@ function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsight
   const unclosed = isOwner ? editable.filter(c=>data[c.id] && !data[c.id].closed) : [];
   const firstName = (profile.full_name||'').split(' ')[0] || 'there';
 
+  // Renders a set of store cards. For franchise stores (isFr=true) the card is
+  // revenue-only: no pending badge, no Income/Expense buttons (we don't book their costs).
+  const renderStoreCards = (list, isFr) => list.map(c=>{
+    const p = data[c.id] || {sales:0,revRows:0,synced:false,exp:0,pending:0,daysDone:new Set(),closed:false,week:[],lastSameDay:null};
+    const done = p.revRows>0;
+    const lsd = p.lastSameDay;
+    const lst = isToday ? p.lastSameTime : null;
+    const base = lst!=null ? lst : lsd;
+    const delta = (base!=null && base>0) ? (p.sales-base)/base : null;
+    const week = p.week||[];
+    const dowLbl = DOW[week.length?week[week.length-1].dow:now.getDay()];
+    const wkMax = Math.max(1, ...week.map(d=>d.amount));
+    const label = c.display_name || c.code;
+    return <div key={c.id} className={'home-card'+(done?' done':'')+(isFr?' home-card-fr':'')} onClick={()=>setDetail({corp:c, p, isFr})}>
+      {done && <div className="hc-check">✓</div>}
+      {!isFr && p.pending>0 && <div className="hc-pend-badge" style={{right:done?38:14}}><span className="dot warn"></span>{p.pending} pending</div>}
+      <div className="hc-code hc-code-big">{label}</div>
+      <div className="hc-amt"><span className="cur">$</span>{p.sales.toLocaleString('en-US',{maximumFractionDigits:0})}<span className="cur"> {isToday ? 'today' : `${MONTHS[now.getMonth()].slice(0,3)} ${now.getDate()}`}</span></div>
+      <div className="hc-cmp">
+        {lst!=null && delta!=null
+          ? <><span className={delta>=0?'pos':'neg'}>{delta>=0?'▲':'▼'} {Math.abs(delta*100).toFixed(0)}%</span> <span className="faint">vs last {dowLbl} same time ({fmt$k(lst)})</span></>
+          : lst!=null
+          ? <span className="faint">Last {dowLbl} same time: {fmt$k(lst)}</span>
+          : lsd!=null && delta!=null
+          ? <><span className={delta>=0?'pos':'neg'}>{delta>=0?'▲':'▼'} {Math.abs(delta*100).toFixed(0)}%</span> <span className="faint">vs last {dowLbl} ({fmt$k(lsd)}{isToday?' full day':''})</span></>
+          : lsd!=null
+          ? <span className="faint">Last {DOW[now.getDay()]}: {fmt$k(lsd)}</span>
+          : <span className="faint">No sales last {dowLbl}</span>}
+      </div>
+      <div className="hc-spark" title="Last 7 days">
+        {week.length>0
+          ? week.map((d,i)=><div key={i} className={'hc-spark-bar'+(i===week.length-1?' today':'')}
+              style={{height:Math.max(8,Math.round(d.amount/wkMax*100))+'%'}} title={`${DOW[d.dow]} ${fmt$k(d.amount)}`}></div>)
+          : null}
+      </div>
+      {!isFr && !readOnly && <div className="hc-actions">
+        <button className="hc-btn income" onClick={e=>{e.stopPropagation(); goEntry(c.id,'income');}}>Income</button>
+        <button className="hc-btn expense" onClick={e=>{e.stopPropagation(); goEntry(c.id,'expense');}}>Expense</button>
+      </div>}
+    </div>;
+  });
+
   return <div>
     <div className="greet">Good {realNow.getHours()<12?'morning':realNow.getHours()<18?'afternoon':'evening'}, {firstName}.</div>
     <div className="greet-sub">{isToday ? 'Tap a store to see its sales detail.' : 'Viewing a past day. Tap a store to see its sales detail.'}</div>
@@ -6161,51 +6383,36 @@ function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsight
       </div>
     </div>}
 
+    {(()=>{
+      // System-wide rollup: today's sales across every operating store (corporate +
+      // franchise), so John can see how the whole Ugly Donuts system is doing. HQ/UMMA
+      // are not stores and are already excluded from allStoreCorps.
+      const allIds = new Set(allStoreCorps.map(c=>c.id));
+      let sysToday = 0, sysStores = 0;
+      loadCorps.forEach(c=>{ if(!allIds.has(c.id)) return; const p=data[c.id]; if(p){ sysToday+=Number(p.sales||0); sysStores++; } });
+      if(allStoreCorps.length<=1) return null;
+      return <div className="card allstores-card" onClick={goInsights} style={{cursor:'pointer',marginBottom:16}}>
+        <div className="as-row">
+          <div>
+            <div className="as-lbl">All Ugly Donuts stores {isToday?'today':`· ${MONTHS[now.getMonth()].slice(0,3)} ${now.getDate()}`}</div>
+            <div className="as-sub faint">{sysStores} store{sysStores!==1?'s':''} · system-wide sales</div>
+          </div>
+          <div className="as-amt"><span className="cur">$</span>{sysToday.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
+        </div>
+      </div>;
+    })()}
+
     <div className="home-grid">
-      {editable.map(c=>{
-        const p = data[c.id] || {sales:0,revRows:0,synced:false,exp:0,pending:0,daysDone:new Set(),closed:false,week:[],lastSameDay:null};
-        const done = p.revRows>0;
-        const pct = Math.min(100, Math.round(p.daysDone.size/dayOfMonth*100));
-        // same weekday last week comparison. Preferred: same time of day (hourly
-        // snapshot), so a half-finished morning is not compared against last week's
-        // FULL day. Falls back to the full-day figure (labeled) when no snapshot
-        // history exists for that day yet.
-        const lsd = p.lastSameDay;
-        const lst = isToday ? p.lastSameTime : null;    // same time last week (live day only)
-        const base = lst!=null ? lst : lsd;
-        const delta = (base!=null && base>0) ? (p.sales-base)/base : null;
-        const week = p.week||[];
-        const dowLbl = DOW[week.length?week[week.length-1].dow:now.getDay()];
-        const wkMax = Math.max(1, ...week.map(d=>d.amount));
-        return <div key={c.id} className={'home-card'+(done?' done':'')} onClick={()=>setDetail({corp:c, p})}>
-          {done && <div className="hc-check">✓</div>}
-          {p.pending>0 && <div className="hc-pend-badge" style={{right:done?38:14}}><span className="dot warn"></span>{p.pending} pending</div>}
-          <div className="hc-code hc-code-big">{c.code}</div>
-          <div className="hc-amt"><span className="cur">$</span>{p.sales.toLocaleString('en-US',{maximumFractionDigits:0})}<span className="cur"> {isToday ? 'today' : `${MONTHS[now.getMonth()].slice(0,3)} ${now.getDate()}`}</span></div>
-          <div className="hc-cmp">
-            {lst!=null && delta!=null
-              ? <><span className={delta>=0?'pos':'neg'}>{delta>=0?'▲':'▼'} {Math.abs(delta*100).toFixed(0)}%</span> <span className="faint">vs last {dowLbl} same time ({fmt$k(lst)})</span></>
-              : lst!=null
-              ? <span className="faint">Last {dowLbl} same time: {fmt$k(lst)}</span>
-              : lsd!=null && delta!=null
-              ? <><span className={delta>=0?'pos':'neg'}>{delta>=0?'▲':'▼'} {Math.abs(delta*100).toFixed(0)}%</span> <span className="faint">vs last {dowLbl} ({fmt$k(lsd)}{isToday?' full day':''})</span></>
-              : lsd!=null
-              ? <span className="faint">Last {DOW[now.getDay()]}: {fmt$k(lsd)}</span>
-              : <span className="faint">No sales last {dowLbl}</span>}
-          </div>
-          <div className="hc-spark" title="Last 7 days">
-            {week.length>0
-              ? week.map((d,i)=><div key={i} className={'hc-spark-bar'+(i===week.length-1?' today':'')}
-                  style={{height:Math.max(8,Math.round(d.amount/wkMax*100))+'%'}} title={`${DOW[d.dow]} ${fmt$k(d.amount)}`}></div>)
-              : null}
-          </div>
-          {!readOnly && <div className="hc-actions">
-            <button className="hc-btn income" onClick={e=>{e.stopPropagation(); goEntry(c.id,'income');}}>Income</button>
-            <button className="hc-btn expense" onClick={e=>{e.stopPropagation(); goEntry(c.id,'expense');}}>Expense</button>
-          </div>}
-        </div>;
-      })}
+      {renderStoreCards(editable)}
     </div>
+
+    {franchises.length>0 && <>
+      <div className="home-section-head">Franchise stores <span className="faint">· revenue only</span></div>
+      <div className="home-grid">
+        {renderStoreCards(franchises, true)}
+      </div>
+    </>}
+
     {detail && (()=>{
       const p = detail.p||{}; const chans = p.channels||[];
       const chTotal = chans.reduce((a,c)=>a+Number(c.amount),0);
@@ -6213,8 +6420,8 @@ function Home({corps, canEditIds, profile, isOwner, readOnly, goEntry, goInsight
         <div className="store-detail" onClick={e=>e.stopPropagation()}>
           <div className="sd-head">
             <div>
-              <div className="sd-code">{detail.corp.code}</div>
-              <div className="sd-name">{detail.corp.name}</div>
+              <div className="sd-code">{detail.corp.display_name || detail.corp.code}</div>
+              <div className="sd-name">{detail.isFr ? 'Franchise store · revenue only' : detail.corp.name}</div>
             </div>
             <button className="sd-close" onClick={()=>setDetail(null)} aria-label="Close">✕</button>
           </div>
@@ -6527,21 +6734,28 @@ function App(){
   const viewCorps = corps.filter(c=>canViewIds.has(c.id));
   // informational tabs display by view access; a viewer has no edit ids, so edits stay off
   const displayIds = isViewer ? canViewIds : canEditIds;
-  // franchisee corps (if any) are excluded from every screen
+  // corporate (directly-operated) stores: shown as buttons, full detail (revenue + expenses)
   const storeCorps = corps.filter(c=>c.corp_type!=='franchisee');
+  // franchisee stores: revenue-only, shown in a searchable dropdown on Home/Insights.
+  // hidden (closed) ones are left out. auto-created by the Toast sync.
+  const franchiseCorps = corps.filter(c=>c.corp_type==='franchisee' && !c.hidden);
+  // "All Ugly Donuts stores" = every operating store (corporate + franchise), excluding
+  // HQ and UMMA which are not retail locations. Used for the system-wide rollup card.
+  const allStoreCorps = corps.filter(c=>
+    (c.corp_type==='corporate' || c.corp_type==='franchisee') && !c.hidden);
   const nav = NAV.filter(n=>n.roles.includes(profile.role));
   const effTab = nav.some(n=>n.id===tab) ? tab : nav[0].id;
 
   const page = {
-    home:      <Home corps={storeCorps} canEditIds={displayIds} readOnly={isViewer} profile={profile} isOwner={isOwner} goEntry={goEntry} goInsights={goInsights} goClose={goClose} goApprovals={goApprovals}/>,
+    home:      <Home corps={storeCorps} franchiseCorps={franchiseCorps} allStoreCorps={allStoreCorps} canEditIds={displayIds} readOnly={isViewer} profile={profile} isOwner={isOwner} goEntry={goEntry} goInsights={goInsights} goClose={goClose} goApprovals={goApprovals}/>,
     approvals: <Approvals corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner}/>,
     entry:     <Entry corps={storeCorps} canEditIds={canEditIds} profile={profile} presetCorp={entryCorp} presetMode={entryMode} activeCorp={activeCorp} onCorp={setActiveCorp}/>,
-    insights:  <Dashboard corps={storeCorps} canEditIds={displayIds} presetCorp={insightsCorp} isOwner={isOwner} activeCorp={activeCorp} onCorp={setActiveCorp}/>,
+    insights:  <Dashboard corps={storeCorps} franchiseCorps={franchiseCorps} allStoreCorps={allStoreCorps} canEditIds={displayIds} presetCorp={insightsCorp} isOwner={isOwner} activeCorp={activeCorp} onCorp={setActiveCorp}/>,
     cash:      <CashPage corps={storeCorps} canEditIds={displayIds} profile={profile} isOwner={isOwner} activeCorp={activeCorp} onCorp={setActiveCorp}/>,
     close:     <ClosePage corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} preset={closePreset} activeCorp={activeCorp} onCorp={setActiveCorp}/>,
     investor:  <InvestorPortal corps={isOwner?storeCorps:viewCorps} isOwner={isOwner} activeCorp={activeCorp} onCorp={setActiveCorp}/>,
     cashledger:<div><div className="page-head"><div><div className="eyebrow">Cash</div><h2>Cash Management</h2></div></div><CashLedger corps={storeCorps} canEditIds={canEditIds} profile={profile}/></div>,
-    settings:  <Settings corps={storeCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} session={session} activeCorp={activeCorp} onCorp={setActiveCorp}/>,
+    settings:  <Settings corps={storeCorps} franchiseCorps={franchiseCorps} canEditIds={canEditIds} profile={profile} isOwner={isOwner} session={session} activeCorp={activeCorp} onCorp={setActiveCorp}/>,
     alerts:    <div><div className="page-head"><div><div className="eyebrow">Install</div><h2>Install App & Notifications</h2></div></div><PwaCard profile={profile}/></div>,
   }[effTab];
 
