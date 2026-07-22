@@ -2391,6 +2391,7 @@ function AllStoresView({corps, y, m, view='month'}){
       try{
         const ids = corps.map(c=>c.id);
         const nowD0 = new Date();
+        const isAgg = view==='year' || view==='alltime';
         const start = view==='alltime' ? '2020-01-01'
           : view==='year' ? `${y}-01-01`
           : `${y}-${pad(m)}-01`;
@@ -2398,7 +2399,16 @@ function AllStoresView({corps, y, m, view='month'}){
           ? `${nowD0.getFullYear()}-${pad(nowD0.getMonth()+1)}-${pad(nowD0.getDate())}`
           : view==='year' ? `${y}-12-31`
           : `${y}-${pad(m)}-${pad(new Date(y,m,0).getDate())}`;
-        const { data, error } = await sb.rpc('home_daily_sales', { p_corp_ids: ids, p_start: start, p_end: end });
+        // Year/All-Time span years of data; per-day rows would exceed Supabase's
+        // 1,000-row cap and silently truncate (stores showed $0). sales_monthly
+        // aggregates per month on the server so the result always fits.
+        let data, error;
+        if(isAgg){
+          ({ data, error } = await sb.rpc('sales_monthly', { p_corp_ids: ids, p_start: start, p_end: end }));
+          if(!error && data) data = data.map(r=>({ corporation_id:r.corporation_id, date:r.month+'-01', total:r.total }));
+        } else {
+          ({ data, error } = await sb.rpc('home_daily_sales', { p_corp_ids: ids, p_start: start, p_end: end }));
+        }
         if(error) throw error;
         // data: [{corporation_id, date, total}]
         const byCorp = {};
@@ -2560,18 +2570,31 @@ function AllStoresView({corps, y, m, view='month'}){
 // a hover value. No net/expense series, since franchises are revenue-only on our books.
 function FranchiseSalesChart({points, labelFor}){
   const [sel,setSel] = React.useState(null);
+  // Fill the card on wide screens: measure the container and stretch the chart to it.
+  // On phones the container is narrower than the minimum readable width, so the chart
+  // keeps its minimum size and scrolls horizontally instead of shrinking the text.
+  const wrapRef = React.useRef(null);
+  const [cw, setCw] = React.useState(0);
+  React.useEffect(()=>{
+    const el = wrapRef.current; if(!el) return;
+    const measure = ()=>setCw(el.clientWidth||0);
+    measure();
+    window.addEventListener('resize', measure);
+    return ()=>window.removeEventListener('resize', measure);
+  },[]);
   if(!points || !points.length) return null;
-  const W = Math.max(560, points.length*26), H = 180, padL = 46, padR = 10, padB = 22, padT = 12;
+  const minW = Math.max(560, points.length*26);
+  const W = Math.max(minW, cw), H = 180, padL = 46, padR = 10, padB = 22, padT = 12;
   const plotH = H - padB - padT;
   const maxV = Math.max(1, ...points.map(p=>p.v));
   const step = niceStep(maxV, 4);
   const axisMax = Math.ceil(maxV/step)*step;
   const yOf = v => padT + plotH * (1 - v/axisMax);
   const gap = (W - padL - padR)/points.length;
-  const bw = Math.min(18, Math.max(6, gap*0.62));
+  const bw = Math.min(44, Math.max(6, gap*0.62));
   const cx = i => padL + gap*i + gap/2;
   const grid = []; for(let g=0; g<=axisMax+1e-6; g+=step) grid.push(g);
-  return <div className="chart-wrap" style={{overflowX:'auto'}}>
+  return <div className="chart-wrap" ref={wrapRef} style={{overflowX:'auto'}}>
     <svg width={W} height={H} onMouseLeave={()=>setSel(null)}>
       {grid.map((g,i)=><g key={i}>
         <line x1={padL} x2={W-padR} y1={yOf(g)} y2={yOf(g)} stroke={i===0?'#E7E4DD':'#F0EEE9'} strokeWidth="1"/>
@@ -2633,12 +2656,15 @@ function FranchiseRevenueView({pl, dayRows, y, m, view, corpId}){
       try{
         const start = view==='year' ? `${y}-01-01` : '2020-01-01';
         const nowD = new Date();
-        const end = `${nowD.getFullYear()}-${pad(nowD.getMonth()+1)}-${pad(nowD.getDate())}`;
-        const { data, error } = await sb.rpc('home_daily_sales', { p_corp_ids: [corpId], p_start: start, p_end: end });
+        const end = view==='year' ? `${y}-12-31`
+          : `${nowD.getFullYear()}-${pad(nowD.getMonth()+1)}-${pad(nowD.getDate())}`;
+        // sales_monthly aggregates per month on the server, so long spans never hit the
+        // 1,000-row response cap that silently truncated per-day loads.
+        const { data, error } = await sb.rpc('sales_monthly', { p_corp_ids: [corpId], p_start: start, p_end: end });
         if(error) throw error;
         const buckets = {};   // 'YYYY-MM' or 'YYYY' -> total
         (data||[]).forEach(r=>{
-          const key = view==='year' ? r.date.slice(0,7) : r.date.slice(0,4);
+          const key = view==='year' ? r.month : r.month.slice(0,4);
           buckets[key] = (buckets[key]||0) + Number(r.total||0);
         });
         let rows;
