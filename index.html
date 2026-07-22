@@ -2209,7 +2209,7 @@ function Dashboard({corps, franchiseCorps=[], allStoreCorps=[], canEditIds, pres
       <div style={{margin:'-10px 0 18px'}}>{singlePicker}</div>}
     {compareStores ?
       <StoreCompareView editable={editable} cmpIds={cmpIds} toggleCmp={toggleCmp} data={cmpData} y={y} m={m} period={cmpPeriod} cmpDate={cmpDate}/> :
-      isAll ? <AllStoresView corps={allStoreCorps} y={y} m={m} view={view}/> :
+      isAll ? <AllStoresView corps={allStoreCorps} y={y} m={m} view={view} range={range}/> :
       loading ? <Spinner/> :
       (view==='alltime' && !allTime && !loadErr) ? <Spinner/> :
       (view==='custom' && !rangeMonths && !loadErr) ? <Spinner/> :
@@ -2218,7 +2218,7 @@ function Dashboard({corps, franchiseCorps=[], allStoreCorps=[], canEditIds, pres
           <div className="mono" style={{marginTop:10,fontSize:12,color:'var(--red)'}}>{loadErr}</div>
           <button className="btn" style={{marginTop:12}} onClick={()=>setRefresh(x=>x+1)}>Try again</button>
         </div> :
-      isFranchise ? <FranchiseRevenueView pl={pl} dayRows={dayRows} y={y} m={m} view={view} corpId={corpId}/> :
+      isFranchise ? <FranchiseRevenueView pl={pl} dayRows={dayRows} y={y} m={m} view={view} corpId={corpId} range={range}/> :
       view==='month'   ? <MonthView pl={pl} yoy={yoy} trend={trend} y={y} m={m}/> :
       view==='daily'   ? <DailyView rows={dayRows} pl={pl} yoy={yoy} y={y} m={m} isOwner={isOwner} categories={(meta&&meta.categories)||[]} onChanged={()=>setRefresh(x=>x+1)} onMonth={(a,b)=>{setY(a);setM(b);}}/> :
       view==='year'    ? <YearView months={yearMonths} y={y} yearMode={yearMode} onYearMode={setYearMode}
@@ -2381,9 +2381,10 @@ function StoreCompareView({editable, cmpIds, toggleCmp, data, y, m, period, cmpD
 // System-wide revenue view: sums sales across every operating store (corporate + franchise,
 // HQ/UMMA excluded). Revenue-only, since franchises have no expenses on our books. Loads
 // each store's monthly daily-sales via the same RPC Home uses, then aggregates.
-function AllStoresView({corps, y, m, view='month'}){
+function AllStoresView({corps, y, m, view='month', range}){
   const [rows, setRows] = useState(null);   // per-store: {corp, total, days:{date:amt}}
   const [err, setErr] = useState(null);
+  const rKey = range ? [range.fromY,range.fromM,range.toY,range.toM].join('-') : '';
   useEffect(()=>{
     let alive = true;
     (async()=>{
@@ -2391,17 +2392,19 @@ function AllStoresView({corps, y, m, view='month'}){
       try{
         const ids = corps.map(c=>c.id);
         const nowD0 = new Date();
-        const isAgg = view==='year' || view==='alltime';
+        const isAgg = view==='year' || view==='alltime' || view==='custom';
         const start = view==='alltime' ? '2020-01-01'
           : view==='year' ? `${y}-01-01`
+          : view==='custom' ? `${range.fromY}-${pad(range.fromM)}-01`
           : `${y}-${pad(m)}-01`;
         const end = (view==='alltime')
           ? `${nowD0.getFullYear()}-${pad(nowD0.getMonth()+1)}-${pad(nowD0.getDate())}`
           : view==='year' ? `${y}-12-31`
+          : view==='custom' ? `${range.toY}-${pad(range.toM)}-${pad(new Date(range.toY,range.toM,0).getDate())}`
           : `${y}-${pad(m)}-${pad(new Date(y,m,0).getDate())}`;
-        // Year/All-Time span years of data; per-day rows would exceed Supabase's
-        // 1,000-row cap and silently truncate (stores showed $0). sales_monthly
-        // aggregates per month on the server so the result always fits.
+        // Long spans (year / all-time / custom) aggregate per month on the server via
+        // sales_monthly: no 1,000-row truncation, no per-row RLS timeout. Only the
+        // single-month daily/month views still need true per-day rows.
         let data, error;
         if(isAgg){
           ({ data, error } = await sb.rpc('sales_monthly', { p_corp_ids: ids, p_start: start, p_end: end }));
@@ -2424,7 +2427,7 @@ function AllStoresView({corps, y, m, view='month'}){
       }catch(e){ if(alive) setErr(e.message||String(e)); }
     })();
     return ()=>{ alive=false; };
-  },[corps.map(c=>c.id).join(','), y, m, view]);
+  },[corps.map(c=>c.id).join(','), y, m, view, rKey]);
 
   if(err) return <div className="card"><h3>Could not load system totals</h3><div className="mono" style={{color:'var(--red)',marginTop:8,fontSize:12}}>{err}</div></div>;
   if(!rows) return <Spinner/>;
@@ -2432,20 +2435,29 @@ function AllStoresView({corps, y, m, view='month'}){
   const nowD = new Date();
 
   // ---- Year / All-Time: aggregate across stores by month or year, with a chart ----
-  if(view==='year' || view==='alltime'){
+  if(view==='year' || view==='alltime' || view==='custom'){
     const buckets = {};   // 'YYYY-MM' or 'YYYY' -> total
     rows.forEach(r=>Object.entries(r.days).forEach(([ds,amt])=>{
-      const key = view==='year' ? ds.slice(0,7) : ds.slice(0,4);
+      const key = view==='alltime' ? ds.slice(0,4) : ds.slice(0,7);
       buckets[key] = (buckets[key]||0) + amt;
     }));
     let aggRows;
     if(view==='year'){
       aggRows = [];
       for(let mm=1; mm<=12; mm++) aggRows.push({ lbl:MONTHS[mm-1].slice(0,3), total:buckets[`${y}-${pad(mm)}`]||0 });
+    } else if(view==='custom'){
+      aggRows = [];
+      let cy=range.fromY, cm=range.fromM;
+      while(cy<range.toY || (cy===range.toY && cm<=range.toM)){
+        aggRows.push({ lbl:`${MONTHS[cm-1].slice(0,3)} '${String(cy).slice(2)}`, total:buckets[`${cy}-${pad(cm)}`]||0 });
+        cm++; if(cm>12){ cm=1; cy++; }
+      }
     } else {
       aggRows = Object.keys(buckets).sort().map(k=>({ lbl:k, total:buckets[k] }));
     }
-    const label = view==='year' ? `${y}` : 'All Time';
+    const label = view==='year' ? `${y}`
+      : view==='custom' ? `${MONTHS[range.fromM-1].slice(0,3)} ${range.fromY} – ${MONTHS[range.toM-1].slice(0,3)} ${range.toY}`
+      : 'All Time';
     const chartPoints = aggRows.map(r=>({ v:r.total, lbl:r.lbl, wknd:false }));
     return <>
       <div className="kpis kpis-1">
@@ -2469,7 +2481,7 @@ function AllStoresView({corps, y, m, view='month'}){
         </tbody></table>
       </div>
       <div className="card" style={{marginTop:16}}>
-        <h3>{view==='year' ? `${y} by Month` : 'By Year'}</h3>
+        <h3>{view==='year' ? `${y} by Month` : view==='custom' ? 'By Month' : 'By Year'}</h3>
         <table className="t" style={{marginTop:8}}><tbody>
           {aggRows.map((r,i)=><tr key={i}>
             <td className="mono">{r.lbl}</td>
@@ -2642,29 +2654,33 @@ function ChannelMixBar({chRows, total}){
   </div>;
 }
 
-function FranchiseRevenueView({pl, dayRows, y, m, view, corpId}){
-  // Year / All-Time need their own aggregates: the monthly `pl` only covers one month.
-  // Load daily sales for the whole span via the same RPC Home uses, then roll up.
-  const needAgg = view==='year' || view==='alltime';
+function FranchiseRevenueView({pl, dayRows, y, m, view, corpId, range}){
+  // Year / All-Time / Custom need their own aggregates: the monthly `pl` only covers one
+  // month. All use the server-side sales_monthly RPC (fast, no row caps, no per-row RLS).
+  const needAgg = view==='year' || view==='alltime' || view==='custom';
   const [agg, setAgg] = useState(null);   // {rows:[{lbl,total}], grand}
   const [aggErr, setAggErr] = useState(null);
+  const rKey = range ? [range.fromY,range.fromM,range.toY,range.toM].join('-') : '';
   useEffect(()=>{
     if(!needAgg || !corpId){ setAgg(null); return; }
     let alive = true;
     (async()=>{
       setAgg(null); setAggErr(null);
       try{
-        const start = view==='year' ? `${y}-01-01` : '2020-01-01';
         const nowD = new Date();
+        const start = view==='year' ? `${y}-01-01`
+          : view==='custom' ? `${range.fromY}-${pad(range.fromM)}-01`
+          : '2020-01-01';
         const end = view==='year' ? `${y}-12-31`
+          : view==='custom' ? `${range.toY}-${pad(range.toM)}-${pad(new Date(range.toY,range.toM,0).getDate())}`
           : `${nowD.getFullYear()}-${pad(nowD.getMonth()+1)}-${pad(nowD.getDate())}`;
         // sales_monthly aggregates per month on the server, so long spans never hit the
-        // 1,000-row response cap that silently truncated per-day loads.
+        // 1,000-row response cap or per-row RLS timeouts.
         const { data, error } = await sb.rpc('sales_monthly', { p_corp_ids: [corpId], p_start: start, p_end: end });
         if(error) throw error;
         const buckets = {};   // 'YYYY-MM' or 'YYYY' -> total
         (data||[]).forEach(r=>{
-          const key = view==='year' ? r.month : r.month.slice(0,4);
+          const key = view==='alltime' ? r.month.slice(0,4) : r.month;
           buckets[key] = (buckets[key]||0) + Number(r.total||0);
         });
         let rows;
@@ -2674,6 +2690,14 @@ function FranchiseRevenueView({pl, dayRows, y, m, view, corpId}){
             const key = `${y}-${pad(mm)}`;
             rows.push({ lbl: MONTHS[mm-1].slice(0,3), total: buckets[key]||0 });
           }
+        } else if(view==='custom'){
+          rows = [];
+          let cy=range.fromY, cm=range.fromM;
+          while(cy<range.toY || (cy===range.toY && cm<=range.toM)){
+            const key = `${cy}-${pad(cm)}`;
+            rows.push({ lbl: `${MONTHS[cm-1].slice(0,3)} '${String(cy).slice(2)}`, total: buckets[key]||0 });
+            cm++; if(cm>12){ cm=1; cy++; }
+          }
         } else {
           rows = Object.keys(buckets).sort().map(k=>({ lbl:k, total:buckets[k] }));
         }
@@ -2682,12 +2706,14 @@ function FranchiseRevenueView({pl, dayRows, y, m, view, corpId}){
       }catch(e){ if(alive) setAggErr(e.message||String(e)); }
     })();
     return ()=>{ alive=false; };
-  },[needAgg, corpId, view, y]);
+  },[needAgg, corpId, view, y, rKey]);
 
   if(needAgg){
     if(aggErr) return <div className="card"><h3>Could not load</h3><div className="mono" style={{color:'var(--red)',marginTop:8,fontSize:12}}>{aggErr}</div></div>;
     if(!agg) return <Spinner/>;
-    const label = view==='year' ? `${y}` : 'All Time';
+    const label = view==='year' ? `${y}`
+      : view==='custom' ? `${MONTHS[range.fromM-1].slice(0,3)} ${range.fromY} – ${MONTHS[range.toM-1].slice(0,3)} ${range.toY}`
+      : 'All Time';
     const chartPoints = agg.rows.map(r=>({ v:r.total, lbl:r.lbl, wknd:false }));
     return <>
       <div className="kpis kpis-1">
@@ -2700,7 +2726,7 @@ function FranchiseRevenueView({pl, dayRows, y, m, view, corpId}){
         <FranchiseSalesChart points={chartPoints}/>
       </div>
       <div className="card" style={{marginTop:16}}>
-        <h3>{view==='year' ? `${y} by Month` : 'By Year'}</h3>
+        <h3>{view==='year' ? `${y} by Month` : view==='custom' ? 'By Month' : 'By Year'}</h3>
         <table className="t" style={{marginTop:8}}><tbody>
           {agg.rows.map((r,i)=><tr key={i}>
             <td className="mono">{r.lbl}</td>
