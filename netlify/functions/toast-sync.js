@@ -242,6 +242,11 @@ exports.handler = async (event) => {
   // When backfilling, default to TIPS ONLY so we don't overwrite revenue that may have
   // been finalized from the Excel board. Pass &tips_only=0 to also refresh revenue.
   const tipsOnly = backfill && qp.tips_only !== '0';
+  // Optional store filter: &only=PEARLAND (comma-separated codes) restricts the run to
+  // those stores. Used to backfill a single franchise without touching corporate stores
+  // (whose past months may be board-finalized) and to keep the run fast enough to not
+  // time out. Case-insensitive.
+  const onlyCodes = qp.only ? new Set(qp.only.split(',').map(s=>s.trim().toUpperCase()).filter(Boolean)) : null;
 
   let token;
   try { token = await login(); }
@@ -264,10 +269,19 @@ exports.handler = async (event) => {
   const byGuid = {}, takenCodes = new Set();
   (allCorps || []).forEach(c => { if (c.toast_guid) byGuid[c.toast_guid] = c; takenCodes.add(c.code); });
 
-  // discover from Toast; if it fails, we still run with whatever env/DB gave us
+  // discover from Toast; if it fails, we still run with whatever env/DB gave us.
+  // When a store filter is set (targeted backfill), skip discovery entirely: we don't
+  // want to create/hide stores or scan the whole account, just backfill the named ones.
   let discovered = [];
-  try { discovered = await listRestaurants(token); }
-  catch (e) { log.push('discover: ' + e.message); }
+  if (!onlyCodes) {
+    try { discovered = await listRestaurants(token); }
+    catch (e) { log.push('discover: ' + e.message); }
+  } else {
+    // build the map straight from the DB for the requested codes
+    (allCorps || []).forEach(c => {
+      if (onlyCodes.has((c.code || '').toUpperCase()) && c.toast_guid) map[c.code] = c.toast_guid;
+    });
+  }
 
   for (const r of discovered) {
     let corp = byGuid[r.guid];
@@ -315,6 +329,7 @@ exports.handler = async (event) => {
   }
 
   for (const [code, guid] of Object.entries(map)) {
+    if (onlyCodes && !onlyCodes.has(code.toUpperCase())) continue;   // targeted backfill
     const { data: corp } = await admin.from('corporations')
       .select('id,corp_type,timezone,hidden').eq('code', code).maybeSingle();
     if (!corp) { log.push(`${code}: no corp`); continue; }
