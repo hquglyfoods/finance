@@ -45,6 +45,59 @@ async function login() {
   return (await res.json()).token.accessToken;
 }
 
+// The list of restaurants our Toast credential can see. This is what makes new
+// stores appear automatically: no env editing needed. Returns [{guid, name,
+// locationName, deleted, managementGroupGuid}].
+async function listRestaurants(token) {
+  const res = await fetch(`${HOST}/partners/v1/restaurants`,
+    { headers: { Authorization: 'Bearer ' + token } });
+  if (!res.ok) throw new Error('restaurants list ' + res.status);
+  const arr = await res.json();
+  return (arr || []).map(r => ({
+    guid: r.restaurantGuid,
+    name: (r.restaurantName || '').trim(),
+    locationName: (r.locationName || '').trim(),
+    deleted: !!r.deleted,
+    managementGroupGuid: r.managementGroupGuid || null,
+  }));
+}
+
+// Per-restaurant config: timezone, closeout hour, first business date, address.
+// Used to set a new store's timezone automatically and to know how far back to
+// backfill its history.
+async function restaurantConfig(token, guid) {
+  const res = await fetch(`${HOST}/restaurants/v1/restaurants/${guid}`,
+    { headers: { Authorization: 'Bearer ' + token, 'Toast-Restaurant-External-ID': guid } });
+  if (!res.ok) throw new Error('restaurant config ' + res.status);
+  const b = await res.json();
+  const g = (b && b.general) || {};
+  const loc = (b && b.location) || {};
+  return {
+    timeZone: g.timeZone || null,
+    closeoutHour: (g.closeoutHour != null ? g.closeoutHour : null),
+    firstBusinessDate: g.firstBusinessDate || null, // e.g. 20250327
+    name: (g.name || '').trim(),
+    locationName: (g.locationName || '').trim(),
+    stateCode: loc.stateCode || null,
+    managementGroupGuid: g.managementGroupGuid || null,
+  };
+}
+
+// Our own corporate management group. Stores in this group that we don't already
+// have are unusual (we create corporate ones by hand); everything else that is new
+// is treated as a franchisee, per the agreed rule "new stores default to franchisee".
+const OUR_GROUP = process.env.TOAST_CORPORATE_GROUP || 'a761b9d9-0074-493d-bc8d-47687dbd9847';
+
+// Make a short store code from a location name, e.g. "Forest Hills" -> "FORESTHILLS".
+// Falls back to part of the GUID if empty. Ensures uniqueness against existing codes.
+function makeCode(name, guid, taken) {
+  let base = (name || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+  if (!base) base = 'STORE' + guid.slice(0, 4).toUpperCase();
+  let code = base, i = 2;
+  while (taken.has(code)) { code = base.slice(0, 10) + i; i++; }
+  return code;
+}
+
 async function diningNameMap(token, guid) {
   const map = {};
   try {
@@ -141,6 +194,42 @@ function rangeDates(startIso, endIso) {
   return list;
 }
 
+// Rough UTC offset (hours) for the timezones our stores use, honoring US DST.
+// Used only to pick which business dates to sync; Toast returns the authoritative
+// business date per order, so this just needs to land on the right local day.
+function offsetForTz(tz) {
+  // DST in effect roughly mid-March to early November (US).
+  const now = new Date();
+  const m = now.getUTCMonth() + 1;
+  const dst = (m > 3 && m < 11) || (m === 3 && now.getUTCDate() >= 8) || (m === 11 && now.getUTCDate() < 1);
+  if (tz === 'America/Chicago')  return dst ? -5 : -6;
+  if (tz === 'America/Denver')   return dst ? -6 : -7;
+  if (tz === 'America/Los_Angeles') return dst ? -7 : -8;
+  // default Eastern
+  return dst ? -4 : -5;
+}
+
+// Seed the standard revenue channels for a newly auto-created store so the sync
+// has channels to write into. Mirrors the channel set used by AD/BW/FH.
+async function seedChannels(admin, corpId) {
+  const defs = [
+    ['cash', 'Cash', true, 1, 1],
+    ['card', 'Card', true, 1, 2],
+    ['uber', 'Uber Eats', true, 1, 3],
+    ['grubhub', 'Grubhub', true, 1, 4],
+    ['doordash', 'DoorDash', true, 1, 5],
+    ['online', 'Online Ordering', true, 1, 6],
+    ['other_income', 'Other Income', true, 1, 7],
+  ];
+  const { data: existing } = await admin.from('revenue_channels').select('code').eq('corporation_id', corpId);
+  const have = new Set((existing || []).map(c => c.code));
+  const rows = defs.filter(d => !have.has(d[0])).map(d => ({
+    corporation_id: corpId, code: d[0], name: d[1],
+    counts_in_total: d[2], total_multiplier: d[3], display_order: d[4], active: true,
+  }));
+  if (rows.length) await admin.from('revenue_channels').insert(rows);
+}
+
 exports.handler = async (event) => {
   const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY,
     { auth: { persistSession: false } });
@@ -154,19 +243,82 @@ exports.handler = async (event) => {
   // been finalized from the Excel board. Pass &tips_only=0 to also refresh revenue.
   const tipsOnly = backfill && qp.tips_only !== '0';
 
-  const map = {};
-  (process.env.TOAST_RESTAURANTS || '').split(',').map(s => s.trim()).filter(Boolean)
-    .forEach(p => { const [c, g] = p.split(':'); map[c] = g; });
-
   let token;
   try { token = await login(); }
   catch (e) { return { statusCode: 500, body: JSON.stringify({ error: e.message }) }; }
 
   const log = [];
-  const CENTRAL = new Set(['PEARLAND']); // stores on Central time
+
+  // ---- Build the store map by AUTO-DISCOVERY from Toast (no env editing needed) ----
+  // 1) Start from any explicit env mapping (legacy / override).
+  // 2) Then ask Toast which restaurants our credential can see and merge them in,
+  //    creating a franchisee corporation for any store we don't have yet, and marking
+  //    deleted stores hidden. Each store's timezone comes from its Toast config.
+  const map = {};   // code -> guid
+  (process.env.TOAST_RESTAURANTS || '').split(',').map(s => s.trim()).filter(Boolean)
+    .forEach(p => { const [c, g] = p.split(':'); if (c && g) map[c] = g; });
+
+  // existing corporations, indexed by toast_guid and by code
+  const { data: allCorps } = await admin.from('corporations')
+    .select('id,code,corp_type,toast_guid,timezone,hidden');
+  const byGuid = {}, takenCodes = new Set();
+  (allCorps || []).forEach(c => { if (c.toast_guid) byGuid[c.toast_guid] = c; takenCodes.add(c.code); });
+
+  // discover from Toast; if it fails, we still run with whatever env/DB gave us
+  let discovered = [];
+  try { discovered = await listRestaurants(token); }
+  catch (e) { log.push('discover: ' + e.message); }
+
+  for (const r of discovered) {
+    let corp = byGuid[r.guid];
+    if (r.deleted) {
+      // store removed in Toast -> hide it, don't sync
+      if (corp && !corp.hidden) { await admin.from('corporations').update({ hidden: true }).eq('id', corp.id); }
+      continue;
+    }
+    if (!corp) {
+      // new store: pull its config for timezone, then create a franchisee corp
+      let cfg = {};
+      try { cfg = await restaurantConfig(token, r.guid); } catch (e) { log.push(`cfg ${r.guid}: ${e.message}`); }
+      const label = r.locationName || cfg.locationName || r.name || 'New Store';
+      const code = makeCode(label, r.guid, takenCodes);
+      takenCodes.add(code);
+      const { data: created, error } = await admin.from('corporations').insert({
+        code,
+        name: label,
+        display_name: label,
+        corp_type: 'franchisee',                  // new stores default to franchisee
+        toast_guid: r.guid,
+        timezone: cfg.timeZone || 'America/New_York',
+        closeout_hour: cfg.closeoutHour,
+        auto_created: true,
+        hidden: false,
+      }).select('id,code,corp_type,toast_guid,timezone,hidden').maybeSingle();
+      if (error) { log.push(`create ${code}: ${error.message}`); continue; }
+      corp = created;
+      byGuid[r.guid] = corp;
+      log.push(`created franchisee ${code} (${r.guid})`);
+      // seed default revenue channels so sync has somewhere to write
+      await seedChannels(admin, corp.id);
+    } else {
+      // known store: make sure it has a timezone (older rows may be null) and unhide
+      const patch = {};
+      if (!corp.timezone) {
+        let cfg = {}; try { cfg = await restaurantConfig(token, r.guid); } catch (e) {}
+        if (cfg.timeZone) patch.timezone = cfg.timeZone;
+        if (cfg.closeoutHour != null) patch.closeout_hour = cfg.closeoutHour;
+      }
+      if (corp.hidden) patch.hidden = false;
+      if (Object.keys(patch).length) await admin.from('corporations').update(patch).eq('id', corp.id);
+    }
+    map[corp.code] = r.guid;    // include in this run
+  }
+
   for (const [code, guid] of Object.entries(map)) {
-    const { data: corp } = await admin.from('corporations').select('id,corp_type').eq('code', code).maybeSingle();
+    const { data: corp } = await admin.from('corporations')
+      .select('id,corp_type,timezone,hidden').eq('code', code).maybeSingle();
     if (!corp) { log.push(`${code}: no corp`); continue; }
+    if (corp.hidden) { continue; } // skip hidden/closed stores
     const isFranchise = corp.corp_type === 'franchisee';
     const { data: chs } = await admin.from('revenue_channels').select('id,code').eq('corporation_id', corp.id);
     const chId = {}; (chs || []).forEach(c => chId[c.code] = c.id);
@@ -177,7 +329,8 @@ exports.handler = async (event) => {
     let dn = {};
     try { dn = await diningNameMap(token, guid); } catch (e) {}
 
-    const offset = CENTRAL.has(code) ? -5 : -4;
+    const storeTz = corp.timezone || 'America/New_York';
+    const offset = offsetForTz(storeTz);
     const dates = backfill ? rangeDates(backfill.start, backfill.end) : bizDates(offset);
     for (const d of dates) {
       let orders;
@@ -241,7 +394,7 @@ exports.handler = async (event) => {
       // live day of a normal run; never during manual backfills. Fail-soft: snapshot
       // problems (e.g. table not created yet) must not break the revenue sync.
       if (d.provisional && !backfill && !tipsOnly) {
-        const tz = CENTRAL.has(code) ? 'America/Chicago' : 'America/New_York';
+        const tz = storeTz;
         try { await captureSnapshot(admin, corp.id, d.iso, tz); }
         catch (e) { log.push(`${code} snapshot: ${e.message}`); }
         // Self-heal: if last week's same day has no hourly snapshots yet (feature just
